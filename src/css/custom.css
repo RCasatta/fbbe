@@ -1,0 +1,31 @@
+.right {
+    text-align: right;
+}
+
+.number {
+    font-family: monospace;
+    text-align: right;
+}
+
+.row-index {
+    text-align: right;
+    width: 1ch;
+}
+
+.break-all {
+    word-break: break-all;
+}
+
+code {
+    word-break: break-all;
+}
+
+details summary::after {
+    background-image: none !important;
+}
+
+td details {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: 0;
+}

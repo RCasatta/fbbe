@@ -1,0 +1,78 @@
+// curl -s http://localhost:8332/rest/headers/1/000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f.json | jq
+
+use bitcoin::{consensus::Decodable, BlockHash, BlockHeader};
+use hyper::body::Buf;
+use serde::Deserialize;
+use tokio::time::sleep;
+
+use crate::error::Error;
+
+use super::{ts_to_date_time_utc, CLIENT};
+
+pub async fn call_many(block_hash: BlockHash, count: u32) -> Result<Vec<BlockHeader>, Error> {
+    let client = CLIENT.clone();
+    let bitcoind_addr = crate::globals::bitcoind_addr();
+    //let uri = format!("http://{bitcoind_addr}/rest/headers/{block_hash}.bin?count={count}").parse()?;  // TODO move to this with bitcoind 0.24
+    let uri = format!("http://{bitcoind_addr}/rest/headers/{count}/{block_hash}.bin").parse()?;
+    let resp = client.get(uri).await?;
+    if resp.status() != 200 {
+        sleep(tokio::time::Duration::from_millis(10)).await;
+        return Err(Error::RpcBlockHeaders);
+    }
+    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let mut reader = body_bytes.reader();
+
+    let mut headers: Vec<BlockHeader> = Vec::with_capacity(count as usize);
+    for _ in 0..count {
+        match Decodable::consensus_decode(&mut reader) {
+            Ok(header) => headers.push(header),
+            Err(_) => break,
+        }
+    }
+
+    Ok(headers)
+}
+
+pub async fn call_one(block_hash: BlockHash) -> Result<BlockheaderJson, Error> {
+    let client = CLIENT.clone();
+    let bitcoind_addr = crate::globals::bitcoind_addr();
+    let uri = format!("http://{bitcoind_addr}/rest/headers/1/{block_hash}.json").parse()?;
+    let resp = client.get(uri).await?;
+    if resp.status() != 200 {
+        sleep(tokio::time::Duration::from_millis(10)).await;
+        return Err(Error::RpcBlockHeaderJson);
+    }
+    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let mut blockheader: Vec<BlockheaderJson> = serde_json::from_reader(body_bytes.reader())?;
+
+    if blockheader.is_empty() {
+        Err(Error::HeaderNotFound(block_hash))
+    } else {
+        Ok(blockheader.remove(0))
+    }
+}
+
+#[derive(Deserialize, Debug)]
+pub struct BlockheaderJson {
+    pub hash: String,
+
+    #[serde(flatten)]
+    pub height_time: HeightTime,
+}
+impl BlockheaderJson {
+    pub(crate) fn height(&self) -> u32 {
+        self.height_time.height
+    }
+}
+
+#[derive(Deserialize, Debug, Clone, Copy)]
+pub struct HeightTime {
+    pub height: u32,
+    pub time: u32,
+}
+
+impl HeightTime {
+    pub fn date_time_utc(&self) -> String {
+        ts_to_date_time_utc(self.time)
+    }
+}

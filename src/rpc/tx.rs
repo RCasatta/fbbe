@@ -1,0 +1,122 @@
+use bitcoin::{
+    blockdata::constants::genesis_block,
+    consensus::{deserialize, Decodable},
+    BlockHash, Network, Transaction, Txid,
+};
+use bitcoin_hashes::hex::FromHex;
+use hyper::body::Buf;
+use once_cell::sync::Lazy;
+use serde::Deserialize;
+use tokio::time::sleep;
+
+use crate::error::Error;
+
+use super::CLIENT;
+
+static GENESIS_TX: Lazy<Txid> = Lazy::new(|| {
+    Txid::from_hex("4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b").unwrap()
+});
+
+// curl -s http://localhost:8332/rest/tx/3d0db8e24ffab61fb96e8a8fc5a0b14989b6e851495232018192b3e98f6b904e.json | jq
+pub async fn call_json(txid: Txid) -> Result<TxJson, Error> {
+    if txid == *GENESIS_TX {
+        return Err(Error::GenesisTx);
+    }
+    let client = CLIENT.clone();
+    let bitcoind_addr = crate::globals::bitcoind_addr();
+
+    let uri = format!("http://{bitcoind_addr}/rest/tx/{txid}.json").parse()?;
+    let resp = client.get(uri).await?;
+    if resp.status() != 200 {
+        sleep(tokio::time::Duration::from_millis(10)).await;
+        return Err(Error::RpcTx);
+    }
+    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let tx: TxJson = serde_json::from_reader(body_bytes.reader())?;
+    Ok(tx)
+}
+
+pub async fn call_parse_json(
+    txid: Txid,
+    network: Network,
+) -> Result<(Option<BlockHash>, Transaction), Error> {
+    Ok(match call_json(txid).await {
+        Ok(tx_json) => (
+            tx_json.block_hash,
+            deserialize(&Vec::<u8>::from_hex(&tx_json.hex)?)?,
+        ),
+        Err(Error::GenesisTx) => {
+            let mut block = genesis_block(network);
+            (Some(block.block_hash()), block.txdata.remove(0))
+        }
+        Err(e) => return Err(e),
+    })
+}
+
+pub async fn call_raw(txid: Txid) -> Result<Transaction, Error> {
+    if txid == *GENESIS_TX {
+        return Err(Error::GenesisTx);
+    }
+    let client = CLIENT.clone();
+    let bitcoind_addr = crate::globals::bitcoind_addr();
+
+    let uri = format!("http://{bitcoind_addr}/rest/tx/{txid}.bin").parse()?;
+    let resp = client.get(uri).await?;
+    if resp.status() != 200 {
+        sleep(tokio::time::Duration::from_millis(10)).await;
+        return Err(Error::RpcTx);
+    }
+    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let tx = Transaction::consensus_decode(&mut body_bytes.reader())?;
+    Ok(tx)
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct TxJson {
+    pub txid: String,
+    pub hash: String,
+    pub version: u32,
+    pub size: u32,
+    pub vsize: u32,
+    pub weight: u32,
+    pub locktime: u32,
+    pub vin: Vec<TxIn>,
+    pub vout: Vec<TxOut>,
+    #[serde(rename = "blockhash")]
+    pub block_hash: Option<BlockHash>,
+    pub hex: String,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct TxIn {
+    pub coinbase: Option<String>,
+    pub txid: Option<String>,
+    pub vout: Option<u32>,
+    #[serde(rename = "scriptSig")]
+    pub script_sig: Option<ScriptSig>,
+    #[serde(default)]
+    pub txinwitness: Vec<String>,
+    pub sequence: u32,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct ScriptSig {
+    pub asm: String,
+    pub hex: String,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct TxOut {
+    pub value: f64,
+    pub n: u32,
+    #[serde(rename = "scriptPubKey")]
+    pub script_pubkey: ScriptPubKey,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct ScriptPubKey {
+    pub asm: String,
+    pub hex: String,
+    pub address: Option<String>,
+    pub r#type: String,
+}

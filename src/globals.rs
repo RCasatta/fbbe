@@ -1,0 +1,56 @@
+use bitcoin::Network;
+use once_cell::sync::OnceCell;
+use std::{collections::HashSet, net::SocketAddr};
+
+use crate::Arguments;
+
+static NETWORK: OnceCell<Network> = OnceCell::new();
+
+pub(crate) fn network() -> Network {
+    *NETWORK.get().expect("must be initialized")
+}
+
+static BITCOIND_ADDR: OnceCell<String> = OnceCell::new();
+
+pub(crate) fn bitcoind_addr() -> &'static str {
+    BITCOIND_ADDR.get().expect("must be initialized")
+}
+
+static NETWORKS: OnceCell<Vec<Network>> = OnceCell::new();
+
+pub(crate) fn networks() -> &'static [Network] {
+    NETWORKS.get().expect("must be initialized")
+}
+
+pub(crate) fn init_globals(args: &mut Arguments) {
+    NETWORK
+        .set(args.network.take().unwrap_or(Network::Bitcoin))
+        .expect("static global must be empty here");
+
+    let mut networks = HashSet::new();
+    networks.insert(network());
+    networks.extend(args.other_network.iter());
+    let networks: Vec<_> = networks.into_iter().collect();
+    log::info!("networks {:?}", networks);
+
+    NETWORKS
+        .set(networks)
+        .expect("static global must be empty here");
+
+    let bitcoind_addr = args.bitcoind_addr.take().unwrap_or_else(|| {
+        let port = match network() {
+            Network::Bitcoin => 8332,
+            Network::Testnet => 18332,
+            Network::Signet => 38332,
+            Network::Regtest => 18443,
+        };
+        format!("127.0.0.1:{}", port)
+    });
+    bitcoind_addr
+        .parse::<SocketAddr>()
+        .expect("bitcoin address is not a socket address");
+    log::info!("bitcoind_addr {}", bitcoind_addr);
+    BITCOIND_ADDR
+        .set(bitcoind_addr)
+        .expect("static global must be empty here");
+}
