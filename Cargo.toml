@@ -1,9 +1,11 @@
 [package]
 name = "fbbe"
+description = "Fast Bitcoin Block Explorer"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+authors = ["Riccardo Casatta <riccardo@casatta.it>"]
+license = "MIT"
+repository = "https://github.com/RCasatta/fbbe"
 
 [dependencies]
 hyper = { version = "0.14.23", features = ["full"] }
