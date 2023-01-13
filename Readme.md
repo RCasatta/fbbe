@@ -6,6 +6,8 @@ A light Bitcoin block explorer without address indexing, using only a bitcoin co
 
 Runs live on mainnet, testnet and signet @ http://fbbe.info
 
+Locally can run on regtest.
+
 ## Running locally
 
 Supposing to have [rust installed](https://www.rust-lang.org/tools/install) and a synced [bitcoin core](https://bitcoincore.org/en/download/) on mainnet with `txindex=1` and `rest=1` do:
@@ -14,6 +16,16 @@ Supposing to have [rust installed](https://www.rust-lang.org/tools/install) and 
 git clone https://github.com/RCasatta/fbbe
 cd fbbe
 cargo run --release
+```
+
+## Nix
+
+A flake is provided to build the fbbe binary.
+
+Whenever `Cargo.toml` or `Cargo.lock` are updated the `cargo2nix` tool must be launched to keep `Cargo.nix` in sync. See https://github.com/cargo2nix/cargo2nix
+
+```
+nix run github:cargo2nix/cargo2nix   # needs nix-command and flakes experimental feature enabled 
 ```
 
 ## Mainnet test cases
