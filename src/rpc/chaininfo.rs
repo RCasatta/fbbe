@@ -14,6 +14,8 @@ pub struct ChainInfo {
     pub blocks: u32,
     #[serde(rename = "bestblockhash")]
     pub best_block_hash: BlockHash,
+    #[serde(rename = "initialblockdownload")]
+    pub initial_block_download: bool,
 }
 
 // curl -s http://localhost:8332/rest/chaininfo.json | jq

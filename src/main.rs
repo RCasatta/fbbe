@@ -9,6 +9,7 @@ use env_logger::Env;
 use globals::networks;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::Server;
+use tokio::time::sleep;
 use std::convert::Infallible;
 use std::sync::Arc;
 use structopt::StructOpt;
@@ -81,8 +82,17 @@ async fn main() {
         .expect("local address is not a socket address");
     log::debug!("local address {:?}", addr);
 
-    let chain_info = rpc::chaininfo::call().await.unwrap();
-    log::info!("{:?}", chain_info);
+    let mut chain_info;
+    loop {
+        chain_info = rpc::chaininfo::call().await.unwrap();
+        if chain_info.initial_block_download {
+            log::warn!("bitcoind is not synced, waiting... {:?}", chain_info);
+        } else {
+            log::info!("bitcoind is synced: {:?}", chain_info);
+            sleep(tokio::time::Duration::from_secs(10)).await;
+            break;
+        }
+    }
 
     match chain_info.chain.as_str() {
         "main" => assert_eq!(network(), Network::Bitcoin),
