@@ -45,9 +45,14 @@ pub struct Arguments {
     #[structopt(short, long)]
     network: Option<Network>,
 
-    /// The socket address this service will bind on
-    #[structopt(short, long, default_value = "127.0.0.1:3000")]
-    pub local_addr: String,
+    /// The socket address this service will bind on. Default value depends on the network:
+    /// * mainnet: "127.0.0.1:3000" 
+    /// * testnet: "127.0.0.1:3001" 
+    /// * signet:  "127.0.0.1:3002" 
+    /// * regtest: "127.0.0.1:3003"
+
+    #[structopt(short, long)]
+    pub local_addr: Option<String>,
 
     /// If the setup involve multiple networks this must be set accordingly.
     /// An header with a link to all the network is generated.
@@ -78,6 +83,13 @@ async fn main() {
 
     let addr = args
         .local_addr
+        .as_deref()
+        .unwrap_or_else(|| match network() {
+            Network::Bitcoin => "127.0.0.1:3000",
+            Network::Testnet => "127.0.0.1:3001",
+            Network::Signet => "127.0.0.1:3002",
+            Network::Regtest => "127.0.0.1:3003",
+        })
         .parse()
         .expect("local address is not a socket address");
     log::debug!("local address {:?}", addr);
