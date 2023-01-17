@@ -37,7 +37,7 @@ in
 {
   cargo2nixVersion = "0.11.0";
   workspace = {
-    fbbe = rustPackages.unknown.fbbe."0.1.0";
+    fbbe = rustPackages.unknown.fbbe."0.1.1";
   };
   "registry+https://github.com/rust-lang/crates.io-index".ahash."0.7.6" = overridableMkRustCrate (profileName: rec {
     name = "ahash";
@@ -395,9 +395,9 @@ in
     };
   });
   
-  "unknown".fbbe."0.1.0" = overridableMkRustCrate (profileName: rec {
+  "unknown".fbbe."0.1.1" = overridableMkRustCrate (profileName: rec {
     name = "fbbe";
-    version = "0.1.0";
+    version = "0.1.1";
     registry = "unknown";
     src = fetchCrateLocal workspaceSrc;
     dependencies = {
