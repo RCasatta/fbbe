@@ -96,7 +96,17 @@ async fn main() {
 
     let mut chain_info;
     loop {
-        chain_info = rpc::chaininfo::call().await.unwrap();
+        chain_info = match rpc::chaininfo::call().await {
+            Ok(chain_info) => chain_info,
+            Err(crate::error::Error::RpcChainInfo) => {
+                log::warn!("bitcoind is still loading, waiting...");
+                sleep(tokio::time::Duration::from_secs(10)).await;
+                continue;
+            }
+            Err(e) => {
+                panic!("bitcoind is probably not running on network {}\n{:?}", network(), e);
+            }
+        };
         if chain_info.initial_block_download {
             log::warn!("bitcoind is not synced, waiting... {:?}", chain_info);
             sleep(tokio::time::Duration::from_secs(10)).await;
