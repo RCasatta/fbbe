@@ -17,6 +17,7 @@ pub enum ParsedRequest {
     Block(BlockHash, usize),
     TxOut(Txid, u32),
     Head,
+    Robots,
 }
 
 pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
@@ -54,6 +55,7 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
         }
 
         (&Method::GET, None, Some("favicon.ico"), None, None) => ParsedRequest::Favicon,
+        (&Method::GET, None, Some("robots.txt"), None, None) => ParsedRequest::Robots,
         (&Method::GET, None, Some("css"), Some("pico.min.css"), None) => ParsedRequest::Css,
         (&Method::GET, None, Some("css"), Some("custom.css"), None) => ParsedRequest::CustomCss,
         (&Method::GET, None, Some("contact"), None, None) => ParsedRequest::Contact,
