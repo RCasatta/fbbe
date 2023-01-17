@@ -29,3 +29,11 @@ td details {
     padding-bottom: 0;
     border-bottom: 0;
 }
+
+.green {
+    color: #388e3c;
+}
+
+.red {
+    color: #c62828;
+}

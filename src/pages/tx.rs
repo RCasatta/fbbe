@@ -109,7 +109,7 @@ pub fn page(
         html! {
             tr {
                 th { "Status" }
-                td class="right" { ins { "Confirmed" } }
+                td class="right green" { "Confirmed" }
             }
 
             tr {
@@ -126,7 +126,7 @@ pub fn page(
         html! {
             tr {
                 th { "Status" }
-                td class="right" { del style="text-decoration-line: none" { "Unconfirmed" } }
+                td class="right red" { "Unconfirmed" }
             }
         }
     };
