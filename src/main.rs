@@ -109,7 +109,7 @@ async fn error_main() -> Result<(), Error> {
                 return Err(Error::RestFlag);
             }
             Err(Error::RpcChainInfo(status_code)) if status_code == 503 => {
-                log::warn!("bitcoind is still loading, waiting...");
+                log::warn!("bitcoind is still loading, waiting... (note: if on regtest you may need to generate a block to terminate IBD)");
                 sleep(tokio::time::Duration::from_secs(10)).await;
                 continue;
             }
