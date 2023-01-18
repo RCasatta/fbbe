@@ -46,8 +46,8 @@ pub enum Error {
     #[error("Bitcoin core RPC block header json failed")]
     RpcBlockHeaderJson,
 
-    #[error("Bitcoin core RPC block raw failed")]
-    RpcBlockRaw,
+    #[error("Bitcoin core RPC block raw failed for block {0}")]
+    RpcBlockRaw(BlockHash),
 
     #[error("Bitcoin core RPC headers failed")]
     RpcBlockHeaders,

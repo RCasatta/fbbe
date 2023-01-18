@@ -35,7 +35,7 @@ pub async fn call_raw(block_hash: BlockHash) -> Result<Block, Error> {
     let resp = client.get(uri).await?;
     if resp.status() != 200 {
         sleep(tokio::time::Duration::from_millis(10)).await;
-        return Err(Error::RpcBlockRaw);
+        return Err(Error::RpcBlockRaw(block_hash));
     }
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
     let block: Block = deserialize(&body_bytes.to_vec())?;

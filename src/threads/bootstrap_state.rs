@@ -2,7 +2,9 @@ use crate::error::Error;
 use crate::rpc::headers::HeightTime;
 use crate::state::{reserve, SharedState};
 use crate::{network, rpc};
+use bitcoin::BlockHash;
 use bitcoin::blockdata::constants::genesis_block;
+use bitcoin_hashes::Hash;
 use std::sync::Arc;
 
 const HEADERS_PER_REQUEST: usize = 101;
@@ -48,6 +50,10 @@ pub async fn bootstrap_state(shared_state: Arc<SharedState>) -> Result<(), Error
         let len = shared_state.txs.lock().await.len();
         if len > shared_state.args.tx_cache_size / 2 {
             log::info!("tx cache full at 50% {len} with {count} blocks");
+            break;
+        }
+        if current == BlockHash::all_zeros() {
+            log::info!("reached genesis in bootstraping state, breaking");
             break;
         }
     }
