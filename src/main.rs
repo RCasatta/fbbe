@@ -9,10 +9,10 @@ use env_logger::Env;
 use globals::networks;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::Server;
-use tokio::time::sleep;
 use std::convert::Infallible;
 use std::sync::Arc;
 use structopt::StructOpt;
+use tokio::time::sleep;
 
 mod error;
 mod globals;
@@ -46,9 +46,9 @@ pub struct Arguments {
     network: Option<Network>,
 
     /// The socket address this service will bind on. Default value depends on the network:
-    /// * mainnet: "127.0.0.1:3000" 
-    /// * testnet: "127.0.0.1:3001" 
-    /// * signet:  "127.0.0.1:3002" 
+    /// * mainnet: "127.0.0.1:3000"
+    /// * testnet: "127.0.0.1:3001"
+    /// * signet:  "127.0.0.1:3002"
     /// * regtest: "127.0.0.1:3003"
 
     #[structopt(short, long)]
@@ -104,7 +104,11 @@ async fn main() {
                 continue;
             }
             Err(e) => {
-                panic!("bitcoind is probably not running on network {}\n{:?}", network(), e);
+                panic!(
+                    "bitcoind is probably not running on network {}\n{:?}",
+                    network(),
+                    e
+                );
             }
         };
         if chain_info.initial_block_download {

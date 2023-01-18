@@ -1,13 +1,10 @@
 // curl -s http://localhost:8332/rest/headers/1/000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f.json | jq
 
+use super::{check_status, ts_to_date_time_utc, CLIENT};
+use crate::error::Error;
 use bitcoin::{consensus::Decodable, BlockHash, BlockHeader};
 use hyper::body::Buf;
 use serde::Deserialize;
-use tokio::time::sleep;
-
-use crate::error::Error;
-
-use super::{ts_to_date_time_utc, CLIENT};
 
 pub async fn call_many(block_hash: BlockHash, count: u32) -> Result<Vec<BlockHeader>, Error> {
     let client = CLIENT.clone();
@@ -15,10 +12,7 @@ pub async fn call_many(block_hash: BlockHash, count: u32) -> Result<Vec<BlockHea
     //let uri = format!("http://{bitcoind_addr}/rest/headers/{block_hash}.bin?count={count}").parse()?;  // TODO move to this with bitcoind 0.24
     let uri = format!("http://{bitcoind_addr}/rest/headers/{count}/{block_hash}.bin").parse()?;
     let resp = client.get(uri).await?;
-    if resp.status() != 200 {
-        sleep(tokio::time::Duration::from_millis(10)).await;
-        return Err(Error::RpcBlockHeaders);
-    }
+    check_status(resp.status(), || Error::RpcBlockHeaders(block_hash, count)).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
     let mut reader = body_bytes.reader();
 
@@ -38,10 +32,7 @@ pub async fn call_one(block_hash: BlockHash) -> Result<BlockheaderJson, Error> {
     let bitcoind_addr = crate::globals::bitcoind_addr();
     let uri = format!("http://{bitcoind_addr}/rest/headers/1/{block_hash}.json").parse()?;
     let resp = client.get(uri).await?;
-    if resp.status() != 200 {
-        sleep(tokio::time::Duration::from_millis(10)).await;
-        return Err(Error::RpcBlockHeaderJson);
-    }
+    check_status(resp.status(), || Error::RpcBlockHeaderJson(block_hash)).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
     let mut blockheader: Vec<BlockheaderJson> = serde_json::from_reader(body_bytes.reader())?;
 

@@ -25,7 +25,6 @@ const CUSTOM_CSS_LAST_MODIFIED: &str = "2022-11-23 07:53:03 UTC";
 const CONTACT_PAGE_LAST_MODIFIED: &str = "2022-12-16 07:53:03 UTC";
 const ROBOTS_LAST_MODIFIED: &str = "2023-01-17 07:53:03 UTC";
 
-
 #[derive(Debug)]
 pub enum ResponseType {
     Text(usize),
@@ -167,7 +166,7 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
             }
         }
 
-        ParsedRequest::TxOut(txid, vout) => match rpc::txout::call(&txid, vout).await {
+        ParsedRequest::TxOut(txid, vout) => match rpc::txout::call(txid, vout).await {
             Ok(tx) => {
                 let outpoint = OutPoint::new(txid, vout);
                 let page = pages::txout::page(&tx, outpoint).into_string();
@@ -236,7 +235,7 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
             .header(CACHE_CONTROL, "public, max-age=31536000")
             .header(CONTENT_TYPE, "image/vnd.microsoft.icon")
             .body(Bytes::from_static(include_bytes!("favicon.ico")).into())?,
-        
+
         ParsedRequest::Robots => Response::builder()
             .header(LAST_MODIFIED, ROBOTS_LAST_MODIFIED)
             .header(CACHE_CONTROL, "public, max-age=3600")

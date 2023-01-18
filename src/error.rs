@@ -1,5 +1,5 @@
 use crate::route::ResponseType;
-use bitcoin::{consensus::encode, BlockHash};
+use bitcoin::{consensus::encode, BlockHash, Txid};
 use hyper::StatusCode;
 
 #[derive(Debug, thiserror::Error)]
@@ -31,26 +31,29 @@ pub enum Error {
     #[error("Bitcoin core RPC chaininfo failed")]
     RpcChainInfo,
 
-    #[error("Bitcoin core RPC tx failed")]
-    RpcTx,
+    #[error("Bitcoin core RPC tx failed txid:{0}")]
+    RpcTx(Txid),
 
-    #[error("Bitcoin core RPC txout failed")]
-    RpcTxOut,
+    #[error("Bitcoin core RPC tx json failed txid:{0}")]
+    RpcTxJson(Txid),
+
+    #[error("Bitcoin core RPC txout failed txid:{0} vout:{1}")]
+    RpcTxOut(Txid, u32),
 
     #[error("Bitcoin core RPC block json failed {0}")]
     RpcBlockJson(BlockHash),
 
-    #[error("Bitcoin core RPC block hash by height json failed")]
-    RpcBlockHashByHeightJson,
+    #[error("Bitcoin core RPC block hash by height ({0}) json failed")]
+    RpcBlockHashByHeightJson(usize),
 
-    #[error("Bitcoin core RPC block header json failed")]
-    RpcBlockHeaderJson,
+    #[error("Bitcoin core RPC block header json failed for block hash:{0}")]
+    RpcBlockHeaderJson(BlockHash),
 
     #[error("Bitcoin core RPC block raw failed for block {0}")]
     RpcBlockRaw(BlockHash),
 
-    #[error("Bitcoin core RPC headers failed")]
-    RpcBlockHeaders,
+    #[error("Bitcoin core RPC headers failed start:{0} count:{1}")]
+    RpcBlockHeaders(BlockHash, u32),
 
     #[error("Bitcoin core RPC mempool info failed")]
     RpcMempoolInfo,

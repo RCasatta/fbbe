@@ -1,3 +1,5 @@
+use super::{check_status, CLIENT};
+use crate::error::Error;
 use bitcoin::{
     blockdata::constants::genesis_block,
     consensus::{deserialize, Decodable},
@@ -7,11 +9,6 @@ use bitcoin_hashes::hex::FromHex;
 use hyper::body::Buf;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
-use tokio::time::sleep;
-
-use crate::error::Error;
-
-use super::CLIENT;
 
 static GENESIS_TX: Lazy<Txid> = Lazy::new(|| {
     Txid::from_hex("4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b").unwrap()
@@ -27,10 +24,7 @@ pub async fn call_json(txid: Txid) -> Result<TxJson, Error> {
 
     let uri = format!("http://{bitcoind_addr}/rest/tx/{txid}.json").parse()?;
     let resp = client.get(uri).await?;
-    if resp.status() != 200 {
-        sleep(tokio::time::Duration::from_millis(10)).await;
-        return Err(Error::RpcTx);
-    }
+    check_status(resp.status(), || Error::RpcTxJson(txid)).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
     let tx: TxJson = serde_json::from_reader(body_bytes.reader())?;
     Ok(tx)
@@ -62,10 +56,7 @@ pub async fn call_raw(txid: Txid) -> Result<Transaction, Error> {
 
     let uri = format!("http://{bitcoind_addr}/rest/tx/{txid}.bin").parse()?;
     let resp = client.get(uri).await?;
-    if resp.status() != 200 {
-        sleep(tokio::time::Duration::from_millis(10)).await;
-        return Err(Error::RpcTx);
-    }
+    check_status(resp.status(), || Error::RpcTx(txid)).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
     let tx = Transaction::consensus_decode(&mut body_bytes.reader())?;
     Ok(tx)

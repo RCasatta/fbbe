@@ -4,10 +4,7 @@ use bitcoin::{consensus::deserialize, Block, BlockHash, Txid};
 use hyper::body::Buf;
 use maud::{html, Markup};
 use serde::Deserialize;
-use tokio::time::sleep;
-
-use crate::{error::Error, globals::network, pages::NBSP, NetworkExt};
-
+use crate::{error::Error, globals::network, pages::NBSP, rpc::check_status, NetworkExt};
 use super::{ts_to_date_time_utc, CLIENT};
 
 pub async fn call_json(block_hash: BlockHash) -> Result<BlockNoTxDetails, Error> {
@@ -18,10 +15,7 @@ pub async fn call_json(block_hash: BlockHash) -> Result<BlockNoTxDetails, Error>
         format!("http://{bitcoind_addr}/rest/block/notxdetails/{block_hash}.json",).parse()?;
     log::trace!("asking {:?}", uri);
     let resp = client.get(uri).await?;
-    if resp.status() != 200 {
-        sleep(tokio::time::Duration::from_millis(10)).await;
-        return Err(Error::RpcBlockJson(block_hash));
-    }
+    check_status(resp.status(), || Error::RpcBlockJson(block_hash)).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
     let block: BlockNoTxDetails = serde_json::from_reader(body_bytes.reader())?;
     Ok(block)
@@ -33,10 +27,7 @@ pub async fn call_raw(block_hash: BlockHash) -> Result<Block, Error> {
 
     let uri = format!("http://{bitcoind_addr}/rest/block/{block_hash}.bin",).parse()?;
     let resp = client.get(uri).await?;
-    if resp.status() != 200 {
-        sleep(tokio::time::Duration::from_millis(10)).await;
-        return Err(Error::RpcBlockRaw(block_hash));
-    }
+    check_status(resp.status(), || Error::RpcBlockRaw(block_hash)).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
     let block: Block = deserialize(&body_bytes.to_vec())?;
     Ok(block)

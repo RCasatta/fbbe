@@ -1,18 +1,14 @@
 // GET /rest/mempool/info.json
 // GET /rest/mempool/contents.json
 
-use std::collections::{HashMap, HashSet};
-
+use super::{check_status, CLIENT};
+use crate::error::Error;
 use bitcoin::Txid;
 use bitcoin_hashes::hex::FromHex;
 use hyper::body::Buf;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tokio::time::sleep;
-
-use crate::error::Error;
-
-use super::CLIENT;
+use std::collections::{HashMap, HashSet};
 
 // curl -s http://localhost:8332/rest/mempool/info.json | jq
 pub async fn info() -> Result<MempoolInfo, Error> {
@@ -21,10 +17,7 @@ pub async fn info() -> Result<MempoolInfo, Error> {
 
     let uri = format!("http://{bitcoind_addr}/rest/mempool/info.json").parse()?;
     let resp = client.get(uri).await?;
-    if resp.status() != 200 {
-        sleep(tokio::time::Duration::from_millis(10)).await;
-        return Err(Error::RpcMempoolInfo);
-    }
+    check_status(resp.status(), || Error::RpcMempoolInfo).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
     let info: MempoolInfo = serde_json::from_reader(body_bytes.reader())?;
     Ok(info)
@@ -37,10 +30,7 @@ pub async fn content() -> Result<HashSet<Txid>, Error> {
 
     let uri = format!("http://{bitcoind_addr}/rest/mempool/contents.json").parse()?;
     let resp = client.get(uri).await?;
-    if resp.status() != 200 {
-        sleep(tokio::time::Duration::from_millis(10)).await;
-        return Err(Error::RpcMempoolContent);
-    }
+    check_status(resp.status(), || Error::RpcMempoolContent).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
     let content: HashMap<String, Value> = serde_json::from_reader(body_bytes.reader())?;
     let txids: HashSet<_> = content.keys().flat_map(|e| Txid::from_hex(e)).collect();

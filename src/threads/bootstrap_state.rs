@@ -2,8 +2,8 @@ use crate::error::Error;
 use crate::rpc::headers::HeightTime;
 use crate::state::{reserve, SharedState};
 use crate::{network, rpc};
-use bitcoin::BlockHash;
 use bitcoin::blockdata::constants::genesis_block;
+use bitcoin::BlockHash;
 use bitcoin_hashes::Hash;
 use std::sync::Arc;
 
