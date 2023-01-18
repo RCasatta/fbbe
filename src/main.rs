@@ -129,11 +129,11 @@ async fn error_main() -> Result<(), Error> {
     }
 
     match chain_info.chain.as_str() {
-        "main" => assert_eq!(network(), Network::Bitcoin),
-        "test" => assert_eq!(network(), Network::Testnet),
-        "signet" => assert_eq!(network(), Network::Signet),
-        "regtest" => assert_eq!(network(), Network::Regtest),
-        _ => panic!("not supported"),
+        "main" => check_network(Network::Bitcoin)?,
+        "test" => check_network(Network::Testnet)?,
+        "signet" => check_network(Network::Signet)?,
+        "regtest" => check_network(Network::Regtest)?,
+        net => panic!("Network returned by bitcoind is not supported: {}", net),
     }
 
     let mempool_info = rpc::mempool::info().await?;
@@ -173,9 +173,17 @@ async fn error_main() -> Result<(), Error> {
     log::info!("Listening on http://{}", addr);
 
     if let Err(e) = server.await {
-        eprintln!("server error: {}", e);
+        log::error!("server error: {}", e);
     }
     Ok(())
+}
+
+fn check_network(bitcoind: Network) -> Result<(), Error> {
+    let fbbe = network();
+
+    (fbbe == bitcoind)
+        .then(|| ())
+        .ok_or_else(|| Error::WrongNetwork { fbbe, bitcoind })
 }
 
 trait NetworkExt {

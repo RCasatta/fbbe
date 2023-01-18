@@ -1,5 +1,5 @@
 use crate::route::ResponseType;
-use bitcoin::{consensus::encode, BlockHash, Txid};
+use bitcoin::{consensus::encode, BlockHash, Network, Txid};
 use hyper::StatusCode;
 
 #[derive(Debug, thiserror::Error)]
@@ -81,6 +81,9 @@ pub enum Error {
 
     #[error("bitcoind is started without the rest flag (`rest=1` in `bitcoin.conf` or `--rest`)")]
     RestFlag,
+
+    #[error("bitcoind and fbbe doesn't have the same network. fbbe:{fbbe} bitcoind:{bitcoind}")]
+    WrongNetwork { fbbe: Network, bitcoind: Network },
 }
 
 impl From<Error> for StatusCode {
