@@ -78,6 +78,9 @@ pub enum Error {
 
     #[error("Content type {0:?} is not supported for endpoint {1}")]
     ContentTypeUnsupported(ResponseType, String),
+
+    #[error("bitcoind is started without the rest flag (`rest=1` in `bitcoin.conf` or `--rest`)")]
+    RestFlag,
 }
 
 impl From<Error> for StatusCode {

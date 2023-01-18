@@ -76,6 +76,12 @@ pub struct Arguments {
 
 #[tokio::main]
 async fn main() {
+    if let Err(e) = error_main().await {
+        log::error!("{}", e);
+    }
+}
+
+async fn error_main() -> Result<(), Error> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
     let mut args = Arguments::from_args();
@@ -100,8 +106,7 @@ async fn main() {
         chain_info = match rpc::chaininfo::call().await {
             Ok(chain_info) => chain_info,
             Err(Error::RpcChainInfo(status_code)) if status_code == 404 => {
-                log::error!("bitcoind is started without the rest flag (`rest=1` in `bitcoin.conf` or `--rest`)");
-                return;
+                return Err(Error::RestFlag);
             }
             Err(Error::RpcChainInfo(status_code)) if status_code == 503 => {
                 log::warn!("bitcoind is still loading, waiting...");
@@ -110,8 +115,8 @@ async fn main() {
             }
             Err(e) => {
                 let network = network();
-                log::error!("bitcoind is probably not running on network {network}. error:{e:?}",);
-                return;
+                log::error!("bitcoind is probably not running on network {network}",);
+                return Err(e);
             }
         };
         if chain_info.initial_block_download {
@@ -131,7 +136,7 @@ async fn main() {
         _ => panic!("not supported"),
     }
 
-    let mempool_info = rpc::mempool::info().await.unwrap();
+    let mempool_info = rpc::mempool::info().await?;
     log::info!("{:?}", mempool_info);
 
     let shared_state = Arc::new(SharedState::new(chain_info.clone(), args, mempool_info));
@@ -170,6 +175,7 @@ async fn main() {
     if let Err(e) = server.await {
         eprintln!("server error: {}", e);
     }
+    Ok(())
 }
 
 trait NetworkExt {
