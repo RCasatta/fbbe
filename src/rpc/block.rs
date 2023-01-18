@@ -1,11 +1,11 @@
 // curl -s http://localhost:8332/rest/block/notxdetails/000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f.json | jq
 
+use super::{ts_to_date_time_utc, CLIENT};
+use crate::{error::Error, globals::network, pages::NBSP, rpc::check_status, NetworkExt};
 use bitcoin::{consensus::deserialize, Block, BlockHash, Txid};
 use hyper::body::Buf;
 use maud::{html, Markup};
 use serde::Deserialize;
-use crate::{error::Error, globals::network, pages::NBSP, rpc::check_status, NetworkExt};
-use super::{ts_to_date_time_utc, CLIENT};
 
 pub async fn call_json(block_hash: BlockHash) -> Result<BlockNoTxDetails, Error> {
     let client = CLIENT.clone();
@@ -15,7 +15,7 @@ pub async fn call_json(block_hash: BlockHash) -> Result<BlockNoTxDetails, Error>
         format!("http://{bitcoind_addr}/rest/block/notxdetails/{block_hash}.json",).parse()?;
     log::trace!("asking {:?}", uri);
     let resp = client.get(uri).await?;
-    check_status(resp.status(), || Error::RpcBlockJson(block_hash)).await?;
+    check_status(resp.status(), |s| Error::RpcBlockJson(s, block_hash)).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
     let block: BlockNoTxDetails = serde_json::from_reader(body_bytes.reader())?;
     Ok(block)
@@ -27,7 +27,7 @@ pub async fn call_raw(block_hash: BlockHash) -> Result<Block, Error> {
 
     let uri = format!("http://{bitcoind_addr}/rest/block/{block_hash}.bin",).parse()?;
     let resp = client.get(uri).await?;
-    check_status(resp.status(), || Error::RpcBlockRaw(block_hash)).await?;
+    check_status(resp.status(), |s| Error::RpcBlockRaw(s, block_hash)).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
     let block: Block = deserialize(&body_bytes.to_vec())?;
     Ok(block)

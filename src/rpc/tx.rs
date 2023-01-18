@@ -24,7 +24,7 @@ pub async fn call_json(txid: Txid) -> Result<TxJson, Error> {
 
     let uri = format!("http://{bitcoind_addr}/rest/tx/{txid}.json").parse()?;
     let resp = client.get(uri).await?;
-    check_status(resp.status(), || Error::RpcTxJson(txid)).await?;
+    check_status(resp.status(), |s| Error::RpcTxJson(s, txid)).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
     let tx: TxJson = serde_json::from_reader(body_bytes.reader())?;
     Ok(tx)
@@ -56,7 +56,7 @@ pub async fn call_raw(txid: Txid) -> Result<Transaction, Error> {
 
     let uri = format!("http://{bitcoind_addr}/rest/tx/{txid}.bin").parse()?;
     let resp = client.get(uri).await?;
-    check_status(resp.status(), || Error::RpcTx(txid)).await?;
+    check_status(resp.status(), |s| Error::RpcTx(s, txid)).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
     let tx = Transaction::consensus_decode(&mut body_bytes.reader())?;
     Ok(tx)

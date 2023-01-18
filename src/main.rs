@@ -1,3 +1,4 @@
+use crate::error::Error;
 use crate::globals::{init_globals, network};
 use crate::route::route_infallible;
 use crate::state::SharedState;
@@ -98,17 +99,19 @@ async fn main() {
     loop {
         chain_info = match rpc::chaininfo::call().await {
             Ok(chain_info) => chain_info,
-            Err(crate::error::Error::RpcChainInfo) => {
+            Err(Error::RpcChainInfo(status_code)) if status_code == 404 => {
+                log::error!("bitcoind is started without the rest flag (`rest=1` in `bitcoin.conf` or `--rest`)");
+                return;
+            }
+            Err(Error::RpcChainInfo(status_code)) if status_code == 503 => {
                 log::warn!("bitcoind is still loading, waiting...");
                 sleep(tokio::time::Duration::from_secs(10)).await;
                 continue;
             }
             Err(e) => {
-                panic!(
-                    "bitcoind is probably not running on network {}\n{:?}",
-                    network(),
-                    e
-                );
+                let network = network();
+                log::error!("bitcoind is probably not running on network {network}. error:{e:?}",);
+                return;
             }
         };
         if chain_info.initial_block_download {

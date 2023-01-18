@@ -28,38 +28,38 @@ pub enum Error {
     #[error(transparent)]
     Join(#[from] tokio::task::JoinError),
 
-    #[error("Bitcoin core RPC chaininfo failed")]
-    RpcChainInfo,
+    #[error("Bitcoin core RPC chaininfo failed status_code:{0}")]
+    RpcChainInfo(StatusCode),
 
-    #[error("Bitcoin core RPC tx failed txid:{0}")]
-    RpcTx(Txid),
+    #[error("Bitcoin core RPC tx failed. txid:{1} status_code:{0}")]
+    RpcTx(StatusCode, Txid),
 
-    #[error("Bitcoin core RPC tx json failed txid:{0}")]
-    RpcTxJson(Txid),
+    #[error("Bitcoin core RPC tx json failed. txid:{1} status_code:{0}")]
+    RpcTxJson(StatusCode, Txid),
 
-    #[error("Bitcoin core RPC txout failed txid:{0} vout:{1}")]
-    RpcTxOut(Txid, u32),
+    #[error("Bitcoin core RPC txout failed. txid:{1} vout:{2} status_code:{0}")]
+    RpcTxOut(StatusCode, Txid, u32),
 
-    #[error("Bitcoin core RPC block json failed {0}")]
-    RpcBlockJson(BlockHash),
+    #[error("Bitcoin core RPC block json failed. block_hash:{0} status_code:{0}")]
+    RpcBlockJson(StatusCode, BlockHash),
 
-    #[error("Bitcoin core RPC block hash by height ({0}) json failed")]
-    RpcBlockHashByHeightJson(usize),
+    #[error("Bitcoin core RPC block hash by height json failed. height:{1} status_code:{0}")]
+    RpcBlockHashByHeightJson(StatusCode, usize),
 
-    #[error("Bitcoin core RPC block header json failed for block hash:{0}")]
-    RpcBlockHeaderJson(BlockHash),
+    #[error("Bitcoin core RPC block header json failed for block. block_hash:{1} status_code:{0}")]
+    RpcBlockHeaderJson(StatusCode, BlockHash),
 
-    #[error("Bitcoin core RPC block raw failed for block {0}")]
-    RpcBlockRaw(BlockHash),
+    #[error("Bitcoin core RPC block raw failed for block. block_hash:{1} status_code:{0}")]
+    RpcBlockRaw(StatusCode, BlockHash),
 
-    #[error("Bitcoin core RPC headers failed start:{0} count:{1}")]
-    RpcBlockHeaders(BlockHash, u32),
+    #[error("Bitcoin core RPC headers failed. start:{1} count:{2} status_code:{0}")]
+    RpcBlockHeaders(StatusCode, BlockHash, u32),
 
-    #[error("Bitcoin core RPC mempool info failed")]
-    RpcMempoolInfo,
+    #[error("Bitcoin core RPC mempool info failed. status_code:{0}")]
+    RpcMempoolInfo(StatusCode),
 
-    #[error("Bitcoin core RPC mempool content failed")]
-    RpcMempoolContent,
+    #[error("Bitcoin core RPC mempool content failed. status_code:{0}")]
+    RpcMempoolContent(StatusCode),
 
     #[error("Invalid page number")]
     InvalidPageNumber,
