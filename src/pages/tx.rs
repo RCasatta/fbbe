@@ -30,19 +30,48 @@ pub fn page(
             if po == &OutPoint::null() {
                 None
             } else {
-                // let outpoint = html! { u { (po.txid.to_hex()) } ":" b { (po.vout) } };
                 let link = format!("{}t/{}", network().as_url_path(), po.txid);
                 let amount = amount_str(previous_output.value);
                 let previous_script_pubkey = script_color(&previous_output.script_pubkey);
                 let previous_script_pubkey_type = script_type(&previous_output.script_pubkey);
                 let script_sig =
                     (!input.script_sig.is_empty()).then(|| script_color(&input.script_sig));
-                let witness = input
-                    .witness
-                    .to_vec()
-                    .iter()
-                    .map(|e| e.to_hex())
-                    .collect::<Vec<_>>();
+
+                // The following logic makes hex the witness elements, empty elements become "<empty>".
+                // Moreover there is a deduplication logic where same consucutive elements like "00 00"
+                // are shown as "00 2 times". This helps showing tx like
+                // 73be398c4bdc43709db7398106609eea2a7841aaf3a4fa2000dc18184faa2a7e which contains
+                // 500_001 empty push
+                let mut witness = vec![];
+                let mut count = 1;
+                let w = input.witness.to_vec();
+                let mut iter = w.into_iter();
+                if let Some(mut before) = iter.next() {
+                    let mut last = None;
+                    for current in iter {
+                        if before != current {
+                            if count == 1 {
+                                witness.push(hex_empty(&before));
+                            } else {
+                                witness.push(format!("{} {} times", hex_empty(&before), count));
+                            }
+                            count = 1;
+                        } else {
+                            count += 1;
+                        }
+
+                        last = Some(current.clone());
+                        before = current;
+                    }
+                    if let Some(last) = last {
+                        if count == 1 {
+                            witness.push(hex_empty(&last));
+                        } else {
+                            witness.push(format!("{} {} times", hex_empty(&last), count));
+                        }
+                    }
+                }
+
                 let sequence = format!("0x{:x}", input.sequence);
                 Some((
                     po,
@@ -301,6 +330,14 @@ pub fn page(
     };
 
     html_page("Transaction", content)
+}
+
+fn hex_empty(val: &[u8]) -> String {
+    if val.is_empty() {
+        "<empty>".to_owned()
+    } else {
+        val.to_hex()
+    }
 }
 
 fn amount_str(val: u64) -> String {
