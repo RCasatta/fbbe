@@ -51,9 +51,13 @@ pub fn page(
                     for current in iter {
                         if before != current {
                             if count == 1 {
-                                witness.push(hex_empty(&before));
+                                witness.push(hex_empty_long(&before));
                             } else {
-                                witness.push(format!("{} {} times", hex_empty(&before), count));
+                                witness.push(format!(
+                                    "{} {} times",
+                                    hex_empty_long(&before),
+                                    count
+                                ));
                             }
                             count = 1;
                         } else {
@@ -65,9 +69,9 @@ pub fn page(
                     }
                     if let Some(last) = last {
                         if count == 1 {
-                            witness.push(hex_empty(&last));
+                            witness.push(hex_empty_long(&last));
                         } else {
-                            witness.push(format!("{} {} times", hex_empty(&last), count));
+                            witness.push(format!("{} {} times", hex_empty_long(&last), count));
                         }
                     }
                 }
@@ -332,9 +336,19 @@ pub fn page(
     html_page("Transaction", content)
 }
 
-fn hex_empty(val: &[u8]) -> String {
+/// convert in hex, unless is empty or too long
+fn hex_empty_long(val: &[u8]) -> String {
     if val.is_empty() {
         "<empty>".to_owned()
+    } else if val.len() > 2000 {
+        let len = val.len();
+
+        format!(
+            "{}...truncated, original size is {} bytes...{}",
+            val[0..128].to_hex(),
+            len,
+            val[len - 128..len].to_hex()
+        )
     } else {
         val.to_hex()
     }
