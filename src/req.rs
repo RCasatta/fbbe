@@ -18,6 +18,8 @@ pub enum ParsedRequest {
     TxOut(Txid, u32),
     Head,
     Robots,
+    BlockToB(BlockHash),
+    TxToT(Txid),
 }
 
 pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
@@ -80,6 +82,14 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
                 None => 0,
             };
             ParsedRequest::Block(block_hash, page)
+        }
+        (&Method::GET, None, Some("block"), Some(block_hash), None) => {
+            let block_hash = BlockHash::from_hex(block_hash)?;
+            ParsedRequest::BlockToB(block_hash)
+        }
+        (&Method::GET, None, Some("tx"), Some(txid), None) => {
+            let txid = Txid::from_hex(txid)?;
+            ParsedRequest::TxToT(txid)
         }
         _ => return Err(Error::NotFound),
     };

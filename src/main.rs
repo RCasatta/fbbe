@@ -115,7 +115,9 @@ async fn error_main() -> Result<(), Error> {
             }
             Err(e) => {
                 let network = network();
-                log::error!("bitcoind is probably not running on network {network}",);
+                log::error!(
+                    "bitcoind is probably not running, or running on wrong network {network}",
+                );
                 return Err(e);
             }
         };

@@ -203,7 +203,6 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
 
         ParsedRequest::SearchTx(txid) => {
             let network = network().as_url_path();
-
             Response::builder()
                 .header(LOCATION, format!("{network}t/{txid}"))
                 .status(StatusCode::TEMPORARY_REDIRECT)
@@ -241,6 +240,20 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
             .header(CACHE_CONTROL, "public, max-age=3600")
             .header(CONTENT_TYPE, "text/plain")
             .body(Bytes::from_static(include_bytes!("robots.txt")).into())?,
+        ParsedRequest::BlockToB(block_hash) => {
+            let network = network().as_url_path();
+            Response::builder()
+                .header(LOCATION, format!("{network}b/{block_hash}"))
+                .status(StatusCode::TEMPORARY_REDIRECT)
+                .body(Body::empty())?
+        }
+        ParsedRequest::TxToT(txid) => {
+            let network = network().as_url_path();
+            Response::builder()
+                .header(LOCATION, format!("{network}t/{txid}"))
+                .status(StatusCode::TEMPORARY_REDIRECT)
+                .body(Body::empty())?
+        }
         // parsed_req => {
         //     let page = format!("{:?}", parsed_req);
         //     Response::new(page.into())
