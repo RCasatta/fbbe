@@ -5,6 +5,7 @@ use bitcoin::Network;
 use maud::{html, Markup, PreEscaped, DOCTYPE};
 use thousands::{digits, Separable, SeparatorPolicy};
 
+pub mod address;
 pub mod block;
 pub mod contact;
 pub mod home;

@@ -209,6 +209,14 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
                 .body(Body::empty())?
         }
 
+        ParsedRequest::SearchAddress(address) => {
+            let network = network().as_url_path();
+            Response::builder()
+                .header(LOCATION, format!("{network}a/{address}"))
+                .status(StatusCode::TEMPORARY_REDIRECT)
+                .body(Body::empty())?
+        }
+
         ParsedRequest::Head => Response::new(Body::empty()),
 
         ParsedRequest::Css => Response::builder()
@@ -254,10 +262,31 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
                 .status(StatusCode::TEMPORARY_REDIRECT)
                 .body(Body::empty())?
         }
-        // parsed_req => {
-        //     let page = format!("{:?}", parsed_req);
-        //     Response::new(page.into())
-        // }
+        ParsedRequest::AddressToA(address) => {
+            let network = network().as_url_path();
+            Response::builder()
+                .header(LOCATION, format!("{network}a/{address}"))
+                .status(StatusCode::TEMPORARY_REDIRECT)
+                .body(Body::empty())?
+        }
+        ParsedRequest::Address(address) => {
+            if address.network != network() {
+                return Err(Error::AddressWrongNetwork {
+                    address: address.network,
+                    fbbe: network(),
+                });
+            } else {
+                let page = pages::address::page(&address)?.into_string();
+
+                Response::builder()
+                    .header(CACHE_CONTROL, "public, max-age=5")
+                    .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
+                    .body(page.into())?
+            }
+        } // parsed_req => {
+          //     let page = format!("{:?}", parsed_req);
+          //     Response::new(page.into())
+          // }
     };
 
     log::debug!("{:?} executed in {:?}", req.uri(), now.elapsed());

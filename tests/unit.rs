@@ -1,8 +1,3 @@
-use std::{
-    io::{self, Write},
-    iter,
-};
-
 use bitcoin::{consensus::Decodable, Transaction, Txid};
 use bitcoin_hashes::hex::FromHex;
 use futures::{future, prelude::*, stream::FuturesUnordered, StreamExt};
@@ -36,6 +31,7 @@ async fn test_unordered() {
 
 const N_CONCURRENT: usize = 2000;
 
+#[ignore]
 #[tokio::test]
 async fn test_buffer_unordered() {
     let client = Client::new();

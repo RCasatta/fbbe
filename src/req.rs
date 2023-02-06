@@ -1,5 +1,7 @@
+use std::str::FromStr;
+
 use crate::error::Error;
-use bitcoin::{BlockHash, Txid};
+use bitcoin::{Address, BlockHash, Txid};
 use bitcoin_hashes::{hex::FromHex, sha256d};
 use hyper::{Body, Method, Request};
 
@@ -13,6 +15,7 @@ pub enum ParsedRequest {
     SearchHeight(u32),
     SearchBlock(BlockHash),
     SearchTx(Txid),
+    SearchAddress(Address),
     Tx(Txid),
     Block(BlockHash, usize),
     TxOut(Txid, u32),
@@ -20,6 +23,8 @@ pub enum ParsedRequest {
     Robots,
     BlockToB(BlockHash),
     TxToT(Txid),
+    Address(Address),
+    AddressToA(Address),
 }
 
 pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
@@ -49,7 +54,10 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
                                 ParsedRequest::SearchTx(val.into())
                             }
                         }
-                        Err(_) => return Err(Error::BadRequest),
+                        Err(_) => match Address::from_str(val) {
+                            Ok(address) => ParsedRequest::SearchAddress(address),
+                            Err(_) => return Err(Error::BadRequest),
+                        },
                     },
                 },
                 _ => return Err(Error::BadRequest),
@@ -83,6 +91,10 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
             };
             ParsedRequest::Block(block_hash, page)
         }
+        (&Method::GET, None, Some("a"), Some(address), None) => {
+            let address = Address::from_str(address)?;
+            ParsedRequest::Address(address)
+        }
         (&Method::GET, None, Some("block"), Some(block_hash), None) => {
             let block_hash = BlockHash::from_hex(block_hash)?;
             ParsedRequest::BlockToB(block_hash)
@@ -90,6 +102,10 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
         (&Method::GET, None, Some("tx"), Some(txid), None) => {
             let txid = Txid::from_hex(txid)?;
             ParsedRequest::TxToT(txid)
+        }
+        (&Method::GET, None, Some("address"), Some(address), None) => {
+            let address = Address::from_str(address)?;
+            ParsedRequest::AddressToA(address)
         }
         _ => return Err(Error::NotFound),
     };

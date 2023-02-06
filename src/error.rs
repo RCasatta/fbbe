@@ -28,6 +28,9 @@ pub enum Error {
     #[error(transparent)]
     Join(#[from] tokio::task::JoinError),
 
+    #[error(transparent)]
+    BitcoinAddress(#[from] bitcoin::util::address::Error),
+
     #[error("Bitcoin core RPC chaininfo failed status_code:{0}")]
     RpcChainInfo(StatusCode),
 
@@ -84,6 +87,9 @@ pub enum Error {
 
     #[error("bitcoind and fbbe doesn't have the same network. fbbe:{fbbe} bitcoind:{bitcoind}")]
     WrongNetwork { fbbe: Network, bitcoind: Network },
+
+    #[error("address and fbbe doesn't have the same network. fbbe:{fbbe} address:{address}")]
+    AddressWrongNetwork { fbbe: Network, address: Network },
 }
 
 impl From<Error> for StatusCode {
