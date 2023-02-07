@@ -7,25 +7,73 @@ use bitcoin::{
 use bitcoin_hashes::hex::ToHex;
 use maud::{html, Markup};
 
-use crate::{network, pages::render::Html, pages::size_rows, rpc::headers::HeightTime, NetworkExt};
+use crate::{
+    error::Error, network, pages::render::Html, pages::size_rows, rpc::headers::HeightTime,
+    NetworkExt,
+};
 
 use super::html_page;
+
+pub const IO_PER_PAGE: usize = 10;
 
 pub fn page(
     tx: &Transaction,
     height_time: Option<(BlockHash, HeightTime)>,
     prevout: &[TxOut],
-) -> Markup {
+    page: usize,
+) -> Result<Markup, Error> {
+    let txid = tx.txid();
+    let network_url_path = network().as_url_path();
+
+    let start = page * IO_PER_PAGE;
+    if start >= tx.input.len() && start >= tx.output.len() {
+        return Err(Error::InvalidPageNumber);
+    }
+
+    let last_page_input = tx.input.len().saturating_sub(1) / IO_PER_PAGE;
+    let last_page_output = tx.output.len().saturating_sub(1) / IO_PER_PAGE;
+    log::info!("last page {last_page_input} {last_page_output}");
+
+    let input_start = start.min(last_page_input * IO_PER_PAGE);
+    let output_start = start.min(last_page_output * IO_PER_PAGE);
+    log::info!("from {input_start} {output_start}");
+
+    let prev_input = (page > 0 && last_page_input != 0).then(|| {
+        format!(
+            "{}t/{}/{}#inputs",
+            network_url_path,
+            txid,
+            (last_page_input - 1).min(page - 1)
+        )
+    });
+    let next_input = (page < last_page_input)
+        .then(|| format!("{}t/{}/{}#inputs", network_url_path, txid, page + 1));
+    let separator_input = (prev_input.is_some() && next_input.is_some()).then(|| " | ");
+
+    let prev_output = (page > 0 && last_page_output != 0).then(|| {
+        format!(
+            "{}t/{}/{}#outputs",
+            network_url_path,
+            txid,
+            (last_page_output - 1).min(page - 1)
+        )
+    });
+    let next_output = (page < last_page_output)
+        .then(|| format!("{}t/{}/{}#outputs", network_url_path, txid, page + 1));
+    let separator_output = (prev_output.is_some() && next_output.is_some()).then(|| " | ");
+
     let sum_outputs: u64 = tx.output.iter().map(|o| o.value).sum();
     let sum_inputs: u64 = prevout.iter().map(|o| o.value).sum();
     let fee = sum_inputs - sum_outputs;
 
-    let txid = tx.txid();
     let inputs = tx
         .input
         .iter()
+        .skip(input_start)
+        .take(IO_PER_PAGE)
         .zip(prevout.iter())
-        .map(|(input, previous_output)| {
+        .enumerate()
+        .map(|(i, (input, previous_output))| {
             let po = &input.previous_output;
             if po == &OutPoint::null() {
                 None
@@ -78,6 +126,7 @@ pub fn page(
 
                 let sequence = format!("0x{:x}", input.sequence);
                 Some((
+                    i + input_start,
                     po,
                     amount,
                     link,
@@ -88,14 +137,13 @@ pub fn page(
                     sequence,
                 ))
             }
-        })
-        .enumerate()
-        .take(100);
-    let inputs_truncated = tx.input.len() > 100;
+        });
 
     let outputs = tx
         .output
         .iter()
+        .skip(output_start)
+        .take(IO_PER_PAGE)
         .enumerate()
         .map(|(i, output)| {
             let address = Address::from_script(&output.script_pubkey, network()).ok();
@@ -123,7 +171,7 @@ pub fn page(
                 .flatten();
 
             (
-                i,
+                i + output_start,
                 address,
                 amount,
                 output_link,
@@ -131,9 +179,7 @@ pub fn page(
                 script_type,
                 op_return_string,
             )
-        })
-        .take(100);
-    let outputs_truncated = tx.output.len() > 100;
+        });
 
     let inputs_plural = if tx.input.len() > 1 { "s" } else { "" };
     let outputs_plural = if tx.output.len() > 1 { "s" } else { "" };
@@ -187,17 +233,32 @@ pub fn page(
                 }
             }
 
-            h2 id="inputs" { (tx.input.len()) " input" (inputs_plural) }
+            hgroup {
+                h2 id="inputs" { (tx.input.len()) " input" (inputs_plural) }
+                p {
+                    @if let Some(prev) = prev_input {
+                        a href=(prev) { "Prev" }
+                    }
+                    @if let Some(separator) = separator_input {
+                        (separator)
+                    }
+                    @if let Some(next) = next_input.as_ref() {
+                        a href=(next) { "Next" }
+                    }
+                }
+            }
 
             table role="grid" {
                 tbody {
-                    @for (i, val) in inputs {
-                        tr id=(format!("i{i}")) {
-                            th class="row-index" {
-                                (i)
-                            }
+                    @for val in inputs {
+                        @if let Some((i, outpoint, amount, link, previous_script_pubkey, previous_script_pubkey_type, script_sig, witness, sequence)) = val {
 
-                            @if let Some((outpoint, amount, link, previous_script_pubkey, previous_script_pubkey_type, script_sig, witness, sequence)) = val {
+                            tr id=(format!("i{i}")) {
+                                th class="row-index" {
+                                    (i)
+                                }
+
+
                                 td {
                                     br;
                                     div {
@@ -242,26 +303,39 @@ pub fn page(
                                     a href=(link) { (amount) }
                                 }
                             }
-                            @else {
-                                td { "Coinbase" }
-                                td {}
-                            }
+                        }
+                        @else {
+                            td { "Coinbase" }
+                            td {}
+
                         }
                     }
                 }
-                @if inputs_truncated {
+                @if let Some(next) = next_input {
                     tfoot {
-                        tr {
+                        fr {
                             th { }
-                            td { "…inputs truncated" }
+                            td { a href=(next) { "other inputs" } }
                             td { }
                         }
                     }
                 }
             }
 
-            h2 id="outputs"  { (tx.output.len()) " output" (outputs_plural) }
-
+            hgroup {
+                h2 id="outputs"  { (tx.output.len()) " output" (outputs_plural) }
+                p {
+                    @if let Some(prev) = prev_output {
+                        a href=(prev) { "Prev" }
+                    }
+                    @if let Some(separator) = separator_output {
+                        (separator)
+                    }
+                    @if let Some(next) = next_output.as_ref() {
+                        a href=(next) { "Next" }
+                    }
+                }
+            }
             table role="grid" {
                 tbody {
                     @for (i, address, amount, output_link, script_pubkey, script_type, op_return_string) in outputs {
@@ -300,11 +374,11 @@ pub fn page(
                         }
                     }
                 }
-                @if outputs_truncated {
+                @if let Some(next) = next_output {
                     tfoot {
-                        tr {
+                        fr {
                             th { }
-                            td { "…outputs truncated" }
+                            td { a href=(next) { "other outputs" } }
                             td { }
                         }
                     }
@@ -333,7 +407,7 @@ pub fn page(
         }
     };
 
-    html_page("Transaction", content)
+    Ok(html_page("Transaction", content))
 }
 
 /// convert in hex, unless is empty or too long

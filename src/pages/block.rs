@@ -17,13 +17,13 @@ pub fn page(block: &BlockNoTxDetails, page: usize) -> Result<Markup, Error> {
     }
     let to_tx = block.tx.len().min(from_tx + PER_PAGE);
     let network_url_path = network().as_url_path();
-    let txids = block.tx.iter().skip(from_tx).take(10).enumerate();
+    let txids = block.tx.iter().skip(from_tx).take(PER_PAGE).enumerate();
     let translate = |i: usize| i + from_tx;
 
     let prev_txs = (page > 0).then(|| format!("{}b/{}/{}", network_url_path, block.hash, page - 1));
     let next_txs = (to_tx != block.tx.len())
         .then(|| format!("{}b/{}/{}", network_url_path, block.hash, page + 1));
-    let separator_txs = (prev_txs.is_some() & next_txs.is_some()).then(|| " | ");
+    let separator_txs = (prev_txs.is_some() && next_txs.is_some()).then(|| " | ");
 
     let current_block = if page == 0 {
         html! { (block.height) }

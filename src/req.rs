@@ -16,7 +16,7 @@ pub enum ParsedRequest {
     SearchBlock(BlockHash),
     SearchTx(Txid),
     SearchAddress(Address),
-    Tx(Txid),
+    Tx(Txid, usize),
     Block(BlockHash, usize),
     TxOut(Txid, u32),
     Head,
@@ -70,9 +70,13 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
         (&Method::GET, None, Some("css"), Some("custom.css"), None) => ParsedRequest::CustomCss,
         (&Method::GET, None, Some("contact"), None, None) => ParsedRequest::Contact,
 
-        (&Method::GET, None, Some("t"), Some(txid), None) => {
+        (&Method::GET, None, Some("t"), Some(txid), page) => {
             let txid = Txid::from_hex(txid)?;
-            ParsedRequest::Tx(txid)
+            let page = match page {
+                Some(page) => page.parse::<usize>()?,
+                None => 0,
+            };
+            ParsedRequest::Tx(txid, page)
         }
         (&Method::GET, None, Some("o"), Some(txid), Some(vout)) => {
             let txid = Txid::from_hex(txid)?;

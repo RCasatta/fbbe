@@ -2,6 +2,8 @@ use crate::{network, state::MempoolFees, NetworkExt};
 use bitcoin::hashes::hex::ToHex;
 use maud::{html, Render};
 
+use super::tx::IO_PER_PAGE;
+
 pub trait Html {
     fn html(&self) -> maud::Markup;
 }
@@ -65,8 +67,14 @@ impl Render for OutPoint {
         let txid_hex = self.0.txid.to_hex();
         let network_url_path = network().as_url_path();
         let vout = self.0.vout;
+        let page = vout as usize / IO_PER_PAGE;
+        let page = if page == 0 {
+            "/".to_string()
+        } else {
+            format!("/{page}")
+        };
 
-        let link = format!("{network_url_path}t/{txid_hex}#o{vout}");
+        let link = format!("{network_url_path}t/{txid_hex}{page}#o{vout}");
 
         html! {
             a href=(link) {
