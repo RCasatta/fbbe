@@ -32,11 +32,11 @@ pub fn page(
 
     let last_page_input = tx.input.len().saturating_sub(1) / IO_PER_PAGE;
     let last_page_output = tx.output.len().saturating_sub(1) / IO_PER_PAGE;
-    log::info!("last page {last_page_input} {last_page_output}");
+    log::debug!("last page {last_page_input} {last_page_output}");
 
     let input_start = start.min(last_page_input * IO_PER_PAGE);
     let output_start = start.min(last_page_output * IO_PER_PAGE);
-    log::info!("from {input_start} {output_start}");
+    log::debug!("from {input_start} {output_start}");
 
     let prev_input = (page > 0 && last_page_input != 0).then(|| {
         format!(
