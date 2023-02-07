@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use crate::rpc;
 use crate::state::SharedState;
@@ -48,8 +49,9 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
     loop {
         if let Ok(mempool) = rpc::mempool::content().await {
             cache.retain(|k, _v| mempool.contains(k)); // keep only current mempool elements
-            log::trace!("mempool content returns {} txids", mempool.len(),);
+            log::trace!("mempool content returns {} txids", mempool.len());
 
+            let start = Instant::now();
             'outer: for txid in mempool {
                 if cache.contains_key(&txid) {
                     continue;
@@ -70,6 +72,14 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
                     let weight = tx.weight();
 
                     cache.insert(txid, WeightFee { weight, fee });
+
+                    if start.elapsed() > Duration::from_secs(60) {
+                        log::info!(
+                            "memppol info is taking more than a minute, breaking. Cache len: {}",
+                            cache.len()
+                        );
+                        break;
+                    }
                 }
             }
         }
