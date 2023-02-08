@@ -1,8 +1,9 @@
 use std::str::from_utf8;
 
 use bitcoin::{
-    blockdata::script::Instruction, consensus::encode::serialize_hex, Address, Amount, BlockHash,
-    Denomination, OutPoint, Script, Transaction, TxOut,
+    blockdata::script::Instruction,
+    consensus::{encode::serialize_hex, serialize},
+    Address, Amount, BlockHash, Denomination, OutPoint, Script, Transaction, TxOut,
 };
 use bitcoin_hashes::hex::ToHex;
 use maud::{html, Markup};
@@ -210,10 +211,16 @@ pub fn page(
         }
     };
 
-    let hex = if tx.size() < 25000 {
-        serialize_hex(&tx)
+    let hex = if tx.size() > 1_000 {
+        let bytes = serialize(&tx);
+        html! {
+            (&bytes[..500].to_hex())
+            b { "...truncated, original size " (tx.size()) " bytes..." }
+            (&bytes[tx.size()-500..].to_hex())
+
+        }
     } else {
-        "Hex of transaction bigger than 25kbyte is not shown".to_string()
+        html! { (serialize_hex(&tx)) }
     };
 
     let content = html! {
