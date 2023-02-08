@@ -69,7 +69,7 @@ impl Render for OutPoint {
         let vout = self.0.vout;
         let page = vout as usize / IO_PER_PAGE;
         let page = if page == 0 {
-            "/".to_string()
+            "".to_string()
         } else {
             format!("/{page}")
         };
