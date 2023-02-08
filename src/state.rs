@@ -52,7 +52,7 @@ impl SharedState {
             txs: Mutex::new(LruCache::new(
                 NonZeroUsize::new(args.tx_cache_size).unwrap(),
             )),
-            tx_in_block: Mutex::new(LruCache::new(NonZeroUsize::new(1_000_000).unwrap())),
+            tx_in_block: Mutex::new(LruCache::new(NonZeroUsize::new(200_000).unwrap())),
             hash_to_height_time: Mutex::new(HashMap::new()),
             height_to_hash: Mutex::new(Vec::new()),
             args,
