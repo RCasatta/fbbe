@@ -354,7 +354,7 @@ pub fn page(
                                 @if let Some(address) = address {
                                     div {
                                         "Address"
-                                        p { code { (address.to_string()) } }
+                                        p { (address.html()) }
                                     }
                                 }
                                 div {

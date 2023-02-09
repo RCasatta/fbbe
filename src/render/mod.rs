@@ -1,3 +1,4 @@
+mod address;
 mod blockhash;
 mod mempoolfees;
 mod outpoint;

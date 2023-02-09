@@ -1,7 +1,7 @@
 use bitcoin::Address;
 use maud::{html, Markup};
 
-use crate::error::Error;
+use crate::{error::Error, render::Html};
 
 use super::html_page;
 
@@ -13,7 +13,7 @@ pub fn page(address: &Address) -> Result<Markup, Error> {
         section {
             hgroup {
                 h1 { "Address" }
-                p  { code { (address.to_string()) } }
+                p  { (address.html()) }
             }
 
             p {
