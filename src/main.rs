@@ -18,6 +18,7 @@ use tokio::time::sleep;
 mod error;
 mod globals;
 mod pages;
+mod render;
 mod req;
 mod route;
 mod rpc;

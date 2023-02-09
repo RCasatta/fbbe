@@ -9,7 +9,6 @@ pub mod address;
 pub mod block;
 pub mod contact;
 pub mod home;
-pub mod render;
 pub mod tx;
 pub mod txout;
 

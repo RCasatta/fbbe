@@ -1,8 +1,8 @@
 use crate::{
     error::Error,
     network,
-    pages::render::Html,
     pages::{html_page, size_rows},
+    render::Html,
     rpc::block::BlockNoTxDetails,
     NetworkExt,
 };

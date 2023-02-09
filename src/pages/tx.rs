@@ -9,8 +9,7 @@ use bitcoin_hashes::hex::ToHex;
 use maud::{html, Markup};
 
 use crate::{
-    error::Error, network, pages::render::Html, pages::size_rows, rpc::headers::HeightTime,
-    NetworkExt,
+    error::Error, network, pages::size_rows, render::Html, rpc::headers::HeightTime, NetworkExt,
 };
 
 use super::html_page;

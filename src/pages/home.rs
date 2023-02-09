@@ -1,7 +1,7 @@
 use super::html_page;
 use crate::{
     network,
-    pages::render::Html,
+    render::Html,
     rpc::{chaininfo::ChainInfo, headers::HeightTime, mempool::MempoolInfo},
     state::MempoolFees,
 };
