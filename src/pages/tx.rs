@@ -80,10 +80,9 @@ pub fn page(
             } else {
                 let link = format!("{}t/{}", network().as_url_path(), po.txid);
                 let amount = amount_str(previous_output.value);
-                let previous_script_pubkey = script_color(&previous_output.script_pubkey);
+                let previous_script_pubkey = previous_output.script_pubkey.clone();
                 let previous_script_pubkey_type = script_type(&previous_output.script_pubkey);
-                let script_sig =
-                    (!input.script_sig.is_empty()).then(|| script_color(&input.script_sig));
+                let script_sig = (!input.script_sig.is_empty()).then(|| input.script_sig.clone());
 
                 // The following logic makes hex the witness elements, empty elements become "<empty>".
                 // Moreover there is a deduplication logic where same consucutive elements like "00 00"
@@ -154,7 +153,7 @@ pub fn page(
                 Some(format!("{}o/{}/{}", network().as_url_path(), txid, i))
             };
             let amount = amount_str(output.value);
-            let script_pubkey = script_color(&output.script_pubkey);
+            let script_pubkey = output.script_pubkey.clone();
             let script_type = script_type(&output.script_pubkey);
 
             let op_return_string = output
@@ -277,14 +276,14 @@ pub fn page(
                                             small { " (" (previous_script_pubkey_type) ")" }
                                         }
                                     }
-                                    p { code { small { (previous_script_pubkey) }  } }
+                                    p {  (previous_script_pubkey.html()) }
 
                                     div { "Sequence"}
                                     p { code { small { (sequence) }  } }
 
                                     @if let Some(script_sig) = script_sig {
                                         div { "Script sig"}
-                                        p { code { small { (script_sig) }  } }
+                                        p { (script_sig.html()) }
                                     }
                                     @if !witness.is_empty() {
                                         div { "Witness"}
@@ -363,7 +362,7 @@ pub fn page(
                                         small { " (" (script_type) ")" }
                                     }
                                 }
-                                p { code { small { (script_pubkey) } } }
+                                p { (script_pubkey.html()) }
 
                                 @if let Some(op_return_string) = op_return_string {
                                     div { "Op return in utf8" }
@@ -484,20 +483,5 @@ pub fn script_type(script: &Script) -> Option<String> {
         None
     } else {
         Some(kind.to_string())
-    }
-}
-
-pub fn script_color(script: &Script) -> Markup {
-    let asm = script.asm();
-    let pieces = asm.split(" ");
-    html! {
-        @for piece in pieces {
-            @if piece.starts_with("OP_") {
-                b { (piece) }
-            } @else {
-                (piece)
-            }
-            " "
-        }
     }
 }
