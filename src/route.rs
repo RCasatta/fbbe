@@ -21,7 +21,6 @@ use mime::{
 use std::{convert::Infallible, sync::Arc, time::Instant};
 
 const CSS_LAST_MODIFIED: &str = "2022-10-03 07:53:03 UTC";
-const CUSTOM_CSS_LAST_MODIFIED: &str = "2022-11-23 07:53:03 UTC";
 const CONTACT_PAGE_LAST_MODIFIED: &str = "2022-12-16 07:53:03 UTC";
 const ROBOTS_LAST_MODIFIED: &str = "2023-01-17 07:53:03 UTC";
 
@@ -64,7 +63,6 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
                 }
             }
             ParsedRequest::Css => Some(CSS_LAST_MODIFIED.to_string()),
-            ParsedRequest::CustomCss => Some(CUSTOM_CSS_LAST_MODIFIED.to_string()),
             ParsedRequest::Contact => Some(CONTACT_PAGE_LAST_MODIFIED.to_string()),
 
             _ => None,
@@ -224,12 +222,6 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
             .header(CACHE_CONTROL, "public, max-age=31536000")
             .header(CONTENT_TYPE, "text/css; charset=utf-8")
             .body(Body::from(include_str!("css/pico.min.css")))?,
-
-        ParsedRequest::CustomCss => Response::builder()
-            .header(LAST_MODIFIED, CUSTOM_CSS_LAST_MODIFIED)
-            .header(CACHE_CONTROL, "public, max-age=3600")
-            .header(CONTENT_TYPE, "text/css; charset=utf-8")
-            .body(Body::from(include_str!("css/custom.css")))?,
 
         ParsedRequest::Contact => Response::builder()
             .header(LAST_MODIFIED, CONTACT_PAGE_LAST_MODIFIED)

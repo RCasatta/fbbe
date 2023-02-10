@@ -12,16 +12,8 @@
     width: 1ch;
 }
 
-.break-all {
-    word-break: break-all;
-}
-
 code {
     word-break: break-all;
-}
-
-details summary::after {
-    background-image: none !important;
 }
 
 td details {

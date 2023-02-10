@@ -28,6 +28,14 @@ Whenever `Cargo.toml` or `Cargo.lock` are updated the `cargo2nix` tool must be l
 nix run github:cargo2nix/cargo2nix   # needs nix-command and flakes experimental feature enabled 
 ```
 
+## CSS
+
+After changing `custom.css` use a minifier:
+
+```
+yui-compressor custom.css > custom.min.css
+```
+
 ## Mainnet test cases
 
 * Block with most tx 00000000000000001080e6de32add416cd6cda29f35ec9bce694fea4b964c7be

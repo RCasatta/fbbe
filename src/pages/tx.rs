@@ -407,7 +407,7 @@ pub fn page(
 
             h2 id="hex" { "Hex "}
 
-            small { code class="break-all" { (hex) } }
+            small { code { (hex) } }
 
         }
     };
