@@ -12,7 +12,7 @@ use crate::{
     error::Error,
     network,
     pages::size_rows,
-    render::Html,
+    render::{AmountRow, Html},
     rpc::headers::HeightTime,
     state::MempoolFees,
     threads::update_mempool_info::{TxidWeightFee, WeightFee},
@@ -392,10 +392,7 @@ fn amount_str(val: u64) -> String {
 
 pub fn fee_rows(wf: WeightFee, last_in_block: Option<TxidWeightFee>) -> Markup {
     html! {
-        tr {
-            th { "Fee" }
-            td class="number" { (amount_str(wf.fee as u64))  }
-        }
+        (AmountRow::new_with_sat("Fee", wf.fee as u64))
 
         tr {
             th { "Fee rate (BTC/KvB)" }

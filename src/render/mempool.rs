@@ -1,5 +1,9 @@
 use super::Html;
-use crate::{rpc::mempool::MempoolInfo, state::MempoolFees};
+use crate::{
+    render::{AmountRow, SizeRow},
+    rpc::mempool::MempoolInfo,
+    state::MempoolFees,
+};
 use maud::{html, Render};
 
 pub struct MempoolSection {
@@ -14,7 +18,11 @@ impl Render for MempoolSection {
         } else {
             "transactions"
         };
-        let total_fees = format!("{:.8}", self.info.total_fee);
+        let mempoolminfee = if (self.info.maxmempool as f64 * 0.95) < self.info.usage as f64 {
+            Some(self.info.mempoolminfee)
+        } else {
+            None
+        };
 
         html! {
             hgroup {
@@ -24,10 +32,15 @@ impl Render for MempoolSection {
 
             table role="grid" {
                 tbody {
-                    tr {
-                        th { "Total fees (BTC)" }
-                        td class="number" { (total_fees) }
+                    (AmountRow::new_with_btc("Total fees (BTC)", self.info.total_fee))
+
+                    @if let Some(mempoolminfee) = mempoolminfee {
+                        (AmountRow::new_with_btc("Mempool min fee (BTC)", mempoolminfee))
                     }
+
+                    // (SizeRow::new("Size (bytes)", self.info.bytes as usize))
+                    (SizeRow::new("Memory usage (bytes)", self.info.usage as usize))
+
 
                     (self.fees)
 

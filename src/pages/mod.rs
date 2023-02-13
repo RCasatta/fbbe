@@ -1,9 +1,8 @@
 use std::collections::BTreeSet;
 
-use crate::{globals::networks, network, NetworkExt};
+use crate::{globals::networks, network, render::SizeRow, NetworkExt};
 use bitcoin::Network;
 use maud::{html, Markup, PreEscaped, DOCTYPE};
-use thousands::{digits, Separable, SeparatorPolicy};
 
 pub mod address;
 pub mod block;
@@ -94,27 +93,12 @@ pub fn footer() -> Markup {
     }
 }
 
-const SEPARATOR_POLICY: SeparatorPolicy = SeparatorPolicy {
-    separator: " ", // NARROW NO-BREAK SPACE' (U+202F)
-    groups: &[3],
-    digits: digits::ASCII_DECIMAL,
-};
-
 pub fn size_rows(size: usize, weight: usize) -> Markup {
     let vsize = (weight + 3) / 4;
 
     html! {
-        tr {
-            th { "Size (B)" }
-            td class="right" { (size.separate_by_policy(SEPARATOR_POLICY)) }
-        }
-        tr {
-            th { "Virtual size (vB)" }
-            td class="right" { (vsize.separate_by_policy(SEPARATOR_POLICY)) }
-        }
-        tr {
-            th { "Weight units (WU)" }
-            td class="right" { (weight.separate_by_policy(SEPARATOR_POLICY))  }
-        }
+        (SizeRow::new("Size (B)", size))
+        (SizeRow::new("Virtual size (vB)", vsize))
+        (SizeRow::new("Weight units (WU)", weight))
     }
 }
