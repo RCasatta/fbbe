@@ -153,6 +153,12 @@ pub fn page(
     let inputs_plural = if tx.input.len() > 1 { "s" } else { "" };
     let outputs_plural = if tx.output.len() > 1 { "s" } else { "" };
 
+    let last_in_block = if height_time.is_none() {
+        mempool_fees.last_in_block.clone()
+    } else {
+        None
+    };
+
     let block_link = if let Some((block_hash, height_time)) = height_time {
         html! {
             tr {
@@ -208,7 +214,7 @@ pub fn page(
                 tbody {
                     (block_link)
                     @if !tx.is_coin_base() {
-                        (fee_rows( wf, mempool_fees.last_in_block.clone()))
+                        (fee_rows( wf, last_in_block))
                     }
                 }
             }
