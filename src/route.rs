@@ -133,7 +133,7 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
             }
         }
 
-        ParsedRequest::Tx(txid, page) => {
+        ParsedRequest::Tx(txid, pagination) => {
             let (tx, block_hash) = state.tx(txid, true).await?;
             let ts = match block_hash.as_ref() {
                 Some(block_hash) => Some((*block_hash, state.height_time(*block_hash).await?)),
@@ -141,7 +141,8 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
             };
             let prevouts = fetch_prevouts(&tx, &state).await?;
             let current_tip = state.chain_info.lock().await.clone();
-            let page = pages::tx::page(&tx, ts, &prevouts, page)?.into_string();
+            let mempool_fees = state.mempool_fees.lock().await.clone();
+            let page = pages::tx::page(&tx, ts, &prevouts, pagination, mempool_fees)?.into_string();
             let cache_seconds =
                 cache_time_from_confirmations(ts.map(|t| current_tip.blocks - t.1.height));
 

@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 use crate::rpc;
 use crate::state::SharedState;
 use bitcoin::Txid;
+use maud::{html, Render};
 use tokio::time::sleep;
 
 pub async fn update_mempool(shared_state: Arc<SharedState>) {
@@ -29,14 +30,40 @@ async fn update_mempool_info(shared_state: Arc<SharedState>) {
 }
 
 #[derive(Debug, Clone)]
-struct WeightFee {
-    weight: usize,
-    fee: usize,
+pub struct WeightFee {
+    /// The weight of the tx in vbytes
+    pub weight: usize,
+
+    /// The absolute fee in satoshi
+    pub fee: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct TxidWeightFee {
+    pub wf: WeightFee,
+    pub txid: Txid,
+}
+
+impl Render for WeightFee {
+    fn render(&self) -> maud::Markup {
+        // em data-tooltip=(rate_sat_vb) style="font-style: normal" { (rate_btc_kvb)
+        let btc_over_kvb = format!("{:.8}", self.rate_btc_over_kvb());
+        let sat_over_vb = format!("{:.1} sat/vB", self.rate_sat_over_vb());
+
+        html! { em data-tooltip=(sat_over_vb) style="font-style: normal" { (btc_over_kvb) } }
+    }
 }
 
 impl WeightFee {
     fn rate(&self) -> usize {
         (self.fee * 1_000_000) / self.weight
+    }
+
+    fn rate_btc_over_kvb(&self) -> f64 {
+        (self.fee as f64 / 100_000_000.0) / (self.weight as f64 / 4_000.0)
+    }
+    fn rate_sat_over_vb(&self) -> f64 {
+        (self.fee as f64) / (self.weight as f64 / 4.0)
     }
 }
 
@@ -44,7 +71,7 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
     log::info!("Starting update_mempool_details");
 
     let mut cache: HashMap<Txid, WeightFee> = HashMap::new();
-    let mut rates = vec![];
+    let mut rates: Vec<TxidWeightFee> = vec![];
 
     loop {
         if let Ok(mempool) = rpc::mempool::content().await {
@@ -85,8 +112,13 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
         }
 
         rates.clear();
-        rates.extend(cache.clone().into_iter());
-        rates.sort_by_cached_key(|a| a.1.rate());
+        rates.extend(
+            cache
+                .clone()
+                .into_iter()
+                .map(|(txid, wf)| TxidWeightFee { wf, txid }),
+        );
+        rates.sort_by_cached_key(|a| a.wf.rate());
 
         let mut sum = 0;
 
@@ -95,20 +127,20 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
             .iter()
             .rev()
             .take_while(|i| {
-                sum += i.1.weight;
+                sum += i.wf.weight;
                 sum < 4_000_000
             })
             .collect();
         log::debug!("block template contains {}", block_template.len());
 
-        let last_in_block = block_template.last().map(|t| t.0);
-        let middle_in_block = block_template.get(block_template.len() / 2).map(|t| t.0);
+        let last_in_block = block_template.last().cloned();
+        let middle_in_block = block_template.get(block_template.len() / 2).cloned();
 
         let mut mempool_fees = shared_state.mempool_fees.lock().await;
 
-        mempool_fees.highest = rates.last().map(|t| t.0);
-        mempool_fees.last_in_block = last_in_block;
-        mempool_fees.middle_in_block = middle_in_block;
+        mempool_fees.highest = rates.last().cloned();
+        mempool_fees.last_in_block = last_in_block.cloned();
+        mempool_fees.middle_in_block = middle_in_block.cloned();
 
         drop(mempool_fees);
 

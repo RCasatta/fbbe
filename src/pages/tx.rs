@@ -9,7 +9,14 @@ use bitcoin_hashes::hex::ToHex;
 use maud::{html, Markup};
 
 use crate::{
-    error::Error, network, pages::size_rows, render::Html, rpc::headers::HeightTime, NetworkExt,
+    error::Error,
+    network,
+    pages::size_rows,
+    render::Html,
+    rpc::headers::HeightTime,
+    state::MempoolFees,
+    threads::update_mempool_info::{TxidWeightFee, WeightFee},
+    NetworkExt,
 };
 
 use super::html_page;
@@ -21,6 +28,7 @@ pub fn page(
     height_time: Option<(BlockHash, HeightTime)>,
     prevout: &[TxOut],
     page: usize,
+    mempool_fees: MempoolFees,
 ) -> Result<Markup, Error> {
     let txid = tx.txid();
     let network_url_path = network().as_url_path();
@@ -83,45 +91,7 @@ pub fn page(
                 let previous_script_pubkey = previous_output.script_pubkey.clone();
                 let previous_script_pubkey_type = script_type(&previous_output.script_pubkey);
                 let script_sig = (!input.script_sig.is_empty()).then(|| input.script_sig.clone());
-
-                // The following logic makes hex the witness elements, empty elements become "<empty>".
-                // Moreover there is a deduplication logic where same consucutive elements like "00 00"
-                // are shown as "00 2 times". This helps showing tx like
-                // 73be398c4bdc43709db7398106609eea2a7841aaf3a4fa2000dc18184faa2a7e which contains
-                // 500_001 empty push
-                let mut witness = vec![];
-                let mut count = 1;
-                let w = input.witness.to_vec();
-                let mut iter = w.into_iter();
-                if let Some(mut before) = iter.next() {
-                    let mut last = None;
-                    for current in iter {
-                        if before != current {
-                            if count == 1 {
-                                witness.push(hex_empty_long(&before));
-                            } else {
-                                witness.push(format!(
-                                    "{} {} times",
-                                    hex_empty_long(&before),
-                                    count
-                                ));
-                            }
-                            count = 1;
-                        } else {
-                            count += 1;
-                        }
-
-                        last = Some(current.clone());
-                        before = current;
-                    }
-                    if let Some(last) = last {
-                        if count == 1 {
-                            witness.push(hex_empty_long(&last));
-                        } else {
-                            witness.push(format!("{} {} times", hex_empty_long(&last), count));
-                        }
-                    }
-                }
+                let witness = input.witness.clone();
 
                 let sequence = format!("0x{:x}", input.sequence);
                 Some((
@@ -221,6 +191,11 @@ pub fn page(
         html! { (serialize_hex(&tx)) }
     };
 
+    let wf = WeightFee {
+        weight: tx.weight(),
+        fee: fee as usize,
+    };
+
     let content = html! {
 
         section {
@@ -233,7 +208,7 @@ pub fn page(
                 tbody {
                     (block_link)
                     @if !tx.is_coin_base() {
-                        (fee_rows(fee, tx.weight()))
+                        (fee_rows( wf, mempool_fees.last_in_block.clone()))
                     }
                 }
             }
@@ -287,20 +262,7 @@ pub fn page(
                                     }
                                     @if !witness.is_empty() {
                                         div { "Witness"}
-                                        p {
-                                            code {
-                                                small {
-                                                    @for (i, el) in witness.iter().enumerate()  {
-                                                        @if i % 2 == 0 {
-                                                            b { (el) " " }
-                                                        } @else {
-                                                            i { (el) " " }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-
+                                        p { (witness.html()) }
                                     }
 
                                 }
@@ -415,24 +377,6 @@ pub fn page(
     Ok(html_page("Transaction", content))
 }
 
-/// convert in hex, unless is empty or too long
-fn hex_empty_long(val: &[u8]) -> String {
-    if val.is_empty() {
-        "<empty>".to_owned()
-    } else if val.len() > 2000 {
-        let len = val.len();
-
-        format!(
-            "{}...truncated, original size is {} bytes...{}",
-            val[0..128].to_hex(),
-            len,
-            val[len - 128..len].to_hex()
-        )
-    } else {
-        val.to_hex()
-    }
-}
-
 fn amount_str(val: u64) -> String {
     format!(
         "{:.8}",
@@ -440,23 +384,22 @@ fn amount_str(val: u64) -> String {
     )
 }
 
-pub fn fee_rows(fee: u64, weight: usize) -> Markup {
-    let virtual_size = weight as f64 / 4.0;
-    let rate_sat_vb = fee as f64 / virtual_size;
-    let rate_sat_vb = format!("{:.1} sat/vB", rate_sat_vb);
-
-    let rate_btc_kvb = (fee as f64 / 100_000_000.0) / (virtual_size / 1_000.0); //  BTC/KvB
-    let rate_btc_kvb = format!("{:.8}", rate_btc_kvb);
-
+pub fn fee_rows(wf: WeightFee, last_in_block: Option<TxidWeightFee>) -> Markup {
     html! {
         tr {
             th { "Fee" }
-            td class="number" { (amount_str(fee))  }
+            td class="number" { (amount_str(wf.fee as u64))  }
         }
 
         tr {
             th { "Fee rate (BTC/KvB)" }
-            td class="number" { em data-tooltip=(rate_sat_vb) style="font-style: normal" { (rate_btc_kvb) } }
+            td class="number" { (wf) }
+        }
+        @if let Some(last_in_block) = last_in_block.as_ref()  {
+            tr {
+                th { em { "Last in block" } }
+                td class="number" { (last_in_block.wf) }
+            }
         }
     }
 }

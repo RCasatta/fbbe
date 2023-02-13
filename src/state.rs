@@ -10,6 +10,7 @@ use crate::{
     error::Error,
     network,
     rpc::{self, chaininfo::ChainInfo, headers::HeightTime, mempool::MempoolInfo},
+    threads::update_mempool_info::TxidWeightFee,
     Arguments,
 };
 
@@ -34,13 +35,13 @@ pub struct SharedState {
 #[derive(Clone)]
 pub struct MempoolFees {
     /// Highest fee tx in the mempool
-    pub highest: Option<Txid>,
+    pub highest: Option<TxidWeightFee>,
 
     /// The fee of the last tx included in a block template of current mempool
-    pub last_in_block: Option<Txid>,
+    pub last_in_block: Option<TxidWeightFee>,
 
     /// The fee of the tx included in the middled of a block template of current mempool
-    pub middle_in_block: Option<Txid>,
+    pub middle_in_block: Option<TxidWeightFee>,
 }
 
 impl SharedState {
