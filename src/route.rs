@@ -1,6 +1,7 @@
 use crate::{
     error::Error,
     network, pages,
+    render::MempoolSection,
     req::{self, ParsedRequest},
     rpc, NetworkExt, SharedState,
 };
@@ -81,12 +82,12 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
     let resp = match parsed_req {
         ParsedRequest::Home => {
             let chain_info = state.chain_info.lock().await.clone();
-            let mempool_info = state.mempool_info.lock().await.clone();
-            let mempool_fees = state.mempool_fees.lock().await.clone();
+            let info = state.mempool_info.lock().await.clone();
+            let fees = state.mempool_fees.lock().await.clone();
+            let mempool_section = MempoolSection { info, fees };
 
             let height_time = state.height_time(chain_info.best_block_hash).await?;
-            let page = pages::home::page(chain_info, height_time, mempool_info, mempool_fees)
-                .into_string();
+            let page = pages::home::page(chain_info, height_time, mempool_section).into_string();
 
             let builder = Response::builder().header(CACHE_CONTROL, "public, max-age=5");
             match response_content_type {

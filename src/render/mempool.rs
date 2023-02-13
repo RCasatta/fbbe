@@ -1,6 +1,41 @@
 use super::Html;
-use crate::state::MempoolFees;
+use crate::{rpc::mempool::MempoolInfo, state::MempoolFees};
 use maud::{html, Render};
+
+pub struct MempoolSection {
+    pub info: MempoolInfo,
+    pub fees: MempoolFees,
+}
+
+impl Render for MempoolSection {
+    fn render(&self) -> maud::Markup {
+        let transaction_s = if self.info.size == 1 {
+            "transaction"
+        } else {
+            "transactions"
+        };
+        let total_fees = format!("{:.8}", self.info.total_fee);
+
+        html! {
+            hgroup {
+                h2 { "Mempool" }
+                p { (self.info.size) " " (transaction_s) }
+            }
+
+            table role="grid" {
+                tbody {
+                    tr {
+                        th { "Total fees (BTC)" }
+                        td class="number" { (total_fees) }
+                    }
+
+                    (self.fees)
+
+                }
+            }
+        }
+    }
+}
 
 impl Render for MempoolFees {
     fn render(&self) -> maud::Markup {
