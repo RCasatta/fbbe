@@ -14,16 +14,15 @@ impl<'a> Render for Witness<'a> {
         let mut witness = vec![];
         let mut count = 1;
         let w = self.0.to_vec();
+        log::debug!("witness: {w:?}");
+
         let mut iter = w.into_iter();
+
         if let Some(mut before) = iter.next() {
             let mut last = None;
             for current in iter {
                 if before != current {
-                    if count == 1 {
-                        witness.push(hex_empty_long(&before));
-                    } else {
-                        witness.push(format!("{} {} times", hex_empty_long(&before), count));
-                    }
+                    push(before, &mut witness, count);
                     count = 1;
                 } else {
                     count += 1;
@@ -32,11 +31,12 @@ impl<'a> Render for Witness<'a> {
                 last = Some(current.clone());
                 before = current;
             }
-            if let Some(last) = last {
-                if count == 1 {
-                    witness.push(hex_empty_long(&last));
-                } else {
-                    witness.push(format!("{} {} times", hex_empty_long(&last), count));
+
+            if witness.is_empty() {
+                push(before, &mut witness, 1);
+            } else {
+                if let Some(last) = last {
+                    push(last, &mut witness, count);
                 }
             }
         }
@@ -54,6 +54,14 @@ impl<'a> Render for Witness<'a> {
                 }
             }
         }
+    }
+}
+
+fn push(data: Vec<u8>, witness: &mut Vec<String>, count: i32) {
+    if count == 1 {
+        witness.push(hex_empty_long(&data));
+    } else {
+        witness.push(format!("{} {} times", hex_empty_long(&data), count));
     }
 }
 
