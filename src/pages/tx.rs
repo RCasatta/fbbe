@@ -13,7 +13,7 @@ use crate::{
     network,
     pages::size_rows,
     render::{AmountRow, Html},
-    route::ResponseType,
+    req::ParsedRequest,
     rpc::headers::HeightTime,
     state::MempoolFees,
     threads::update_mempool_info::{TxidWeightFee, WeightFee},
@@ -30,7 +30,7 @@ pub fn page(
     prevout: &[TxOut],
     page: usize,
     mempool_fees: MempoolFees,
-    response_type: ResponseType,
+    parsed: &ParsedRequest,
 ) -> Result<Markup, Error> {
     let txid = tx.txid();
     let network_url_path = network().as_url_path();
@@ -248,7 +248,7 @@ pub fn page(
 
 
                                 td {
-                                    @if !response_type.is_text() {
+                                    @if !parsed.response_type.is_text() {
                                         br;
                                     }
 
@@ -322,7 +322,7 @@ pub fn page(
                                 (i)
                             }
                             td {
-                                @if !response_type.is_text() {
+                                @if !parsed.response_type.is_text() {
                                     br;
                                 }
                                 @if let Some(address) = address {
@@ -387,7 +387,7 @@ pub fn page(
         }
     };
 
-    Ok(html_page("Transaction", content, response_type))
+    Ok(html_page("Transaction", content, parsed))
 }
 
 fn amount_str(val: u64) -> String {

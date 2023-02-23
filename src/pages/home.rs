@@ -2,7 +2,7 @@ use super::html_page;
 use crate::{
     network,
     render::{Html, MempoolSection},
-    route::ResponseType,
+    req::ParsedRequest,
     rpc::{chaininfo::ChainInfo, headers::HeightTime},
 };
 use maud::{html, Markup};
@@ -13,7 +13,7 @@ pub fn page(
     info: ChainInfo,
     height_time: HeightTime,
     mempool_sec: MempoolSection,
-    response_type: ResponseType,
+    parsed: &ParsedRequest,
 ) -> Markup {
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
     let duration = Duration::from_secs(now.as_secs() - height_time.time as u64);
@@ -28,7 +28,7 @@ pub fn page(
                 p { (format!("{:?}",network())) }
             }
 
-            @if !response_type.is_text() {
+            @if !parsed.response_type.is_text() {
                 form {
                     label for="s" { "Search for tx id, block height or hash" }
                     input type="search" id="s" name="s" placeholder=(info.blocks) autofocus;
@@ -66,5 +66,5 @@ pub fn page(
         }
     };
 
-    html_page(&format!("{:?}", network()), content, response_type)
+    html_page(&format!("{:?}", network()), content, parsed)
 }

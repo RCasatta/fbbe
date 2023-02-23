@@ -2,7 +2,7 @@ use crate::{
     error::Error,
     network, pages,
     render::MempoolSection,
-    req::{self, ParsedRequest},
+    req::{self, Resource},
     rpc, NetworkExt, SharedState,
 };
 use bitcoin::{consensus::serialize, OutPoint, TxOut, Txid};
@@ -40,23 +40,21 @@ impl ResponseType {
 
 pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Response<Body>, Error> {
     let now = Instant::now();
-    log::debug!("request: {:?}", req);
     // let _count = state.requests.fetch_add(1, Ordering::Relaxed);
-    let (parsed_req, response_type) = req::parse(&req).await?;
-    log::debug!("response in: {:?}", response_type);
+    let parsed_req = req::parse(&req).await?;
 
     // DETERMINE IF NOT MODIFIED
     if let Some(if_modified_since) = req.headers().get(IF_MODIFIED_SINCE) {
         log::trace!("{:?} if modified since {:?}", req.uri(), if_modified_since);
-        let modified = match &parsed_req {
-            // ParsedRequest::Tx(txid) => state.txs.lock().await.get(txid).map,
-            ParsedRequest::Block(block_hash, _) => state
+        let modified = match &parsed_req.resource {
+            // Resource::Tx(txid) => state.txs.lock().await.get(txid).map,
+            Resource::Block(block_hash, _) => state
                 .hash_to_height_time
                 .lock()
                 .await
                 .get(block_hash)
                 .map(|e| e.date_time_utc()),
-            ParsedRequest::Tx(txid, _) => {
+            Resource::Tx(txid, _) => {
                 if let Some(block_hash) = state.tx_in_block.lock().await.get(txid) {
                     state
                         .hash_to_height_time
@@ -68,8 +66,8 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
                     None
                 }
             }
-            ParsedRequest::Css => Some(CSS_LAST_MODIFIED.to_string()),
-            ParsedRequest::Contact => Some(CONTACT_PAGE_LAST_MODIFIED.to_string()),
+            Resource::Css => Some(CSS_LAST_MODIFIED.to_string()),
+            Resource::Contact => Some(CONTACT_PAGE_LAST_MODIFIED.to_string()),
 
             _ => None,
         };
@@ -84,19 +82,19 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
         }
     }
 
-    let resp = match parsed_req {
-        ParsedRequest::Home => {
+    let resp = match parsed_req.resource {
+        Resource::Home => {
             let chain_info = state.chain_info.lock().await.clone();
             let info = state.mempool_info.lock().await.clone();
             let fees = state.mempool_fees.lock().await.clone();
             let mempool_section = MempoolSection { info, fees };
 
             let height_time = state.height_time(chain_info.best_block_hash).await?;
-            let page = pages::home::page(chain_info, height_time, mempool_section, response_type)
+            let page = pages::home::page(chain_info, height_time, mempool_section, &parsed_req)
                 .into_string();
 
             let builder = Response::builder().header(CACHE_CONTROL, "public, max-age=5");
-            match response_type {
+            match parsed_req.response_type {
                 ResponseType::Text(col) => builder
                     .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
                     .header(VARY, ACCEPT)
@@ -107,16 +105,16 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
                     .body(page.into())?,
                 ResponseType::Bytes => {
                     return Err(Error::ContentTypeUnsupported(
-                        response_type,
+                        parsed_req.response_type,
                         req.uri().to_string(),
                     ))
                 }
             }
         }
 
-        ParsedRequest::Block(block_hash, page) => {
+        Resource::Block(block_hash, page) => {
             let block = rpc::block::call_json(block_hash).await?;
-            let page = pages::block::page(&block, page, response_type)?.into_string();
+            let page = pages::block::page(&block, page, &parsed_req)?.into_string();
             let current_tip = state.chain_info.lock().await.clone();
             let block_confirmations = current_tip.blocks - block.height;
             let cache_seconds = cache_time_from_confirmations(Some(block_confirmations));
@@ -126,7 +124,7 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
                 .header(CACHE_CONTROL, cache_control) // cache examples https://developers.cloudflare.com/cache/about/cache-control/#examples
                 .header(LAST_MODIFIED, block.date_time_utc());
 
-            match response_type {
+            match parsed_req.response_type {
                 ResponseType::Text(col) => builder
                     .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
                     .header(VARY, ACCEPT)
@@ -137,16 +135,16 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
                     .body(page.into())?,
                 ResponseType::Bytes => {
                     return Err(Error::ContentTypeUnsupported(
-                        response_type,
+                        parsed_req.response_type,
                         req.uri().to_string(),
                     ))
                 }
             }
         }
 
-        ParsedRequest::Tx(txid, pagination) => {
+        Resource::Tx(txid, pagination) => {
             if pagination > 0 {
-                if let ResponseType::Bytes = response_type {
+                if let ResponseType::Bytes = parsed_req.response_type {
                     return Err(Error::BadRequest);
                 }
             }
@@ -158,9 +156,8 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
             let prevouts = fetch_prevouts(&tx, &state).await?;
             let current_tip = state.chain_info.lock().await.clone();
             let mempool_fees = state.mempool_fees.lock().await.clone();
-            let page =
-                pages::tx::page(&tx, ts, &prevouts, pagination, mempool_fees, response_type)?
-                    .into_string();
+            let page = pages::tx::page(&tx, ts, &prevouts, pagination, mempool_fees, &parsed_req)?
+                .into_string();
             let cache_seconds =
                 cache_time_from_confirmations(ts.map(|t| current_tip.blocks - t.1.height));
 
@@ -170,7 +167,7 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
                 builder = builder.header(LAST_MODIFIED, ts.1.date_time_utc());
             }
 
-            match response_type {
+            match parsed_req.response_type {
                 ResponseType::Text(col) => builder
                     .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
                     .header(VARY, ACCEPT)
@@ -186,10 +183,10 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
             }
         }
 
-        ParsedRequest::TxOut(txid, vout) => match rpc::txout::call(txid, vout).await {
+        Resource::TxOut(txid, vout) => match rpc::txout::call(txid, vout).await {
             Ok(tx) => {
                 let outpoint = OutPoint::new(txid, vout);
-                let page = pages::txout::page(&tx, outpoint, response_type).into_string();
+                let page = pages::txout::page(&tx, outpoint, &parsed_req).into_string();
                 let cache_seconds = if tx.utxos.is_empty() {
                     60 * 60 * 24 * 30 // one month
                 } else {
@@ -203,7 +200,7 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
             Err(e) => return Err(e),
         },
 
-        ParsedRequest::SearchHeight(height) => {
+        Resource::SearchHeight(height) => {
             let hash = state.hash(height).await?;
             let network = network().as_url_path();
 
@@ -213,7 +210,7 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
                 .body(Body::empty())?
         }
 
-        ParsedRequest::SearchBlock(hash) => {
+        Resource::SearchBlock(hash) => {
             let network = network().as_url_path();
             Response::builder()
                 .header(LOCATION, format!("{network}b/{hash}"))
@@ -221,7 +218,7 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
                 .body(Body::empty())?
         }
 
-        ParsedRequest::SearchTx(txid) => {
+        Resource::SearchTx(txid) => {
             let network = network().as_url_path();
             Response::builder()
                 .header(LOCATION, format!("{network}t/{txid}"))
@@ -229,7 +226,7 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
                 .body(Body::empty())?
         }
 
-        ParsedRequest::SearchAddress(address) => {
+        Resource::SearchAddress(address) => {
             let network = network().as_url_path();
             Response::builder()
                 .header(LOCATION, format!("{network}a/{address}"))
@@ -237,62 +234,60 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
                 .body(Body::empty())?
         }
 
-        ParsedRequest::Head => Response::new(Body::empty()),
+        Resource::Head => Response::new(Body::empty()),
 
-        ParsedRequest::Css => Response::builder()
+        Resource::Css => Response::builder()
             .header(LAST_MODIFIED, CSS_LAST_MODIFIED)
             .header(CACHE_CONTROL, "public, max-age=31536000")
             .header(CONTENT_TYPE, "text/css; charset=utf-8")
             .body(Body::from(include_str!("css/pico.min.css")))?,
 
-        ParsedRequest::Contact => Response::builder()
+        Resource::Contact => Response::builder()
             .header(LAST_MODIFIED, CONTACT_PAGE_LAST_MODIFIED)
             .header(CACHE_CONTROL, "public, max-age=3600")
             .header(CONTENT_TYPE, "text/html; charset=utf-8")
-            .body(Body::from(
-                pages::contact::page(response_type)?.into_string(),
-            ))?,
+            .body(Body::from(pages::contact::page(&parsed_req)?.into_string()))?,
 
-        ParsedRequest::Favicon => Response::builder()
+        Resource::Favicon => Response::builder()
             .header(LAST_MODIFIED, CONTACT_PAGE_LAST_MODIFIED)
             .header(CACHE_CONTROL, "public, max-age=31536000")
             .header(CONTENT_TYPE, "image/vnd.microsoft.icon")
             .body(Bytes::from_static(include_bytes!("favicon.ico")).into())?,
 
-        ParsedRequest::Robots => Response::builder()
+        Resource::Robots => Response::builder()
             .header(LAST_MODIFIED, ROBOTS_LAST_MODIFIED)
             .header(CACHE_CONTROL, "public, max-age=3600")
             .header(CONTENT_TYPE, "text/plain")
             .body(Bytes::from_static(include_bytes!("robots.txt")).into())?,
-        ParsedRequest::BlockToB(block_hash) => {
+        Resource::BlockToB(block_hash) => {
             let network = network().as_url_path();
             Response::builder()
                 .header(LOCATION, format!("{network}b/{block_hash}"))
                 .status(StatusCode::TEMPORARY_REDIRECT)
                 .body(Body::empty())?
         }
-        ParsedRequest::TxToT(txid) => {
+        Resource::TxToT(txid) => {
             let network = network().as_url_path();
             Response::builder()
                 .header(LOCATION, format!("{network}t/{txid}"))
                 .status(StatusCode::TEMPORARY_REDIRECT)
                 .body(Body::empty())?
         }
-        ParsedRequest::AddressToA(address) => {
+        Resource::AddressToA(address) => {
             let network = network().as_url_path();
             Response::builder()
                 .header(LOCATION, format!("{network}a/{address}"))
                 .status(StatusCode::TEMPORARY_REDIRECT)
                 .body(Body::empty())?
         }
-        ParsedRequest::Address(address) => {
+        Resource::Address(ref address) => {
             if address.network != network() {
                 return Err(Error::AddressWrongNetwork {
                     address: address.network,
                     fbbe: network(),
                 });
             } else {
-                let page = pages::address::page(&address, response_type)?.into_string();
+                let page = pages::address::page(&address, &parsed_req)?.into_string();
 
                 Response::builder()
                     .header(CACHE_CONTROL, "public, max-age=5")

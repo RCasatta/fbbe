@@ -1,11 +1,11 @@
 use bitcoin::Address;
 use maud::{html, Markup};
 
-use crate::{error::Error, render::Html, route::ResponseType};
+use crate::{error::Error, render::Html, req::ParsedRequest};
 
 use super::html_page;
 
-pub fn page(address: &Address, response_type: ResponseType) -> Result<Markup, Error> {
+pub fn page(address: &Address, parsed: &ParsedRequest) -> Result<Markup, Error> {
     let mempool = format!("https://mempool.space/address/{address}");
     let blockstream = format!("https://blockstream.info/address/{address}");
 
@@ -29,5 +29,5 @@ pub fn page(address: &Address, response_type: ResponseType) -> Result<Markup, Er
         }
     };
 
-    Ok(html_page("Address", content, response_type))
+    Ok(html_page("Address", content, parsed))
 }

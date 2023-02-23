@@ -1,6 +1,9 @@
 use std::collections::BTreeSet;
 
-use crate::{globals::networks, network, render::SizeRow, route::ResponseType, NetworkExt};
+use crate::{
+    globals::networks, network, render::SizeRow, req::ParsedRequest, route::ResponseType,
+    NetworkExt,
+};
 use bitcoin::Network;
 use maud::{html, Markup, PreEscaped, DOCTYPE};
 
@@ -55,39 +58,37 @@ fn nav_header(response_type: ResponseType) -> Markup {
     }
 }
 
-pub fn html_page(title: &str, content: Markup, response_type: ResponseType) -> Markup {
+pub fn html_page(title: &str, content: Markup, parsed: &ParsedRequest) -> Markup {
     html! {
         (DOCTYPE)
         html lang = "en" {
             (header(title))
             body {
                 div class="container" {
-                    (nav_header(response_type))
+                    (nav_header(parsed.response_type))
                 }
                 main class="container" {
                     (content)
                 }
-                (footer(response_type))
+                (footer(parsed))
             }
         }
     }
 }
 
 /// A static footer.
-pub fn footer(response_type: ResponseType) -> Markup {
-    if response_type.is_text() {
+pub fn footer(parsed: &ParsedRequest) -> Markup {
+    if parsed.response_type.is_text() {
         return html! {};
     }
-    let link = match network() {
-        Network::Bitcoin => "/",
-        Network::Testnet => "/testnet/",
-        Network::Signet => "/signet/",
-        Network::Regtest => "/regtest/",
-    };
+    let base = network().as_url_path();
     html! {
         footer {
             div class="container" {
-                a href=(link) { "Home" }
+                a href=(base) { "Home" }
+                @if let Some(link) = parsed.resource.link(&base) {
+                    " | " a href=(link) { "Text" }
+                }
                 " | " a href="/contact" { "Contact" }
                 " | " a href="https://github.com/RCasatta/fbbe" { "Source" }
 

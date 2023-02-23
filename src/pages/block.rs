@@ -3,7 +3,7 @@ use crate::{
     network,
     pages::{html_page, size_rows},
     render::Html,
-    route::ResponseType,
+    req::ParsedRequest,
     rpc::block::BlockNoTxDetails,
     NetworkExt,
 };
@@ -14,7 +14,7 @@ const PER_PAGE: usize = 10;
 pub fn page(
     block: &BlockNoTxDetails,
     page: usize,
-    response_type: ResponseType,
+    parsed: &ParsedRequest,
 ) -> Result<Markup, Error> {
     let from_tx = page * PER_PAGE;
     if from_tx >= block.tx.len() {
@@ -114,5 +114,5 @@ pub fn page(
         }
     };
 
-    Ok(html_page("Block", content, response_type))
+    Ok(html_page("Block", content, parsed))
 }
