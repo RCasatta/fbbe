@@ -11,7 +11,8 @@ use html2text::render::text_renderer::RichDecorator;
 use hyper::{
     body::Bytes,
     header::{
-        ACCEPT, CACHE_CONTROL, CONTENT_TYPE, IF_MODIFIED_SINCE, LAST_MODIFIED, LOCATION, USER_AGENT,
+        ACCEPT, CACHE_CONTROL, CONTENT_TYPE, IF_MODIFIED_SINCE, LAST_MODIFIED, LOCATION,
+        USER_AGENT, VARY,
     },
     Body, Request, Response, StatusCode,
 };
@@ -103,9 +104,11 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
             match response_type {
                 ResponseType::Text(col) => builder
                     .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
+                    .header(VARY, "Accept")
                     .body(convert_text_html(page, col))?,
                 ResponseType::Html => builder
                     .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
+                    .header(VARY, "Accept")
                     .body(page.into())?,
                 ResponseType::Bytes => {
                     return Err(Error::ContentTypeUnsupported(
@@ -131,9 +134,11 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
             match response_type {
                 ResponseType::Text(col) => builder
                     .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
+                    .header(VARY, "Accept")
                     .body(convert_text_html(page, col))?,
                 ResponseType::Html => builder
                     .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
+                    .header(VARY, "Accept")
                     .body(page.into())?,
                 ResponseType::Bytes => {
                     return Err(Error::ContentTypeUnsupported(
@@ -168,12 +173,15 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
             match response_type {
                 ResponseType::Text(col) => builder
                     .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
+                    .header(VARY, "Accept")
                     .body(convert_text_html(page, col))?,
                 ResponseType::Html => builder
                     .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
+                    .header(VARY, "Accept")
                     .body(page.into())?,
                 ResponseType::Bytes => builder
                     .header(CONTENT_TYPE, APPLICATION_OCTET_STREAM.as_ref())
+                    .header(VARY, "Accept")
                     .body(Bytes::from(serialize(&tx)).into())?,
             }
         }
