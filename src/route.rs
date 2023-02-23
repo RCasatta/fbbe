@@ -11,15 +11,11 @@ use html2text::render::text_renderer::RichDecorator;
 use hyper::{
     body::Bytes,
     header::{
-        ACCEPT, CACHE_CONTROL, CONTENT_TYPE, IF_MODIFIED_SINCE, LAST_MODIFIED, LOCATION,
-        USER_AGENT, VARY,
+        ACCEPT, CACHE_CONTROL, CONTENT_TYPE, IF_MODIFIED_SINCE, LAST_MODIFIED, LOCATION, VARY,
     },
     Body, Request, Response, StatusCode,
 };
-use mime::{
-    APPLICATION_OCTET_STREAM, OCTET_STREAM, STAR_STAR, TEXT_HTML_UTF_8, TEXT_PLAIN,
-    TEXT_PLAIN_UTF_8,
-};
+use mime::{APPLICATION_OCTET_STREAM, TEXT_HTML_UTF_8, TEXT_PLAIN_UTF_8};
 use std::{convert::Infallible, sync::Arc, time::Instant};
 
 const CSS_LAST_MODIFIED: &str = "2022-10-03 07:53:03 UTC";
@@ -46,8 +42,7 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
     let now = Instant::now();
     log::debug!("request: {:?}", req);
     // let _count = state.requests.fetch_add(1, Ordering::Relaxed);
-    let parsed_req = req::parse(&req).await?;
-    let response_type = parse_response_content_type(&req);
+    let (parsed_req, response_type) = req::parse(&req).await?;
     log::debug!("response in: {:?}", response_type);
 
     // DETERMINE IF NOT MODIFIED
@@ -104,11 +99,11 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
             match response_type {
                 ResponseType::Text(col) => builder
                     .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
-                    .header(VARY, "Accept")
+                    .header(VARY, ACCEPT)
                     .body(convert_text_html(page, col))?,
                 ResponseType::Html => builder
                     .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
-                    .header(VARY, "Accept")
+                    .header(VARY, ACCEPT)
                     .body(page.into())?,
                 ResponseType::Bytes => {
                     return Err(Error::ContentTypeUnsupported(
@@ -134,11 +129,11 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
             match response_type {
                 ResponseType::Text(col) => builder
                     .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
-                    .header(VARY, "Accept")
+                    .header(VARY, ACCEPT)
                     .body(convert_text_html(page, col))?,
                 ResponseType::Html => builder
                     .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
-                    .header(VARY, "Accept")
+                    .header(VARY, ACCEPT)
                     .body(page.into())?,
                 ResponseType::Bytes => {
                     return Err(Error::ContentTypeUnsupported(
@@ -150,6 +145,11 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
         }
 
         ParsedRequest::Tx(txid, pagination) => {
+            if pagination > 0 {
+                if let ResponseType::Bytes = response_type {
+                    return Err(Error::BadRequest);
+                }
+            }
             let (tx, block_hash) = state.tx(txid, true).await?;
             let ts = match block_hash.as_ref() {
                 Some(block_hash) => Some((*block_hash, state.height_time(*block_hash).await?)),
@@ -173,15 +173,15 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
             match response_type {
                 ResponseType::Text(col) => builder
                     .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
-                    .header(VARY, "Accept")
+                    .header(VARY, ACCEPT)
                     .body(convert_text_html(page, col))?,
                 ResponseType::Html => builder
                     .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
-                    .header(VARY, "Accept")
+                    .header(VARY, ACCEPT)
                     .body(page.into())?,
                 ResponseType::Bytes => builder
                     .header(CONTENT_TYPE, APPLICATION_OCTET_STREAM.as_ref())
-                    .header(VARY, "Accept")
+                    .header(VARY, ACCEPT)
                     .body(Bytes::from(serialize(&tx)).into())?,
             }
         }
@@ -312,43 +312,6 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
 
 fn convert_text_html(page: String, columns: usize) -> Body {
     html2text::from_read_with_decorator(&page.into_bytes()[..], columns, RichDecorator {}).into()
-}
-
-fn parse_response_content_type(req: &Request<Body>) -> ResponseType {
-    match req.headers().get(ACCEPT) {
-        None => ResponseType::Html,
-        Some(accept) => {
-            if accept == TEXT_PLAIN_UTF_8.as_ref() || accept == TEXT_PLAIN.as_ref() {
-                ResponseType::Text(parse_cols(&req))
-            } else if accept == OCTET_STREAM.as_ref() || accept == APPLICATION_OCTET_STREAM.as_ref()
-            {
-                ResponseType::Bytes
-            } else if accept == STAR_STAR.as_ref() {
-                if req
-                    .headers()
-                    .get(USER_AGENT)
-                    .map(|e| e.to_str().ok())
-                    .flatten()
-                    .map(|e| e.starts_with("curl"))
-                    .unwrap_or(false)
-                {
-                    ResponseType::Text(parse_cols(req))
-                } else {
-                    ResponseType::Html
-                }
-            } else {
-                ResponseType::Html
-            }
-        }
-    }
-}
-
-fn parse_cols(req: &Request<Body>) -> usize {
-    req.headers()
-        .get("columns")
-        .and_then(|c| c.to_str().ok())
-        .and_then(|e| e.parse::<usize>().ok())
-        .unwrap_or(80)
 }
 
 fn cache_time_from_confirmations(confirmation: Option<u32>) -> u32 {
