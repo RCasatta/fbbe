@@ -10,13 +10,16 @@ impl<'a> Render for Script<'a> {
         html! {
             code {
                 small {
-                    @for piece in pieces {
+                    @for (i, piece) in pieces.enumerate() {
+                        @if i != 0 {
+                            " "
+                        }
                         @if piece.starts_with("OP_") {
                             b { (piece) }
                         } @else {
                             (piece)
                         }
-                        " "
+
                     }
                 }
             }

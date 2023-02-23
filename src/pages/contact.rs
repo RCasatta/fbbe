@@ -1,8 +1,8 @@
 use super::html_page;
-use crate::{error::Error, pages::NBSP};
+use crate::{error::Error, pages::NBSP, route::ResponseType};
 use maud::{html, Markup};
 
-pub fn page() -> Result<Markup, Error> {
+pub fn page(response_type: ResponseType) -> Result<Markup, Error> {
     let content = html! {
         section {
             h1 { "Contact" }
@@ -27,5 +27,5 @@ pub fn page() -> Result<Markup, Error> {
         }
     };
 
-    Ok(html_page("Contact", content))
+    Ok(html_page("Contact", content, response_type))
 }

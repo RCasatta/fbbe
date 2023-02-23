@@ -13,6 +13,7 @@ use crate::{
     network,
     pages::size_rows,
     render::{AmountRow, Html},
+    route::ResponseType,
     rpc::headers::HeightTime,
     state::MempoolFees,
     threads::update_mempool_info::{TxidWeightFee, WeightFee},
@@ -29,6 +30,7 @@ pub fn page(
     prevout: &[TxOut],
     page: usize,
     mempool_fees: MempoolFees,
+    response_type: ResponseType,
 ) -> Result<Markup, Error> {
     let txid = tx.txid();
     let network_url_path = network().as_url_path();
@@ -246,7 +248,10 @@ pub fn page(
 
 
                                 td {
-                                    br;
+                                    @if !response_type.is_text() {
+                                        br;
+                                    }
+
                                     div {
                                         "Previous outpoint"
                                         p { (outpoint.html()) }
@@ -317,7 +322,9 @@ pub fn page(
                                 (i)
                             }
                             td {
-                                br;
+                                @if !response_type.is_text() {
+                                    br;
+                                }
                                 @if let Some(address) = address {
                                     div {
                                         "Address"
@@ -380,7 +387,7 @@ pub fn page(
         }
     };
 
-    Ok(html_page("Transaction", content))
+    Ok(html_page("Transaction", content, response_type))
 }
 
 fn amount_str(val: u64) -> String {

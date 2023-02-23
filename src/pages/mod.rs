@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use crate::{globals::networks, network, render::SizeRow, NetworkExt};
+use crate::{globals::networks, network, render::SizeRow, route::ResponseType, NetworkExt};
 use bitcoin::Network;
 use maud::{html, Markup, PreEscaped, DOCTYPE};
 
@@ -27,7 +27,7 @@ pub fn header(title: &str) -> Markup {
     }
 }
 
-fn nav_header() -> Markup {
+fn nav_header(response_type: ResponseType) -> Markup {
     let title = match network() {
         Network::Bitcoin => "Fast Bitcoin Block Explorer",
         Network::Testnet => "Fast Bitcoin Block Explorer (Testnet)",
@@ -44,7 +44,7 @@ fn nav_header() -> Markup {
                 li { a href=(network().as_url_path()) { (title) } }
             }
 
-            @if !other_networks.is_empty() {
+            @if !other_networks.is_empty() && !response_type.is_text() {
                 ul {
                     @for net in other_networks {
                         li { a href=(net.as_url_path()) { (net.to_maiusc_string()) } }
@@ -55,26 +55,29 @@ fn nav_header() -> Markup {
     }
 }
 
-pub fn html_page(title: &str, content: Markup) -> Markup {
+pub fn html_page(title: &str, content: Markup, response_type: ResponseType) -> Markup {
     html! {
         (DOCTYPE)
         html lang = "en" {
             (header(title))
             body {
                 div class="container" {
-                    (nav_header())
+                    (nav_header(response_type))
                 }
                 main class="container" {
                     (content)
                 }
-                (footer())
+                (footer(response_type))
             }
         }
     }
 }
 
 /// A static footer.
-pub fn footer() -> Markup {
+pub fn footer(response_type: ResponseType) -> Markup {
+    if response_type.is_text() {
+        return html! {};
+    }
     let link = match network() {
         Network::Bitcoin => "/",
         Network::Testnet => "/testnet/",

@@ -2,13 +2,19 @@ use super::html_page;
 use crate::{
     network,
     render::{Html, MempoolSection},
+    route::ResponseType,
     rpc::{chaininfo::ChainInfo, headers::HeightTime},
 };
 use maud::{html, Markup};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use timeago::Formatter;
 
-pub fn page(info: ChainInfo, height_time: HeightTime, mempool_sec: MempoolSection) -> Markup {
+pub fn page(
+    info: ChainInfo,
+    height_time: HeightTime,
+    mempool_sec: MempoolSection,
+    response_type: ResponseType,
+) -> Markup {
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
     let duration = Duration::from_secs(now.as_secs() - height_time.time as u64);
     let formatter = Formatter::new();
@@ -22,9 +28,11 @@ pub fn page(info: ChainInfo, height_time: HeightTime, mempool_sec: MempoolSectio
                 p { (format!("{:?}",network())) }
             }
 
-            form {
-                label for="s" { "Search for tx id, block height or hash" }
-                input type="search" id="s" name="s" placeholder=(info.blocks) autofocus;
+            @if !response_type.is_text() {
+                form {
+                    label for="s" { "Search for tx id, block height or hash" }
+                    input type="search" id="s" name="s" placeholder=(info.blocks) autofocus;
+                }
             }
 
             hgroup {
@@ -58,5 +66,5 @@ pub fn page(info: ChainInfo, height_time: HeightTime, mempool_sec: MempoolSectio
         }
     };
 
-    html_page(&format!("{:?}", network()), content)
+    html_page(&format!("{:?}", network()), content, response_type)
 }

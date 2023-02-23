@@ -7,7 +7,7 @@ use crate::{
 };
 use bitcoin::{consensus::serialize, OutPoint, TxOut, Txid};
 use bitcoin_hashes::Hash;
-use html2text::render::text_renderer::TrivialDecorator;
+use html2text::render::text_renderer::RichDecorator;
 use hyper::{
     body::Bytes,
     header::{
@@ -25,11 +25,20 @@ const CSS_LAST_MODIFIED: &str = "2022-10-03 07:53:03 UTC";
 const CONTACT_PAGE_LAST_MODIFIED: &str = "2022-12-16 07:53:03 UTC";
 const ROBOTS_LAST_MODIFIED: &str = "2023-01-17 07:53:03 UTC";
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum ResponseType {
     Text(usize),
     Html,
     Bytes,
+}
+
+impl ResponseType {
+    pub fn is_text(&self) -> bool {
+        match self {
+            ResponseType::Text(_) => true,
+            _ => false,
+        }
+    }
 }
 
 pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Response<Body>, Error> {
@@ -37,8 +46,8 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
     log::debug!("request: {:?}", req);
     // let _count = state.requests.fetch_add(1, Ordering::Relaxed);
     let parsed_req = req::parse(&req).await?;
-    let response_content_type = parse_response_content_type(&req);
-    log::debug!("response in: {:?}", response_content_type);
+    let response_type = parse_response_content_type(&req);
+    log::debug!("response in: {:?}", response_type);
 
     // DETERMINE IF NOT MODIFIED
     if let Some(if_modified_since) = req.headers().get(IF_MODIFIED_SINCE) {
@@ -87,10 +96,11 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
             let mempool_section = MempoolSection { info, fees };
 
             let height_time = state.height_time(chain_info.best_block_hash).await?;
-            let page = pages::home::page(chain_info, height_time, mempool_section).into_string();
+            let page = pages::home::page(chain_info, height_time, mempool_section, response_type)
+                .into_string();
 
             let builder = Response::builder().header(CACHE_CONTROL, "public, max-age=5");
-            match response_content_type {
+            match response_type {
                 ResponseType::Text(col) => builder
                     .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
                     .body(convert_text_html(page, col))?,
@@ -99,7 +109,7 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
                     .body(page.into())?,
                 ResponseType::Bytes => {
                     return Err(Error::ContentTypeUnsupported(
-                        response_content_type,
+                        response_type,
                         req.uri().to_string(),
                     ))
                 }
@@ -108,7 +118,7 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
 
         ParsedRequest::Block(block_hash, page) => {
             let block = rpc::block::call_json(block_hash).await?;
-            let page = pages::block::page(&block, page)?.into_string();
+            let page = pages::block::page(&block, page, response_type)?.into_string();
             let current_tip = state.chain_info.lock().await.clone();
             let block_confirmations = current_tip.blocks - block.height;
             let cache_seconds = cache_time_from_confirmations(Some(block_confirmations));
@@ -118,7 +128,7 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
                 .header(CACHE_CONTROL, cache_control) // cache examples https://developers.cloudflare.com/cache/about/cache-control/#examples
                 .header(LAST_MODIFIED, block.date_time_utc());
 
-            match response_content_type {
+            match response_type {
                 ResponseType::Text(col) => builder
                     .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
                     .body(convert_text_html(page, col))?,
@@ -127,7 +137,7 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
                     .body(page.into())?,
                 ResponseType::Bytes => {
                     return Err(Error::ContentTypeUnsupported(
-                        response_content_type,
+                        response_type,
                         req.uri().to_string(),
                     ))
                 }
@@ -143,7 +153,9 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
             let prevouts = fetch_prevouts(&tx, &state).await?;
             let current_tip = state.chain_info.lock().await.clone();
             let mempool_fees = state.mempool_fees.lock().await.clone();
-            let page = pages::tx::page(&tx, ts, &prevouts, pagination, mempool_fees)?.into_string();
+            let page =
+                pages::tx::page(&tx, ts, &prevouts, pagination, mempool_fees, response_type)?
+                    .into_string();
             let cache_seconds =
                 cache_time_from_confirmations(ts.map(|t| current_tip.blocks - t.1.height));
 
@@ -153,7 +165,7 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
                 builder = builder.header(LAST_MODIFIED, ts.1.date_time_utc());
             }
 
-            match response_content_type {
+            match response_type {
                 ResponseType::Text(col) => builder
                     .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
                     .body(convert_text_html(page, col))?,
@@ -169,7 +181,7 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
         ParsedRequest::TxOut(txid, vout) => match rpc::txout::call(txid, vout).await {
             Ok(tx) => {
                 let outpoint = OutPoint::new(txid, vout);
-                let page = pages::txout::page(&tx, outpoint).into_string();
+                let page = pages::txout::page(&tx, outpoint, response_type).into_string();
                 let cache_seconds = if tx.utxos.is_empty() {
                     60 * 60 * 24 * 30 // one month
                 } else {
@@ -229,7 +241,9 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
             .header(LAST_MODIFIED, CONTACT_PAGE_LAST_MODIFIED)
             .header(CACHE_CONTROL, "public, max-age=3600")
             .header(CONTENT_TYPE, "text/html; charset=utf-8")
-            .body(Body::from(pages::contact::page()?.into_string()))?,
+            .body(Body::from(
+                pages::contact::page(response_type)?.into_string(),
+            ))?,
 
         ParsedRequest::Favicon => Response::builder()
             .header(LAST_MODIFIED, CONTACT_PAGE_LAST_MODIFIED)
@@ -270,7 +284,7 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
                     fbbe: network(),
                 });
             } else {
-                let page = pages::address::page(&address)?.into_string();
+                let page = pages::address::page(&address, response_type)?.into_string();
 
                 Response::builder()
                     .header(CACHE_CONTROL, "public, max-age=5")
@@ -289,7 +303,7 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
 }
 
 fn convert_text_html(page: String, columns: usize) -> Body {
-    html2text::from_read_with_decorator(&page.into_bytes()[..], columns, TrivialDecorator {}).into()
+    html2text::from_read_with_decorator(&page.into_bytes()[..], columns, RichDecorator {}).into()
 }
 
 fn parse_response_content_type(req: &Request<Body>) -> ResponseType {

@@ -3,6 +3,7 @@ use crate::{
     network,
     pages::{html_page, size_rows},
     render::Html,
+    route::ResponseType,
     rpc::block::BlockNoTxDetails,
     NetworkExt,
 };
@@ -10,7 +11,11 @@ use maud::{html, Markup};
 
 const PER_PAGE: usize = 10;
 
-pub fn page(block: &BlockNoTxDetails, page: usize) -> Result<Markup, Error> {
+pub fn page(
+    block: &BlockNoTxDetails,
+    page: usize,
+    response_type: ResponseType,
+) -> Result<Markup, Error> {
     let from_tx = page * PER_PAGE;
     if from_tx >= block.tx.len() {
         return Err(Error::InvalidPageNumber);
@@ -109,5 +114,5 @@ pub fn page(block: &BlockNoTxDetails, page: usize) -> Result<Markup, Error> {
         }
     };
 
-    Ok(html_page("Block", content))
+    Ok(html_page("Block", content, response_type))
 }
