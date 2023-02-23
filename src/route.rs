@@ -10,9 +10,7 @@ use bitcoin_hashes::Hash;
 use html2text::render::text_renderer::RichDecorator;
 use hyper::{
     body::Bytes,
-    header::{
-        ACCEPT, CACHE_CONTROL, CONTENT_TYPE, IF_MODIFIED_SINCE, LAST_MODIFIED, LOCATION, VARY,
-    },
+    header::{CACHE_CONTROL, CONTENT_TYPE, IF_MODIFIED_SINCE, LAST_MODIFIED, LOCATION},
     Body, Request, Response, StatusCode,
 };
 use mime::{APPLICATION_OCTET_STREAM, TEXT_HTML_UTF_8, TEXT_PLAIN_UTF_8};
@@ -97,11 +95,9 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
             match parsed_req.response_type {
                 ResponseType::Text(col) => builder
                     .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
-                    .header(VARY, ACCEPT)
                     .body(convert_text_html(page, col))?,
                 ResponseType::Html => builder
                     .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
-                    .header(VARY, ACCEPT)
                     .body(page.into())?,
                 ResponseType::Bytes => {
                     return Err(Error::ContentTypeUnsupported(
@@ -127,11 +123,9 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
             match parsed_req.response_type {
                 ResponseType::Text(col) => builder
                     .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
-                    .header(VARY, ACCEPT)
                     .body(convert_text_html(page, col))?,
                 ResponseType::Html => builder
                     .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
-                    .header(VARY, ACCEPT)
                     .body(page.into())?,
                 ResponseType::Bytes => {
                     return Err(Error::ContentTypeUnsupported(
@@ -170,15 +164,12 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
             match parsed_req.response_type {
                 ResponseType::Text(col) => builder
                     .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
-                    .header(VARY, ACCEPT)
                     .body(convert_text_html(page, col))?,
                 ResponseType::Html => builder
                     .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
-                    .header(VARY, ACCEPT)
                     .body(page.into())?,
                 ResponseType::Bytes => builder
                     .header(CONTENT_TYPE, APPLICATION_OCTET_STREAM.as_ref())
-                    .header(VARY, ACCEPT)
                     .body(Bytes::from(serialize(&tx)).into())?,
             }
         }
