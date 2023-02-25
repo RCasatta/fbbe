@@ -8,6 +8,10 @@ use super::html_page;
 pub fn page(address: &Address, parsed: &ParsedRequest) -> Result<Markup, Error> {
     let mempool = format!("https://mempool.space/address/{address}");
     let blockstream = format!("https://blockstream.info/address/{address}");
+    let address_type = address
+        .address_type()
+        .map(|t| t.to_string())
+        .unwrap_or("Unknown".to_string());
 
     let content = html! {
         section {
@@ -15,6 +19,8 @@ pub fn page(address: &Address, parsed: &ParsedRequest) -> Result<Markup, Error> 
                 h1 { "Address" }
                 p  { (address.html()) }
             }
+
+            p { "Type: " b { (address_type) } }
 
             p {
                 "This explorer doesn't index addresses. Check the following explorers:"
