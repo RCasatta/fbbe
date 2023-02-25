@@ -81,7 +81,7 @@ pub fn page(
         .iter()
         .skip(input_start)
         .take(IO_PER_PAGE)
-        .zip(prevout.iter())
+        .zip(prevout.iter().skip(input_start))
         .enumerate()
         .map(|(i, (input, previous_output))| {
             let po = &input.previous_output;
