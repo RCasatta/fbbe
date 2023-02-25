@@ -29,3 +29,5 @@ timeago = "0.3.1"
 structopt = "0.3.26"
 html2text = "0.4.4"
 mime = "0.3.16"
+qr_code = { version="1.1.0", features = ["bmp"] }
+base64 = "0.21.0"

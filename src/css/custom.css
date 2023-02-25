@@ -29,3 +29,9 @@ td details {
 .red {
     color: #c62828;
 }
+
+.qr {
+    height: 250px;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+}

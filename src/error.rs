@@ -31,6 +31,12 @@ pub enum Error {
     #[error(transparent)]
     BitcoinAddress(#[from] bitcoin::util::address::Error),
 
+    #[error(transparent)]
+    Bmp(#[from] qr_code::bmp_monochrome::BmpError),
+
+    #[error(transparent)]
+    Qr(#[from] qr_code::types::QrError),
+
     #[error("Bitcoin core RPC chaininfo failed status_code:{0}")]
     RpcChainInfo(StatusCode),
 
