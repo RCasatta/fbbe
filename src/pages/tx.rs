@@ -291,7 +291,7 @@ pub fn page(
                 }
                 @if let Some(next) = next_input {
                     tfoot {
-                        fr {
+                        tr {
                             th { }
                             td { a href=(next) { "other inputs" } }
                             td { }
@@ -356,7 +356,7 @@ pub fn page(
                 }
                 @if let Some(next) = next_output {
                     tfoot {
-                        fr {
+                        tr {
                             th { }
                             td { a href=(next) { "other outputs" } }
                             td { }
