@@ -5,7 +5,11 @@ pub(crate) struct Script<'a>(&'a bitcoin::Script);
 
 impl<'a> Render for Script<'a> {
     fn render(&self) -> maud::Markup {
-        let asm = self.0.asm();
+        let asm = if self.0.is_empty() {
+            "<empty>".to_owned()
+        } else {
+            self.0.asm()
+        };
         let pieces = asm.split(" ");
         html! {
             code {
