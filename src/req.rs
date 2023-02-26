@@ -147,23 +147,24 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
 
 impl Resource {
     pub fn link(&self, base: &str) -> Option<String> {
-        match *self {
+        match self {
             Resource::Home => Some(format!("{}text", base)),
 
             Resource::Tx(txid, pagination) => {
-                if pagination == 0 {
+                if *pagination == 0 {
                     Some(format!("{base}t/{txid}/text"))
                 } else {
                     Some(format!("{base}t/{txid}/{pagination}/text"))
                 }
             }
             Resource::Block(block_hash, pagination) => {
-                if pagination == 0 {
+                if *pagination == 0 {
                     Some(format!("{base}b/{block_hash}/text"))
                 } else {
                     Some(format!("{base}b/{block_hash}/{pagination}/text"))
                 }
             }
+            Resource::Address(address) => Some(format!("{base}a/{address}/text")),
             _ => None,
         }
     }

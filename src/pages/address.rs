@@ -5,7 +5,7 @@ use bitcoin::Address;
 use maud::{html, Markup};
 use qr_code::QrCode;
 
-use crate::{error::Error, render::Html, req::ParsedRequest};
+use crate::{error::Error, render::Html, req::ParsedRequest, route::convert_text_html_string};
 
 use super::html_page;
 
@@ -16,7 +16,7 @@ pub fn page(address: &Address, parsed: &ParsedRequest) -> Result<Markup, Error> 
         .address_type()
         .map(|t| t.to_string())
         .unwrap_or("Unknown".to_string());
-    let image_src = create_bmp_base64_qr(&address.to_qr_uri())?;
+    let address_qr_uri = address.to_qr_uri();
 
     let content = html! {
         section {
@@ -27,15 +27,17 @@ pub fn page(address: &Address, parsed: &ParsedRequest) -> Result<Markup, Error> 
 
             p { "Type: " b { (address_type) } }
 
-            p { img class="qr" src=(image_src); }
+            @if !parsed.response_type.is_text() {
+                p { img class="qr" src=(create_bmp_base64_qr(&address_qr_uri)?); }
 
-            p {
-                "This explorer doesn't index addresses. Check the following explorers:"
+                p {
+                    "This explorer doesn't index addresses. Check the following explorers:"
 
-                ul {
-                    li { a href=(mempool) { "mempool.space" } }
-                    li { a href=(blockstream) { "blockstream.info" } }
+                    ul {
+                        li { a href=(mempool) { "mempool.space" } }
+                        li { a href=(blockstream) { "blockstream.info" } }
 
+                    }
                 }
             }
 
@@ -63,4 +65,17 @@ fn create_bmp_base64_qr(message: &str) -> Result<String, Error> {
     let mut cursor = Cursor::new(vec![]);
     bmp.write(&mut cursor).unwrap();
     Ok(to_data_url(cursor.into_inner(), "image/bmp"))
+}
+
+pub fn text_page(address: &Address, page: &str, col: usize) -> Result<String, Error> {
+    let mut s = convert_text_html_string(page, col);
+    s.push_str("\n");
+    s.push_str(&create_string_qr(&address.to_qr_uri())?);
+    Ok(s)
+}
+/// Creates QR containing `message` and encode it in data url
+pub(crate) fn create_string_qr(message: &str) -> Result<String, Error> {
+    let qr = QrCode::new(message.as_bytes())?;
+
+    Ok(qr.to_string(true, 2))
 }

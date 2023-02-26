@@ -95,7 +95,7 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
             match parsed_req.response_type {
                 ResponseType::Text(col) => builder
                     .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
-                    .body(convert_text_html(page, col))?,
+                    .body(convert_text_html(&page, col))?,
                 ResponseType::Html => builder
                     .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
                     .body(page.into())?,
@@ -123,7 +123,7 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
             match parsed_req.response_type {
                 ResponseType::Text(col) => builder
                     .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
-                    .body(convert_text_html(page, col))?,
+                    .body(convert_text_html(&page, col))?,
                 ResponseType::Html => builder
                     .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
                     .body(page.into())?,
@@ -164,7 +164,7 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
             match parsed_req.response_type {
                 ResponseType::Text(col) => builder
                     .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
-                    .body(convert_text_html(page, col))?,
+                    .body(convert_text_html(&page, col))?,
                 ResponseType::Html => builder
                     .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
                     .body(page.into())?,
@@ -280,10 +280,20 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
             } else {
                 let page = pages::address::page(&address, &parsed_req)?.into_string();
 
-                Response::builder()
-                    .header(CACHE_CONTROL, "public, max-age=5")
-                    .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
-                    .body(page.into())?
+                match parsed_req.response_type {
+                    ResponseType::Text(col) => Response::builder()
+                        .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
+                        .body(pages::address::text_page(&address, &page, col)?.into())?,
+                    ResponseType::Html => Response::builder()
+                        .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
+                        .body(page.into())?,
+                    ResponseType::Bytes => {
+                        return Err(Error::ContentTypeUnsupported(
+                            parsed_req.response_type,
+                            req.uri().to_string(),
+                        ))
+                    }
+                }
             }
         } // parsed_req => {
           //     let page = format!("{:?}", parsed_req);
@@ -296,8 +306,12 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
     Ok(resp)
 }
 
-fn convert_text_html(page: String, columns: usize) -> Body {
-    html2text::from_read_with_decorator(&page.into_bytes()[..], columns, RichDecorator {}).into()
+fn convert_text_html(page: &str, columns: usize) -> Body {
+    convert_text_html_string(page, columns).into()
+}
+
+pub(crate) fn convert_text_html_string(page: &str, columns: usize) -> String {
+    html2text::from_read_with_decorator(page.as_bytes(), columns, RichDecorator {})
 }
 
 fn cache_time_from_confirmations(confirmation: Option<u32>) -> u32 {
