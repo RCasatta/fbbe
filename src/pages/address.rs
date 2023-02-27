@@ -17,6 +17,7 @@ pub fn page(address: &Address, parsed: &ParsedRequest) -> Result<Markup, Error> 
         .map(|t| t.to_string())
         .unwrap_or("Unknown".to_string());
     let address_qr_uri = address.to_qr_uri();
+    let script_pubkey = address.script_pubkey();
 
     let content = html! {
         section {
@@ -25,11 +26,24 @@ pub fn page(address: &Address, parsed: &ParsedRequest) -> Result<Markup, Error> 
                 p  { (address.html()) }
             }
 
-            p { "Type: " b { (address_type) } }
-
             @if !parsed.response_type.is_text() {
                 p { a href=(&address_qr_uri) { img class="qr" src=(create_bmp_base64_qr(&address_qr_uri)?); } }
+            }
 
+            table role="grid" {
+                tbody {
+                    tr {
+                        th { "Type" }
+                        td { (address_type) }
+                    }
+                    tr {
+                        th { "Script" }
+                        td { (script_pubkey.html()) }
+                    }
+                }
+            }
+
+            @if !parsed.response_type.is_text() {
                 p {
                     "This explorer doesn't index addresses. Check the following explorers:"
 
