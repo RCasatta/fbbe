@@ -28,7 +28,7 @@ pub fn page(address: &Address, parsed: &ParsedRequest) -> Result<Markup, Error> 
             p { "Type: " b { (address_type) } }
 
             @if !parsed.response_type.is_text() {
-                p { img class="qr" src=(create_bmp_base64_qr(&address_qr_uri)?); }
+                p { a href=(&address_qr_uri) { img class="qr" src=(create_bmp_base64_qr(&address_qr_uri)?); } }
 
                 p {
                     "This explorer doesn't index addresses. Check the following explorers:"
