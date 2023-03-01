@@ -95,6 +95,11 @@ pub fn page(
                 let script_sig = (!input.script_sig.is_empty()).then(|| input.script_sig.clone());
                 let witness = input.witness.clone();
 
+                let p2wsh_witness_script = previous_script_pubkey
+                    .is_v0_p2wsh()
+                    .then(|| witness.last().map(|e| Script::from(e.to_vec())))
+                    .flatten();
+
                 let sequence = format!("0x{:x}", input.sequence);
                 Some((
                     i + input_start,
@@ -105,6 +110,7 @@ pub fn page(
                     previous_script_pubkey_type,
                     script_sig,
                     witness,
+                    p2wsh_witness_script,
                     sequence,
                 ))
             }
@@ -239,7 +245,7 @@ pub fn page(
             table role="grid" {
                 tbody {
                     @for val in inputs {
-                        @if let Some((i, outpoint, amount, link, previous_script_pubkey, previous_script_pubkey_type, script_sig, witness, sequence)) = val {
+                        @if let Some((i, outpoint, amount, link, previous_script_pubkey, previous_script_pubkey_type, script_sig, witness, p2wsh_witness_script, sequence)) = val {
 
                             tr id=(format!("i{i}")) {
                                 th class="row-index" {
@@ -274,6 +280,10 @@ pub fn page(
                                     @if !witness.is_empty() {
                                         div { "Witness"}
                                         p { (witness.html()) }
+                                    }
+                                    @if let Some(p2wsh_witness_script) = p2wsh_witness_script {
+                                        div { "P2wsh witness script"}
+                                        p { (p2wsh_witness_script.html()) }
                                     }
 
                                 }
