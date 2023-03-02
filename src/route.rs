@@ -305,13 +305,23 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
             }
         }
         Resource::FullTx(ref tx) => {
-            let mempool_fees = state.mempool_fees.lock().await.clone();
-            let prevouts = fetch_prevouts(tx, &state, true).await?;
-            let page = pages::tx::page(&tx, None, &prevouts, 0, mempool_fees, &parsed_req, true)?
-                .into_string();
-            Response::builder()
-                .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
-                .body(page.into())?
+            let txid = tx.txid();
+            if state.tx(txid, false).await.is_ok() {
+                let network = network().as_url_path();
+                Response::builder()
+                    .header(LOCATION, format!("{network}t/{txid}"))
+                    .status(StatusCode::TEMPORARY_REDIRECT)
+                    .body(Body::empty())?
+            } else {
+                let mempool_fees = state.mempool_fees.lock().await.clone();
+                let prevouts = fetch_prevouts(tx, &state, true).await?;
+                let page =
+                    pages::tx::page(&tx, None, &prevouts, 0, mempool_fees, &parsed_req, true)?
+                        .into_string();
+                Response::builder()
+                    .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
+                    .body(page.into())?
+            }
         } // parsed_req => {
           //     let page = format!("{:?}", parsed_req);
           //     Response::new(page.into())
