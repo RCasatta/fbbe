@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use crate::{error::Error, route::ResponseType};
-use bitcoin::{Address, BlockHash, Txid};
+use bitcoin::{consensus::deserialize, Address, BlockHash, Transaction, Txid};
 use bitcoin_hashes::{hex::FromHex, sha256d};
 use hyper::{Body, Method, Request};
 
@@ -30,6 +30,7 @@ pub enum Resource {
     TxToT(Txid),
     Address(Address),
     AddressToA(Address),
+    FullTx(Transaction),
 }
 
 pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
@@ -79,7 +80,14 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
                         }
                         Err(_) => match Address::from_str(val) {
                             Ok(address) => Resource::SearchAddress(address),
-                            Err(_) => return Err(Error::BadRequest),
+                            Err(_) => {
+                                let bytes =
+                                    Vec::<u8>::from_hex(val).map_err(|_| Error::BadRequest)?;
+                                let tx: Transaction =
+                                    deserialize(&bytes).map_err(|_| Error::BadRequest)?;
+
+                                Resource::FullTx(tx)
+                            }
                         },
                     },
                 },

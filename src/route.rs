@@ -147,11 +147,19 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
                 Some(block_hash) => Some((*block_hash, state.height_time(*block_hash).await?)),
                 None => None,
             };
-            let prevouts = fetch_prevouts(&tx, &state).await?;
+            let prevouts = fetch_prevouts(&tx, &state, false).await?;
             let current_tip = state.chain_info.lock().await.clone();
             let mempool_fees = state.mempool_fees.lock().await.clone();
-            let page = pages::tx::page(&tx, ts, &prevouts, pagination, mempool_fees, &parsed_req)?
-                .into_string();
+            let page = pages::tx::page(
+                &tx,
+                ts,
+                &prevouts,
+                pagination,
+                mempool_fees,
+                &parsed_req,
+                false,
+            )?
+            .into_string();
             let cache_seconds =
                 cache_time_from_confirmations(ts.map(|t| current_tip.blocks - t.1.height));
 
@@ -295,6 +303,15 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
                     }
                 }
             }
+        }
+        Resource::FullTx(ref tx) => {
+            let mempool_fees = state.mempool_fees.lock().await.clone();
+            let prevouts = fetch_prevouts(tx, &state, true).await?;
+            let page = pages::tx::page(&tx, None, &prevouts, 0, mempool_fees, &parsed_req, true)?
+                .into_string();
+            Response::builder()
+                .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
+                .body(page.into())?
         } // parsed_req => {
           //     let page = format!("{:?}", parsed_req);
           //     Response::new(page.into())
@@ -336,6 +353,7 @@ fn cache_time_from_confirmations(confirmation: Option<u32>) -> u32 {
 async fn fetch_prevouts(
     tx: &bitcoin::Transaction,
     state: &SharedState,
+    fill_missing: bool,
 ) -> Result<Vec<bitcoin::TxOut>, Error> {
     if tx.input.len() > 1 {
         state.preload_prevouts(tx).await;
@@ -343,8 +361,18 @@ async fn fetch_prevouts(
     let mut prevouts = Vec::with_capacity(tx.input.len());
     for input in tx.input.iter() {
         if input.previous_output.txid != Txid::all_zeros() {
-            let previous_tx = state.tx(input.previous_output.txid, false).await?.0;
-            prevouts.push(previous_tx.output[input.previous_output.vout as usize].clone());
+            match state.tx(input.previous_output.txid, false).await {
+                Ok((previous_tx, _)) => {
+                    prevouts.push(previous_tx.output[input.previous_output.vout as usize].clone())
+                }
+                Err(e) => {
+                    if fill_missing {
+                        prevouts.push(TxOut::default())
+                    } else {
+                        return Err(e);
+                    }
+                }
+            }
         } else {
             // fake txout for coinbase
             prevouts.push(TxOut::default())

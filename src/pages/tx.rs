@@ -27,14 +27,14 @@ pub const IO_PER_PAGE: usize = 10;
 pub fn page(
     tx: &Transaction,
     height_time: Option<(BlockHash, HeightTime)>,
-    prevout: &[TxOut],
+    prevouts: &[TxOut],
     page: usize,
     mempool_fees: MempoolFees,
     parsed: &ParsedRequest,
+    user_provided: bool,
 ) -> Result<Markup, Error> {
     let txid = tx.txid();
     let network_url_path = network().as_url_path();
-
     let start = page * IO_PER_PAGE;
     if start >= tx.input.len() && start >= tx.output.len() {
         return Err(Error::InvalidPageNumber);
@@ -73,30 +73,33 @@ pub fn page(
     let separator_output = (prev_output.is_some() && next_output.is_some()).then(|| " | ");
 
     let sum_outputs: u64 = tx.output.iter().map(|o| o.value).sum();
-    let sum_inputs: u64 = prevout.iter().map(|o| o.value).sum();
-    let fee = sum_inputs - sum_outputs;
+    let sum_inputs: u64 = prevouts.iter().map(|o| o.value).sum();
+    let fee = sum_inputs.saturating_sub(sum_outputs); // saturating never happens on confirmed/mempool-accepted tx, but we show also user made txs
 
     let inputs = tx
         .input
         .iter()
         .skip(input_start)
         .take(IO_PER_PAGE)
-        .zip(prevout.iter().skip(input_start))
+        .zip(prevouts.iter().skip(input_start))
         .enumerate()
         .map(|(i, (input, previous_output))| {
             let po = &input.previous_output;
             if po == &OutPoint::null() {
                 None
             } else {
-                let link = format!("{}t/{}", network().as_url_path(), po.txid);
+                let link = format!("{}t/{}#o{}", network().as_url_path(), po.txid, po.vout);
                 let amount = amount_str(previous_output.value);
-                let previous_script_pubkey = previous_output.script_pubkey.clone();
+                let previous_script_pubkey = (previous_output.value != u64::MAX)
+                    .then(|| previous_output.script_pubkey.clone());
                 let previous_script_pubkey_type = script_type(&previous_output.script_pubkey);
                 let script_sig = (!input.script_sig.is_empty()).then(|| input.script_sig.clone());
                 let witness = input.witness.clone();
 
                 let p2wsh_witness_script = previous_script_pubkey
-                    .is_v0_p2wsh()
+                    .as_ref()
+                    .map(|s| s.is_v0_p2wsh())
+                    .unwrap_or(false)
                     .then(|| witness.last().map(|e| Script::from(e.to_vec())))
                     .flatten();
 
@@ -188,7 +191,14 @@ pub fn page(
         html! {
             tr {
                 th { "Status" }
-                td class="right red" { "Unconfirmed" }
+                td class="right red" {
+                    @if user_provided {
+                        "User provided"
+                    } @else {
+                        "Unconfirmed"
+                    }
+
+                }
             }
         }
     };
@@ -221,7 +231,7 @@ pub fn page(
             table role="grid" {
                 tbody {
                     (block_link)
-                    @if !tx.is_coin_base() {
+                    @if !tx.is_coin_base() && !prevouts.iter().any(|p| p.value == u64::MAX) {
                         (fee_rows( wf, last_in_block))
                     }
                 }
@@ -252,7 +262,6 @@ pub fn page(
                                     (i)
                                 }
 
-
                                 td {
                                     @if !parsed.response_type.is_text() {
                                         br;
@@ -262,13 +271,17 @@ pub fn page(
                                         "Previous outpoint"
                                         p { (outpoint.html()) }
                                     }
-                                    div {
-                                        "Previous script pubkey"
-                                        @if let Some(previous_script_pubkey_type) = previous_script_pubkey_type {
-                                            small { " (" (previous_script_pubkey_type) ")" }
+
+                                    @if let Some(previous_script_pubkey) = previous_script_pubkey {
+                                        div {
+                                            "Previous script pubkey"
+                                            @if let Some(previous_script_pubkey_type) = previous_script_pubkey_type {
+                                                small { " (" (previous_script_pubkey_type) ")" }
+                                            }
                                         }
+
+                                        p {  (previous_script_pubkey.html()) }
                                     }
-                                    p {  (previous_script_pubkey.html()) }
 
                                     div { "Sequence"}
                                     p { code { small { (sequence) }  } }
@@ -401,10 +414,14 @@ pub fn page(
 }
 
 fn amount_str(val: u64) -> String {
-    format!(
-        "{:.8}",
-        Amount::from_sat(val).to_float_in(Denomination::Bitcoin)
-    )
+    if val == u64::MAX {
+        "Not exist".to_owned()
+    } else {
+        format!(
+            "{:.8}",
+            Amount::from_sat(val).to_float_in(Denomination::Bitcoin)
+        )
+    }
 }
 
 pub fn fee_rows(wf: WeightFee, last_in_block: Option<TxidWeightFee>) -> Markup {
