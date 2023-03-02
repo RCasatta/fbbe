@@ -123,7 +123,7 @@ async fn error_main() -> Result<(), Error> {
             }
         };
         if chain_info.initial_block_download {
-            log::warn!("bitcoind is not synced, waiting... {:?}", chain_info);
+            log::warn!("bitcoind is not synced, waiting (on regtest you may need to generate a block)... {:?}", chain_info);
             sleep(tokio::time::Duration::from_secs(10)).await;
         } else {
             log::info!("bitcoind is synced: {:?}", chain_info);

@@ -5,7 +5,7 @@ use crate::{
     req::{self, Resource},
     rpc, NetworkExt, SharedState,
 };
-use bitcoin::{consensus::serialize, OutPoint, TxOut, Txid};
+use bitcoin::{consensus::serialize, Network, OutPoint, TxOut, Txid};
 use bitcoin_hashes::Hash;
 use html2text::render::text_renderer::RichDecorator;
 use hyper::{
@@ -272,7 +272,7 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
                 .body(Body::empty())?
         }
         Resource::Address(ref address) => {
-            if address.network != network() {
+            if address.network != address_compatible(network()) {
                 return Err(Error::AddressWrongNetwork {
                     address: address.network,
                     fbbe: network(),
@@ -304,6 +304,14 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
     log::debug!("{:?} executed in {:?}", req.uri(), now.elapsed());
 
     Ok(resp)
+}
+
+fn address_compatible(network: bitcoin::Network) -> bitcoin::Network {
+    if let Network::Signet = network {
+        Network::Testnet
+    } else {
+        network
+    }
 }
 
 fn convert_text_html(page: &str, columns: usize) -> Body {

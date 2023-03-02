@@ -5,13 +5,34 @@ use bitcoin::Address;
 use maud::{html, Markup};
 use qr_code::QrCode;
 
-use crate::{error::Error, render::Html, req::ParsedRequest, route::convert_text_html_string};
+use crate::{
+    error::Error, globals::network, render::Html, req::ParsedRequest,
+    route::convert_text_html_string,
+};
 
 use super::html_page;
 
 pub fn page(address: &Address, parsed: &ParsedRequest) -> Result<Markup, Error> {
-    let mempool = format!("https://mempool.space/address/{address}");
-    let blockstream = format!("https://blockstream.info/address/{address}");
+    use bitcoin::Network::*;
+    let network = network();
+    let network_path = match network {
+        Bitcoin => "",
+        Testnet => "testnet/",
+        Signet => "signet/",
+        Regtest => "regtest/",
+    };
+    let mempool = match network {
+        Bitcoin | Testnet | Signet => Some(format!(
+            "https://mempool.space/{network_path}address/{address}"
+        )),
+        _ => None,
+    };
+    let blockstream = match network {
+        Bitcoin | Testnet => Some(format!(
+            "https://blockstream.info/{network_path}address/{address}"
+        )),
+        _ => None,
+    };
     let address_type = address
         .address_type()
         .map(|t| t.to_string())
@@ -43,13 +64,17 @@ pub fn page(address: &Address, parsed: &ParsedRequest) -> Result<Markup, Error> 
                 }
             }
 
-            @if !parsed.response_type.is_text() {
+            @if !parsed.response_type.is_text() && (mempool.is_some() || blockstream.is_some()) {
                 p {
                     "This explorer doesn't index addresses. Check the following explorers:"
 
                     ul {
-                        li { a href=(mempool) { "mempool.space" } }
-                        li { a href=(blockstream) { "blockstream.info" } }
+                        @if let Some(mempool) = mempool {
+                            li { a href=(mempool) { "mempool.space" } }
+                        }
+                        @if let Some(blockstream) = blockstream {
+                            li { a href=(blockstream) { "blockstream.info" } }
+                        }
 
                     }
                 }
