@@ -21,6 +21,7 @@ pub enum Resource {
     SearchBlock(BlockHash),
     SearchTx(Txid),
     SearchAddress(Address),
+    SearchFullTx(Transaction),
     Tx(Txid, usize),
     Block(BlockHash, usize),
     TxOut(Txid, u32),
@@ -86,7 +87,7 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
                                 let tx: Transaction =
                                     deserialize(&bytes).map_err(|_| Error::BadRequest)?;
 
-                                Resource::FullTx(tx)
+                                Resource::SearchFullTx(tx)
                             }
                         },
                     },
@@ -136,6 +137,11 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
         (&Method::GET, None, Some(&"tx"), Some(txid), None) => {
             let txid = Txid::from_hex(txid)?;
             Resource::TxToT(txid)
+        }
+        (&Method::GET, None, Some(&"txhex"), Some(hex), None) => {
+            let bytes = Vec::<u8>::from_hex(*hex)?;
+            let tx: Transaction = deserialize(&bytes)?;
+            Resource::FullTx(tx)
         }
         (&Method::GET, None, Some(&"address"), Some(address), None) => {
             let address = Address::from_str(address)?;

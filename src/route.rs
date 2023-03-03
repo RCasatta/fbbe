@@ -6,7 +6,7 @@ use crate::{
     rpc, NetworkExt, SharedState,
 };
 use bitcoin::{consensus::serialize, Network, OutPoint, TxOut, Txid};
-use bitcoin_hashes::Hash;
+use bitcoin_hashes::{hex::ToHex, Hash};
 use html2text::render::text_renderer::RichDecorator;
 use hyper::{
     body::Bytes,
@@ -304,28 +304,44 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
                 }
             }
         }
-        Resource::FullTx(ref tx) => {
+        Resource::SearchFullTx(ref tx) => {
             let txid = tx.txid();
+            let network = network().as_url_path();
+
             if state.tx(txid, false).await.is_ok() {
-                let network = network().as_url_path();
                 Response::builder()
                     .header(LOCATION, format!("{network}t/{txid}"))
                     .status(StatusCode::TEMPORARY_REDIRECT)
                     .body(Body::empty())?
             } else {
-                let mempool_fees = state.mempool_fees.lock().await.clone();
-                let prevouts = fetch_prevouts(tx, &state, true).await?;
-                let page =
-                    pages::tx::page(&tx, None, &prevouts, 0, mempool_fees, &parsed_req, true)?
-                        .into_string();
+                let bytes = serialize(&tx);
+                let hex = bytes.to_hex();
+
                 Response::builder()
-                    .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
-                    .body(page.into())?
+                    .header(LOCATION, format!("{network}txhex/{hex}"))
+                    .status(StatusCode::TEMPORARY_REDIRECT)
+                    .body(Body::empty())?
             }
-        } // parsed_req => {
-          //     let page = format!("{:?}", parsed_req);
-          //     Response::new(page.into())
-          // }
+        }
+        Resource::FullTx(ref tx) => {
+            let mempool_fees = state.mempool_fees.lock().await.clone();
+            let prevouts = fetch_prevouts(tx, &state, true).await?;
+            let page = pages::tx::page(&tx, None, &prevouts, 0, mempool_fees, &parsed_req, true)?
+                .into_string();
+            let builder = Response::builder().header(CACHE_CONTROL, "public, max-age=3600");
+
+            match parsed_req.response_type {
+                ResponseType::Text(col) => builder
+                    .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
+                    .body(convert_text_html(&page, col))?,
+                ResponseType::Html => builder
+                    .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
+                    .body(page.into())?,
+                ResponseType::Bytes => builder
+                    .header(CONTENT_TYPE, APPLICATION_OCTET_STREAM.as_ref())
+                    .body(Bytes::from(serialize(&tx)).into())?,
+            }
+        }
     };
 
     log::debug!("{:?} executed in {:?}", req.uri(), now.elapsed());
