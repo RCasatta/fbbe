@@ -1,0 +1,60 @@
+name: Test
+
+on: [pull_request]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+
+  test:
+    runs-on: "ubuntu-20.04"
+    env:
+      RUST_LOG: fbbe=info
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: Swatinem/rust-cache@v1.2.0
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+
+  cosmetics:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v2
+      - uses: Swatinem/rust-cache@v1.2.0
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          profile: minimal
+          components: rustfmt, clippy
+      - name: fmt
+        run: cargo fmt -- --check
+      - name: clippy
+        run: cargo clippy -- -D warnings
+
+  rust-version:
+    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: [ "stable", "nightly" ]
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: Swatinem/rust-cache@v1.2.0
+        with:
+          key: ${{ matrix.version }}
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
