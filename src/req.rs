@@ -195,10 +195,10 @@ impl Resource {
     }
 }
 
-fn parse_cols(req: &Request<Body>) -> usize {
+fn parse_cols(req: &Request<Body>) -> u16 {
     req.headers()
         .get("columns")
         .and_then(|c| c.to_str().ok())
-        .and_then(|e| e.parse::<usize>().ok())
+        .and_then(|e| e.parse::<u16>().ok())
         .unwrap_or(80)
 }

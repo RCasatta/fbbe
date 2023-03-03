@@ -22,7 +22,7 @@ const ROBOTS_LAST_MODIFIED: &str = "2023-01-17 07:53:03 UTC";
 
 #[derive(Debug, Clone, Copy)]
 pub enum ResponseType {
-    Text(usize),
+    Text(u16),
     Html,
     Bytes,
 }
@@ -357,12 +357,12 @@ fn address_compatible(network: bitcoin::Network) -> bitcoin::Network {
     }
 }
 
-fn convert_text_html(page: &str, columns: usize) -> Body {
+fn convert_text_html(page: &str, columns: u16) -> Body {
     convert_text_html_string(page, columns).into()
 }
 
-pub(crate) fn convert_text_html_string(page: &str, columns: usize) -> String {
-    html2text::from_read_with_decorator(page.as_bytes(), columns, RichDecorator {})
+pub(crate) fn convert_text_html_string(page: &str, columns: u16) -> String {
+    html2text::from_read_with_decorator(page.as_bytes(), columns as usize, RichDecorator {})
 }
 
 fn cache_time_from_confirmations(confirmation: Option<u32>) -> u32 {
