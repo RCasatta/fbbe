@@ -1,7 +1,9 @@
 use std::str::FromStr;
 
 use crate::{error::Error, route::ResponseType};
-use bitcoin::{consensus::deserialize, Address, BlockHash, Transaction, Txid};
+use bitcoin::{
+    consensus::deserialize, psbt::PartiallySignedTransaction, Address, BlockHash, Transaction, Txid,
+};
 use bitcoin_hashes::{hex::FromHex, sha256d};
 use hyper::{Body, Method, Request};
 
@@ -82,12 +84,21 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
                         Err(_) => match Address::from_str(val) {
                             Ok(address) => Resource::SearchAddress(address),
                             Err(_) => {
-                                let bytes =
-                                    Vec::<u8>::from_hex(val).map_err(|_| Error::BadRequest)?;
-                                let tx: Transaction =
-                                    deserialize(&bytes).map_err(|_| Error::BadRequest)?;
-
-                                Resource::SearchFullTx(tx)
+                                match Vec::<u8>::from_hex(val)
+                                    .map(|bytes| deserialize::<Transaction>(&bytes))
+                                {
+                                    Ok(Ok(tx)) => Resource::SearchFullTx(tx),
+                                    _ => {
+                                        let val = percent_encoding::percent_decode(val.as_bytes())
+                                            .decode_utf8()
+                                            .map_err(|_| Error::BadRequest)?;
+                                        let psbt =
+                                            PartiallySignedTransaction::from_str(val.as_ref())
+                                                .map_err(|_| Error::BadRequest)?;
+                                        let tx = psbt.extract_tx();
+                                        Resource::SearchFullTx(tx)
+                                    }
+                                }
                             }
                         },
                     },
