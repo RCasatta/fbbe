@@ -38,7 +38,7 @@ fn nav_header(response_type: ResponseType) -> Markup {
         Network::Regtest => "Fast Bitcoin Block Explorer (Regtest)",
     };
 
-    let mut other_networks: BTreeSet<_> = networks().into_iter().collect();
+    let mut other_networks: BTreeSet<_> = networks().iter().collect();
     other_networks.remove(&network());
 
     html! {

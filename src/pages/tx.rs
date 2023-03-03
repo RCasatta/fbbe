@@ -58,7 +58,7 @@ pub fn page(
     });
     let next_input = (page < last_page_input)
         .then(|| format!("{}t/{}/{}#inputs", network_url_path, txid, page + 1));
-    let separator_input = (prev_input.is_some() && next_input.is_some()).then(|| " | ");
+    let separator_input = (prev_input.is_some() && next_input.is_some()).then_some(" | ");
 
     let prev_output = (page > 0 && last_page_output != 0).then(|| {
         format!(
@@ -70,7 +70,7 @@ pub fn page(
     });
     let next_output = (page < last_page_output)
         .then(|| format!("{}t/{}/{}#outputs", network_url_path, txid, page + 1));
-    let separator_output = (prev_output.is_some() && next_output.is_some()).then(|| " | ");
+    let separator_output = (prev_output.is_some() && next_output.is_some()).then_some(" | ");
 
     let sum_outputs: u64 = tx.output.iter().map(|o| o.value).sum();
     let sum_inputs: u64 = prevouts.iter().map(|o| o.value).sum();
@@ -143,7 +143,7 @@ pub fn page(
                 .then(|| {
                     for instruction in output.script_pubkey.instructions() {
                         if let Ok(Instruction::PushBytes(data)) = instruction {
-                            return from_utf8(&data).ok();
+                            return from_utf8(data).ok();
                         }
                     }
                     None
@@ -165,7 +165,7 @@ pub fn page(
     let outputs_plural = if tx.output.len() > 1 { "s" } else { "" };
 
     let last_in_block = if height_time.is_none() {
-        mempool_fees.last_in_block.clone()
+        mempool_fees.last_in_block
     } else {
         None
     };

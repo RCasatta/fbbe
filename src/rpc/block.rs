@@ -29,7 +29,7 @@ pub async fn call_raw(block_hash: BlockHash) -> Result<Block, Error> {
     let resp = client.get(uri).await?;
     check_status(resp.status(), |s| Error::RpcBlockRaw(s, block_hash)).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
-    let block: Block = deserialize(&body_bytes.to_vec())?;
+    let block: Block = deserialize(&body_bytes)?;
     Ok(block)
 }
 

@@ -22,7 +22,7 @@ fn check_pages() {
     args.bitcoind_addr = Some(bitcoind.params.rpc_socket.into());
     args.network = Some(Network::Regtest);
     let fbbe_addr = create_local_socket(bitcoind::get_available_port().unwrap());
-    args.local_addr = Some(fbbe_addr.clone());
+    args.local_addr = Some(fbbe_addr);
 
     // TODO shutdown the thread
     let _h = std::thread::spawn(|| {

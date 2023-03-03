@@ -108,7 +108,7 @@ fn create_bmp_base64_qr(message: &str) -> Result<String, Error> {
 
 pub fn text_page(address: &Address, page: &str, col: u16) -> Result<String, Error> {
     let mut s = convert_text_html_string(page, col);
-    s.push_str("\n");
+    s.push('\n');
     s.push_str(&create_string_qr(&address.to_qr_uri())?);
     Ok(s)
 }

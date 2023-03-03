@@ -58,7 +58,7 @@ async fn update_chain_info(
                                     "cache missing or reorg longer than 1 happened, going back"
                                 );
                                 last_block_hash = prev_blockhash;
-                                last_height = last_height - 1;
+                                last_height -= 1;
                             }
                         }
                     }

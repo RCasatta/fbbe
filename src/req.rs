@@ -44,7 +44,7 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
         return Err(Error::BadRequest);
     }
     let response_type = match path.last() {
-        Some(&"text") => ResponseType::Text(parse_cols(&req)),
+        Some(&"text") => ResponseType::Text(parse_cols(req)),
         Some(&"bin") => ResponseType::Bytes,
         _ => ResponseType::Html,
     };
@@ -60,7 +60,7 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
     let is_head = req.method() == Method::HEAD;
     let method = if is_head { &Method::GET } else { req.method() };
 
-    let mut resource = match (method, query, path.get(0), path.get(1), path.get(2)) {
+    let mut resource = match (method, query, path.first(), path.get(1), path.get(2)) {
         (&Method::GET, None, Some(&""), None, None) => Resource::Home,
         (&Method::GET, Some(query), None | Some(&""), None, None) => {
             if query.contains('&') {
@@ -150,7 +150,7 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
             Resource::TxToT(txid)
         }
         (&Method::GET, None, Some(&"txhex"), Some(hex), None) => {
-            let bytes = Vec::<u8>::from_hex(*hex)?;
+            let bytes = Vec::<u8>::from_hex(hex)?;
             let tx: Transaction = deserialize(&bytes)?;
             Resource::FullTx(tx)
         }

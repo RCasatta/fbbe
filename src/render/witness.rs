@@ -34,10 +34,8 @@ impl<'a> Render for Witness<'a> {
 
             if witness.is_empty() {
                 push(before, &mut witness, 1);
-            } else {
-                if let Some(last) = last {
-                    push(last, &mut witness, count);
-                }
+            } else if let Some(last) = last {
+                push(last, &mut witness, count);
             }
         }
 

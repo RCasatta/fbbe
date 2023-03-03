@@ -3,7 +3,7 @@ use chrono::{DateTime, NaiveDateTime, Utc};
 use hyper::{client::HttpConnector, Client, StatusCode};
 use once_cell::sync::Lazy;
 
-pub static CLIENT: Lazy<Client<HttpConnector>> = Lazy::new(|| Client::new());
+pub static CLIENT: Lazy<Client<HttpConnector>> = Lazy::new(Client::new);
 
 pub mod block;
 pub mod blockhashbyheight;

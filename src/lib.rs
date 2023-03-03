@@ -171,8 +171,8 @@ fn check_network(bitcoind: Network) -> Result<(), Error> {
     let fbbe = network();
 
     (fbbe == bitcoind)
-        .then(|| ())
-        .ok_or_else(|| Error::WrongNetwork { fbbe, bitcoind })
+        .then_some(())
+        .ok_or(Error::WrongNetwork { fbbe, bitcoind })
 }
 
 trait NetworkExt {

@@ -286,12 +286,12 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
                     fbbe: network(),
                 });
             } else {
-                let page = pages::address::page(&address, &parsed_req)?.into_string();
+                let page = pages::address::page(address, &parsed_req)?.into_string();
 
                 match parsed_req.response_type {
                     ResponseType::Text(col) => Response::builder()
                         .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
-                        .body(pages::address::text_page(&address, &page, col)?.into())?,
+                        .body(pages::address::text_page(address, &page, col)?.into())?,
                     ResponseType::Html => Response::builder()
                         .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
                         .body(page.into())?,
@@ -326,7 +326,7 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
         Resource::FullTx(ref tx) => {
             let mempool_fees = state.mempool_fees.lock().await.clone();
             let prevouts = fetch_prevouts(tx, &state, true).await?;
-            let page = pages::tx::page(&tx, None, &prevouts, 0, mempool_fees, &parsed_req, true)?
+            let page = pages::tx::page(tx, None, &prevouts, 0, mempool_fees, &parsed_req, true)?
                 .into_string();
             let builder = Response::builder().header(CACHE_CONTROL, "public, max-age=3600");
 

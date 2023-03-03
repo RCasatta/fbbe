@@ -10,7 +10,7 @@ impl<'a> Render for Script<'a> {
         } else {
             self.0.asm()
         };
-        let pieces = asm.split(" ");
+        let pieces = asm.split(' ');
         html! {
             code {
                 small {

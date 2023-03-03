@@ -17,7 +17,7 @@ pub async fn info() -> Result<MempoolInfo, Error> {
 
     let uri = format!("http://{bitcoind_addr}/rest/mempool/info.json").parse()?;
     let resp = client.get(uri).await?;
-    check_status(resp.status(), |s| Error::RpcMempoolInfo(s)).await?;
+    check_status(resp.status(), Error::RpcMempoolInfo).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
     let info: MempoolInfo = serde_json::from_reader(body_bytes.reader())?;
     Ok(info)
@@ -30,7 +30,7 @@ pub async fn content() -> Result<HashSet<Txid>, Error> {
 
     let uri = format!("http://{bitcoind_addr}/rest/mempool/contents.json").parse()?;
     let resp = client.get(uri).await?;
-    check_status(resp.status(), |s| Error::RpcMempoolContent(s)).await?;
+    check_status(resp.status(), Error::RpcMempoolContent).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
     let content: HashMap<String, Value> = serde_json::from_reader(body_bytes.reader())?;
     let txids: HashSet<_> = content.keys().flat_map(|e| Txid::from_hex(e)).collect();

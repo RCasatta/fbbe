@@ -162,7 +162,7 @@ impl SharedState {
         }
 
         let got_txs: Vec<_> = stream::iter(needed)
-            .map(move |txid| rpc::tx::call_raw(txid))
+            .map(rpc::tx::call_raw)
             .buffer_unordered(self.args.fetch_parallelism)
             .collect()
             .await;

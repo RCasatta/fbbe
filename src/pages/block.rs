@@ -28,7 +28,7 @@ pub fn page(
     let prev_txs = (page > 0).then(|| format!("{}b/{}/{}", network_url_path, block.hash, page - 1));
     let next_txs = (to_tx != block.tx.len())
         .then(|| format!("{}b/{}/{}", network_url_path, block.hash, page + 1));
-    let separator_txs = (prev_txs.is_some() && next_txs.is_some()).then(|| " | ");
+    let separator_txs = (prev_txs.is_some() && next_txs.is_some()).then_some(" | ");
 
     let current_block = if page == 0 {
         html! { (block.height) }
