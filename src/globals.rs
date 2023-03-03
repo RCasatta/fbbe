@@ -2,7 +2,7 @@ use bitcoin::Network;
 use once_cell::sync::OnceCell;
 use std::{collections::HashSet, net::SocketAddr};
 
-use crate::Arguments;
+use crate::{create_local_socket, Arguments};
 
 static NETWORK: OnceCell<Network> = OnceCell::new();
 
@@ -10,9 +10,9 @@ pub(crate) fn network() -> Network {
     *NETWORK.get().expect("must be initialized")
 }
 
-static BITCOIND_ADDR: OnceCell<String> = OnceCell::new();
+static BITCOIND_ADDR: OnceCell<SocketAddr> = OnceCell::new();
 
-pub(crate) fn bitcoind_addr() -> &'static str {
+pub(crate) fn bitcoind_addr() -> &'static SocketAddr {
     BITCOIND_ADDR.get().expect("must be initialized")
 }
 
@@ -44,11 +44,8 @@ pub(crate) fn init_globals(args: &mut Arguments) {
             Network::Signet => 38332,
             Network::Regtest => 18443,
         };
-        format!("127.0.0.1:{}", port)
+        create_local_socket(port)
     });
-    bitcoind_addr
-        .parse::<SocketAddr>()
-        .expect("bitcoin address is not a socket address");
     log::info!("bitcoind_addr {}", bitcoind_addr);
     BITCOIND_ADDR
         .set(bitcoind_addr)
