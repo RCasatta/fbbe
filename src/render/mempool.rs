@@ -18,7 +18,7 @@ impl Render for MempoolSection {
         } else {
             "transactions"
         };
-        let mempoolminfee = if (self.info.maxmempool as f64 * 0.95) < self.info.usage as f64 {
+        let mempoolminfee = if self.info.mempoolminfee > 0.00000999 {
             Some(self.info.mempoolminfee)
         } else {
             None
