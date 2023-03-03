@@ -141,8 +141,8 @@ pub fn page(
                 .script_pubkey
                 .is_op_return()
                 .then(|| {
-                    for instruction in output.script_pubkey.instructions() {
-                        if let Ok(Instruction::PushBytes(data)) = instruction {
+                    for instruction in output.script_pubkey.instructions().flatten() {
+                        if let Instruction::PushBytes(data) = instruction {
                             return from_utf8(data).ok();
                         }
                     }

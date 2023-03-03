@@ -169,10 +169,8 @@ impl SharedState {
 
         let mut txs = self.txs.lock().await;
 
-        for tx in got_txs {
-            if let Ok(tx) = tx {
-                txs.push(tx.txid(), tx);
-            }
+        for tx in got_txs.into_iter().flatten() {
+            txs.push(tx.txid(), tx);
         }
 
         if needed_len > 30 {

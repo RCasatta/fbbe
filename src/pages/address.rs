@@ -36,7 +36,7 @@ pub fn page(address: &Address, parsed: &ParsedRequest) -> Result<Markup, Error> 
     let address_type = address
         .address_type()
         .map(|t| t.to_string())
-        .unwrap_or("Unknown".to_string());
+        .unwrap_or_else(|| "Unknown".to_owned());
     let address_qr_uri = address.to_qr_uri();
     let script_pubkey = address.script_pubkey();
 

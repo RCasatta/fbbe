@@ -29,10 +29,7 @@ pub enum ResponseType {
 
 impl ResponseType {
     pub fn is_text(&self) -> bool {
-        match self {
-            ResponseType::Text(_) => true,
-            _ => false,
-        }
+        matches!(self, ResponseType::Text(_))
     }
 }
 
