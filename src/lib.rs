@@ -138,8 +138,10 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
     let shared_state_chain = shared_state.clone();
     let shared_state_mempool = shared_state.clone();
 
+    #[allow(clippy::let_underscore_future)]
     let _ = tokio::spawn(async move {
         h.await.unwrap();
+        #[allow(clippy::let_underscore_future)]
         let _ = tokio::spawn(async move {
             update_chain_info_infallible(shared_state_chain, chain_info).await
         });
