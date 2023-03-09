@@ -1,6 +1,4 @@
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use std::time::Duration;
 
 use crate::error::Error;
 use crate::rpc;
@@ -81,22 +79,17 @@ async fn update_chain_info(
 }
 
 async fn update_blocks_in_last_hour(shared_state: &Arc<SharedState>, last_tip_height: usize) {
-    let mut count = 0;
     let height_to_hash = shared_state.height_to_hash.lock().await;
-    for i in (0..last_tip_height).rev() {
-        let hash = height_to_hash[i];
+    let mut data = Vec::with_capacity(6);
+    for i in 0..6 {
+        let hash = height_to_hash[last_tip_height - i];
 
         if hash != BlockHash::all_zeros() {
-            if let Ok(ht) = shared_state.height_time(hash).await {
-                if ht.since_now() > Duration::from_secs(60 * 60) {
-                    break;
-                } else {
-                    count += 1;
-                }
+            match shared_state.height_time(hash).await {
+                Ok(ht) => data.push((ht.since_now().as_secs() / 60).to_string()),
+                Err(_) => return,
             }
         }
     }
-    shared_state
-        .blocks_in_last_hour
-        .store(count, Ordering::Relaxed);
+    *shared_state.minutes_since_block.lock().await = Some(data.join(", "));
 }

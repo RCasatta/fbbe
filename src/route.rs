@@ -14,11 +14,7 @@ use hyper::{
     Body, Request, Response, StatusCode,
 };
 use mime::{APPLICATION_OCTET_STREAM, TEXT_HTML_UTF_8, TEXT_PLAIN_UTF_8};
-use std::{
-    convert::Infallible,
-    sync::{atomic::Ordering, Arc},
-    time::Instant,
-};
+use std::{convert::Infallible, sync::Arc, time::Instant};
 
 const CSS_LAST_MODIFIED: &str = "2022-10-03 07:53:03 UTC";
 const CONTACT_PAGE_LAST_MODIFIED: &str = "2022-12-16 07:53:03 UTC";
@@ -88,7 +84,7 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
             let mempool_section = MempoolSection {
                 info: state.mempool_info.lock().await.clone(),
                 fees: state.mempool_fees.lock().await.clone(),
-                blocks_in_last_hour: state.blocks_in_last_hour.load(Ordering::Relaxed),
+                minutes_since_block: state.minutes_since_block.lock().await.clone(),
             };
 
             let height_time = state.height_time(chain_info.best_block_hash).await?;
