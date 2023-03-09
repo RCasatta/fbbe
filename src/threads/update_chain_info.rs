@@ -1,9 +1,13 @@
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::error::Error;
 use crate::rpc;
 use crate::rpc::chaininfo::ChainInfo;
 use crate::state::SharedState;
+use bitcoin::BlockHash;
+use bitcoin_hashes::Hash;
 use tokio::time::sleep;
 
 pub(crate) async fn update_chain_info_infallible(
@@ -23,6 +27,8 @@ async fn update_chain_info(
 
     let mut current = initial_chain_info;
     loop {
+        update_blocks_in_last_hour(&shared_state, current.blocks as usize).await;
+
         sleep(tokio::time::Duration::from_secs(2)).await;
 
         match rpc::chaininfo::call().await {
@@ -72,4 +78,25 @@ async fn update_chain_info(
             }
         }
     }
+}
+
+async fn update_blocks_in_last_hour(shared_state: &Arc<SharedState>, last_tip_height: usize) {
+    let mut count = 0;
+    let height_to_hash = shared_state.height_to_hash.lock().await;
+    for i in (0..last_tip_height).rev() {
+        let hash = height_to_hash[i];
+
+        if hash != BlockHash::all_zeros() {
+            if let Ok(ht) = shared_state.height_time(hash).await {
+                if ht.since_now() > Duration::from_secs(60 * 60) {
+                    break;
+                } else {
+                    count += 1;
+                }
+            }
+        }
+    }
+    shared_state
+        .blocks_in_last_hour
+        .store(count, Ordering::Relaxed);
 }

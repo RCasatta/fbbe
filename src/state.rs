@@ -1,4 +1,4 @@
-use std::{collections::HashMap, num::NonZeroUsize};
+use std::{collections::HashMap, num::NonZeroUsize, sync::atomic::AtomicUsize};
 
 use bitcoin::{Block, BlockHash, Transaction, Txid};
 use bitcoin_hashes::Hash;
@@ -30,6 +30,7 @@ pub struct SharedState {
     pub args: Arguments,
     pub mempool_info: Mutex<MempoolInfo>,
     pub mempool_fees: Mutex<MempoolFees>,
+    pub blocks_in_last_hour: AtomicUsize,
 }
 
 #[derive(Clone)]
@@ -64,6 +65,7 @@ impl SharedState {
                 last_in_block: None,
                 middle_in_block: None,
             }),
+            blocks_in_last_hour: AtomicUsize::new(usize::MAX),
         }
     }
 

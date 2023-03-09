@@ -9,6 +9,7 @@ use maud::{html, Render};
 pub struct MempoolSection {
     pub info: MempoolInfo,
     pub fees: MempoolFees,
+    pub blocks_in_last_hour: usize,
 }
 
 impl Render for MempoolSection {
@@ -41,6 +42,16 @@ impl Render for MempoolSection {
                     // (SizeRow::new("Size (bytes)", self.info.bytes as usize))
                     (SizeRow::new("Memory usage (bytes)", self.info.usage as usize))
 
+                    @if self.blocks_in_last_hour != usize::MAX {
+                        tr {
+                            th {
+                                "Blocks in last hour"
+                            }
+                            td class="right" {
+                                (self.blocks_in_last_hour)
+                            }
+                        }
+                    }
 
                     (self.fees)
 

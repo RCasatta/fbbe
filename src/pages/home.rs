@@ -6,7 +6,6 @@ use crate::{
     rpc::{chaininfo::ChainInfo, headers::HeightTime},
 };
 use maud::{html, Markup};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use timeago::Formatter;
 
 pub fn page(
@@ -15,8 +14,7 @@ pub fn page(
     mempool_sec: MempoolSection,
     parsed: &ParsedRequest,
 ) -> Markup {
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    let duration = Duration::from_secs(now.as_secs() - height_time.time as u64);
+    let duration = height_time.since_now();
     let formatter = Formatter::new();
     let time_ago = formatter.convert(duration);
 
@@ -58,6 +56,7 @@ pub fn page(
                             (time_ago)
                         }
                     }
+
                 }
             }
 

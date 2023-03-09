@@ -102,7 +102,7 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
 
                     if start.elapsed() > Duration::from_secs(60) {
                         log::info!(
-                            "memppol info is taking more than a minute, breaking. Cache len: {}",
+                            "mempool info is taking more than a minute, breaking. Cache len: {}",
                             cache.len()
                         );
                         break;
