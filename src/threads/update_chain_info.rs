@@ -79,17 +79,28 @@ async fn update_chain_info(
 }
 
 async fn update_blocks_in_last_hour(shared_state: &Arc<SharedState>, last_tip_height: usize) {
-    let height_to_hash = shared_state.height_to_hash.lock().await;
     let mut data = Vec::with_capacity(6);
-    for i in 0..6 {
-        let hash = height_to_hash[last_tip_height - i];
 
-        if hash != BlockHash::all_zeros() {
-            match shared_state.height_time(hash).await {
-                Ok(ht) => data.push((ht.since_now().as_secs() / 60).to_string()),
-                Err(_) => return,
+    {
+        let height_to_hash = shared_state.height_to_hash.lock().await;
+        for i in 0..6 {
+            let hash = height_to_hash[last_tip_height - i];
+
+            if hash != BlockHash::all_zeros() {
+                match shared_state.height_time(hash).await {
+                    Ok(ht) => data.push((ht.since_now().as_secs() / 60).to_string()),
+                    Err(_) => break,
+                }
+            } else {
+                break;
             }
         }
     }
-    *shared_state.minutes_since_block.lock().await = Some(data.join(", "));
+    let new = if data.len() == 6 {
+        Some(data.join(", "))
+    } else {
+        None
+    };
+
+    *shared_state.minutes_since_block.lock().await = new;
 }
