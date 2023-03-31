@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use super::html_page;
 use crate::{
     network,
@@ -5,8 +7,10 @@ use crate::{
     req::ParsedRequest,
     rpc::{chaininfo::ChainInfo, headers::HeightTime},
 };
-use maud::{html, Markup};
+use maud::{html, Markup, PreEscaped};
 use timeago::Formatter;
+
+const TWO_HOURS: Duration = Duration::from_secs(60 * 60 * 2);
 
 pub fn page(
     info: ChainInfo,
@@ -17,8 +21,12 @@ pub fn page(
     let duration = height_time.since_now();
     let formatter = Formatter::new();
     let time_ago = formatter.convert(duration);
-
     let content = html! {
+        @if duration > TWO_HOURS {
+            (PreEscaped("<!-- LAST BLOCK MORE THAN 2 HOURS AGO -->"))
+        } @else {
+            (PreEscaped("<!-- LAST BLOCK LESS THAN 2 HOURS AGO -->"))
+        }
         section {
 
             hgroup {
