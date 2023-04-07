@@ -25,7 +25,7 @@ async fn update_chain_info(
 
     let mut current = initial_chain_info;
     loop {
-        update_blocks_in_last_hour(&shared_state, current.blocks as usize).await;
+        //update_blocks_in_last_hour(&shared_state, current.blocks as usize).await;
 
         sleep(tokio::time::Duration::from_secs(2)).await;
 
