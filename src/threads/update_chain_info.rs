@@ -90,17 +90,19 @@ async fn update_blocks_in_last_hour(shared_state: &Arc<SharedState>, last_tip_he
                         match shared_state.height_time(*hash).await {
                             Ok(ht) => data.push((ht.since_now().as_secs() / 60).to_string()),
                             Err(_) => {
-                                log::warn!("update_blocks_in_last_hour: err getting height_time");
+                                log::warn!("update_blocks_in_last_hour: err getting height_time {last_tip_height} {i}");
                                 break;
                             }
                         }
                     } else {
-                        log::warn!("update_blocks_in_last_hour: all_zeros");
+                        log::warn!("update_blocks_in_last_hour: all_zeros {last_tip_height} {i}");
                         break;
                     }
                 }
                 None => {
-                    log::warn!("update_blocks_in_last_hour: height_to_hash None");
+                    log::warn!(
+                        "update_blocks_in_last_hour: height_to_hash None {last_tip_height} {i}"
+                    );
                     break;
                 }
             }
