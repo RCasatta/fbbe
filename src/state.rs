@@ -199,6 +199,10 @@ impl SharedState {
                 .lock()
                 .await
                 .insert(block_hash, height_time);
+
+            let mut height_to_hash = self.height_to_hash.lock().await;
+            reserve(&mut height_to_hash, height as usize);
+            height_to_hash[height as usize] = block_hash;
         }
 
         Ok(())
