@@ -1,5 +1,6 @@
+use std::str::FromStr;
+
 use bitcoin::{consensus::Decodable, Transaction, Txid};
-use bitcoin_hashes::hex::FromHex;
 use futures::{future, prelude::*, stream::FuturesUnordered, StreamExt};
 use hyper::{
     body::{self, Buf},
@@ -38,7 +39,7 @@ async fn test_buffer_unordered() {
     let bitcoind_socket = "10.0.0.2:8332";
 
     let txid =
-        Txid::from_hex("52539a56b1eb890504b775171923430f0355eb836a57134ba598170a2f8980c1").unwrap();
+        Txid::from_str("52539a56b1eb890504b775171923430f0355eb836a57134ba598170a2f8980c1").unwrap();
 
     let uri = format!("http://{bitcoind_socket}/rest/tx/{txid}.bin")
         .parse()

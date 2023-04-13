@@ -1,13 +1,12 @@
 use super::Html;
 use crate::{globals::network, pages::tx::IO_PER_PAGE, NetworkExt};
-use bitcoin_hashes::hex::ToHex;
 use maud::{html, Render};
 
 pub(crate) struct OutPoint(bitcoin::OutPoint);
 
 impl Render for OutPoint {
     fn render(&self) -> maud::Markup {
-        let txid_hex = self.0.txid.to_hex();
+        let txid_hex = format!("{:x}", self.0.txid);
         let network_url_path = network().as_url_path();
         let vout = self.0.vout;
         let page = vout as usize / IO_PER_PAGE;

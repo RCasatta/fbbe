@@ -1,13 +1,12 @@
 use super::Html;
 use crate::{globals::network, NetworkExt};
-use bitcoin::hashes::hex::ToHex;
 use maud::{html, Render};
 
 pub(crate) struct BlockHash(pub bitcoin::BlockHash);
 
 impl Render for BlockHash {
     fn render(&self) -> maud::Markup {
-        let hex = self.0.to_hex();
+        let hex = format!("{:x}", self.0);
         let network_url_path = network().as_url_path();
         let link = format!("{network_url_path}b/{hex}");
 

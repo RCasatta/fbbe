@@ -1,10 +1,11 @@
 use std::str::FromStr;
 
 use crate::{error::Error, route::ResponseType};
+use bitcoin::hashes::hex::FromHex;
+use bitcoin::hashes::{sha256d, Hash};
 use bitcoin::{
     consensus::deserialize, psbt::PartiallySignedTransaction, Address, BlockHash, Transaction, Txid,
 };
-use bitcoin_hashes::{hex::FromHex, sha256d};
 use hyper::{Body, Method, Request};
 
 #[derive(Debug, Clone)]
@@ -73,16 +74,16 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
             match (iter.next(), iter.next()) {
                 (Some(val), None) => match val.parse::<u32>() {
                     Ok(height) => Resource::SearchHeight(height),
-                    Err(_) => match sha256d::Hash::from_hex(val) {
+                    Err(_) => match sha256d::Hash::from_str(val) {
                         Ok(val) => {
-                            if val.ends_with(&[0u8; 4]) {
+                            if val.to_byte_array().ends_with(&[0u8; 4]) {
                                 Resource::SearchBlock(val.into())
                             } else {
                                 Resource::SearchTx(val.into())
                             }
                         }
                         Err(_) => match Address::from_str(val) {
-                            Ok(address) => Resource::SearchAddress(address),
+                            Ok(address) => Resource::SearchAddress(address.assume_checked()),
                             Err(_) => {
                                 match Vec::<u8>::from_hex(val)
                                     .map(|bytes| deserialize::<Transaction>(&bytes))
@@ -113,7 +114,7 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
         (&Method::GET, None, Some(&"contact"), None, None) => Resource::Contact,
 
         (&Method::GET, None, Some(&"t"), Some(txid), page) => {
-            let txid = Txid::from_hex(txid)?;
+            let txid = Txid::from_str(txid)?;
             let page = match page {
                 Some(page) => page.parse::<usize>()?,
                 None => 0,
@@ -121,7 +122,7 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
             Resource::Tx(txid, page)
         }
         (&Method::GET, None, Some(&"o"), Some(txid), Some(vout)) => {
-            let txid = Txid::from_hex(txid)?;
+            let txid = Txid::from_str(txid)?;
             let vout: u32 = vout.parse()?;
             Resource::TxOut(txid, vout)
         }
@@ -130,7 +131,7 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
             Resource::SearchHeight(height)
         }
         (&Method::GET, None, Some(&"b"), Some(block_hash), page) => {
-            let block_hash = BlockHash::from_hex(block_hash)?;
+            let block_hash = BlockHash::from_str(block_hash)?;
             let page = match page {
                 Some(page) => page.parse::<usize>()?,
                 None => 0,
@@ -139,14 +140,14 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
         }
         (&Method::GET, None, Some(&"a"), Some(address), None) => {
             let address = Address::from_str(address)?;
-            Resource::Address(address)
+            Resource::Address(address.assume_checked())
         }
         (&Method::GET, None, Some(&"block"), Some(block_hash), None) => {
-            let block_hash = BlockHash::from_hex(block_hash)?;
+            let block_hash = BlockHash::from_str(block_hash)?;
             Resource::BlockToB(block_hash)
         }
         (&Method::GET, None, Some(&"tx"), Some(txid), None) => {
-            let txid = Txid::from_hex(txid)?;
+            let txid = Txid::from_str(txid)?;
             Resource::TxToT(txid)
         }
         (&Method::GET, None, Some(&"txhex"), Some(hex), None) => {
@@ -156,7 +157,7 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
         }
         (&Method::GET, None, Some(&"address"), Some(address), None) => {
             let address = Address::from_str(address)?;
-            Resource::AddressToA(address)
+            Resource::AddressToA(address.assume_checked())
         }
         _ => return Err(Error::NotFound),
     };

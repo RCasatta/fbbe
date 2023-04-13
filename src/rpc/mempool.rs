@@ -4,11 +4,13 @@
 use super::{check_status, CLIENT};
 use crate::error::Error;
 use bitcoin::Txid;
-use bitcoin_hashes::hex::FromHex;
 use hyper::body::Buf;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    str::FromStr,
+};
 
 // curl -s http://localhost:8332/rest/mempool/info.json | jq
 pub async fn info() -> Result<MempoolInfo, Error> {
@@ -33,7 +35,7 @@ pub async fn content() -> Result<HashSet<Txid>, Error> {
     check_status(resp.status(), Error::RpcMempoolContent).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
     let content: HashMap<String, Value> = serde_json::from_reader(body_bytes.reader())?;
-    let txids: HashSet<_> = content.keys().flat_map(|e| Txid::from_hex(e)).collect();
+    let txids: HashSet<_> = content.keys().flat_map(|e| Txid::from_str(e)).collect();
     Ok(txids)
 }
 

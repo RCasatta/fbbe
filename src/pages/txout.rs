@@ -1,5 +1,4 @@
 use bitcoin::OutPoint;
-use bitcoin_hashes::hex::ToHex;
 use maud::{html, Markup};
 
 use crate::{network, req::ParsedRequest, rpc::txout::TxOutJson, NetworkExt};
@@ -7,7 +6,7 @@ use crate::{network, req::ParsedRequest, rpc::txout::TxOutJson, NetworkExt};
 use super::html_page;
 
 pub fn page(tx: &TxOutJson, outpoint: OutPoint, parsed: &ParsedRequest) -> Markup {
-    let txid = outpoint.txid.to_hex();
+    let txid = format!("{:x}", outpoint.txid);
     let outpoint = html! { code { u { (&txid) } ":" (outpoint.vout) } };
     let link = format!("{}t/{}", network().as_url_path(), &txid);
     let is_spent = if tx.utxos.is_empty() {

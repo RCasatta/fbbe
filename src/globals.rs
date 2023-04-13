@@ -43,6 +43,7 @@ pub(crate) fn init_globals(args: &mut Arguments) {
             Network::Testnet => 18332,
             Network::Signet => 38332,
             Network::Regtest => 18443,
+            _ => panic!("non existing network"),
         };
         create_local_socket(port)
     });

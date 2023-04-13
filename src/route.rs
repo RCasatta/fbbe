@@ -5,8 +5,9 @@ use crate::{
     req::{self, Resource},
     rpc, NetworkExt, SharedState,
 };
+use bitcoin::hashes::Hash;
 use bitcoin::{consensus::serialize, Network, OutPoint, TxOut, Txid};
-use bitcoin_hashes::{hex::ToHex, Hash};
+use bitcoin_private::hex::exts::DisplayHex;
 use html2text::render::text_renderer::RichDecorator;
 use hyper::{
     body::Bytes,
@@ -315,7 +316,7 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
                     .body(Body::empty())?
             } else {
                 let bytes = serialize(&tx);
-                let hex = bytes.to_hex();
+                let hex = bytes.to_lower_hex_string();
 
                 Response::builder()
                     .header(LOCATION, format!("{network}txhex/{hex}"))

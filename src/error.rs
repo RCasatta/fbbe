@@ -17,7 +17,7 @@ pub enum Error {
     Uri(#[from] hyper::http::uri::InvalidUri),
 
     #[error(transparent)]
-    Hex(#[from] bitcoin_hashes::hex::Error),
+    Hex(#[from] bitcoin::hashes::hex::Error),
 
     #[error(transparent)]
     ParseInt(#[from] std::num::ParseIntError),
@@ -29,7 +29,7 @@ pub enum Error {
     Join(#[from] tokio::task::JoinError),
 
     #[error(transparent)]
-    BitcoinAddress(#[from] bitcoin::util::address::Error),
+    BitcoinAddress(#[from] bitcoin::address::Error),
 
     #[error(transparent)]
     Bmp(#[from] qr_code::bmp_monochrome::BmpError),

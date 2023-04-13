@@ -4,11 +4,14 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use super::{check_status, ts_to_date_time_utc, CLIENT};
 use crate::error::Error;
-use bitcoin::{consensus::Decodable, BlockHash, BlockHeader};
+use bitcoin::{consensus::Decodable, BlockHash};
 use hyper::body::Buf;
 use serde::Deserialize;
 
-pub async fn call_many(block_hash: BlockHash, count: u32) -> Result<Vec<BlockHeader>, Error> {
+pub async fn call_many(
+    block_hash: BlockHash,
+    count: u32,
+) -> Result<Vec<bitcoin::block::Header>, Error> {
     let client = CLIENT.clone();
     let bitcoind_addr = crate::globals::bitcoind_addr();
     //let uri = format!("http://{bitcoind_addr}/rest/headers/{block_hash}.bin?count={count}").parse()?;  // TODO move to this with bitcoind 0.24
@@ -21,7 +24,7 @@ pub async fn call_many(block_hash: BlockHash, count: u32) -> Result<Vec<BlockHea
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
     let mut reader = body_bytes.reader();
 
-    let mut headers: Vec<BlockHeader> = Vec::with_capacity(count as usize);
+    let mut headers: Vec<bitcoin::block::Header> = Vec::with_capacity(count as usize);
     for _ in 0..count {
         match Decodable::consensus_decode(&mut reader) {
             Ok(header) => headers.push(header),

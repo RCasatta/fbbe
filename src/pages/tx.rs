@@ -3,9 +3,9 @@ use std::str::from_utf8;
 use bitcoin::{
     blockdata::script::Instruction,
     consensus::{encode::serialize_hex, serialize},
-    Address, Amount, BlockHash, Denomination, OutPoint, Script, Transaction, TxOut,
+    Address, Amount, BlockHash, Denomination, OutPoint, Script, ScriptBuf, Transaction, TxOut,
 };
-use bitcoin_hashes::hex::ToHex;
+use bitcoin_private::hex::exts::DisplayHex;
 use maud::{html, Markup};
 
 use crate::{
@@ -100,7 +100,7 @@ pub fn page(
                     .as_ref()
                     .map(|s| s.is_v0_p2wsh())
                     .unwrap_or(false)
-                    .then(|| witness.last().map(|e| Script::from(e.to_vec())))
+                    .then(|| witness.last().map(|e| ScriptBuf::from(e.to_vec())))
                     .flatten();
 
                 let sequence = format!("0x{:x}", input.sequence);
@@ -143,7 +143,7 @@ pub fn page(
                 .then(|| {
                     for instruction in output.script_pubkey.instructions().flatten() {
                         if let Instruction::PushBytes(data) = instruction {
-                            return from_utf8(data).ok();
+                            return from_utf8(data.as_bytes()).ok();
                         }
                     }
                     None
@@ -206,9 +206,9 @@ pub fn page(
     let hex = if tx.size() > 1_000 {
         let bytes = serialize(&tx);
         html! {
-            (&bytes[..500].to_hex())
+            (&bytes[..500].to_lower_hex_string())
             b { "...truncated, original size " (tx.size()) " bytes..." }
-            (&bytes[tx.size()-500..].to_hex())
+            (&bytes[tx.size()-500..].to_lower_hex_string())
 
         }
     } else {
@@ -216,7 +216,7 @@ pub fn page(
     };
 
     let wf = WeightFee {
-        weight: tx.weight(),
+        weight: tx.weight().to_wu() as usize,
         fee: fee as usize,
     };
 
@@ -391,14 +391,14 @@ pub fn page(
             h2 id="details" { "Details "}
             table role="grid" {
                 tbody {
-                    (size_rows(tx.size(), tx.weight()))
+                    (size_rows(tx.size(), tx.weight().to_wu() as usize))
                     tr {
                         th { "Version" }
                         td class="right" { (tx.version) }
                     }
                     tr {
                         th { "Lock time" }
-                        td class="right" { (tx.lock_time.to_u32()) }
+                        td class="right" { (tx.lock_time.to_consensus_u32()) }
                     }
                 }
             }

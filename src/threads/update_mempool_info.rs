@@ -32,7 +32,7 @@ async fn update_mempool_info(shared_state: Arc<SharedState>) {
 #[derive(Debug, Clone)]
 pub struct WeightFee {
     /// The weight of the tx in vbytes
-    pub weight: usize,
+    pub weight: usize, // TODO: change to Weight
 
     /// The absolute fee in satoshi
     pub fee: usize,
@@ -96,7 +96,7 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
                     }
                     let sum_outputs: u64 = tx.output.iter().map(|o| o.value).sum();
                     let fee = (sum_inputs - sum_outputs) as usize;
-                    let weight = tx.weight();
+                    let weight = tx.weight().to_wu() as usize;
 
                     cache.insert(txid, WeightFee { weight, fee });
 

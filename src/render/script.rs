@@ -8,7 +8,7 @@ impl<'a> Render for Script<'a> {
         let asm = if self.0.is_empty() {
             "<empty>".to_owned()
         } else {
-            self.0.asm()
+            self.0.to_asm_string()
         };
         let pieces = asm.split(' ');
         html! {

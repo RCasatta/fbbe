@@ -15,7 +15,11 @@ fn check_pages() {
 
     let bitcoind =
         bitcoind::BitcoinD::with_conf(bitcoind::downloaded_exe_path().unwrap(), &config).unwrap();
-    let addr = bitcoind.client.get_new_address(None, None).unwrap();
+    let addr = bitcoind
+        .client
+        .get_new_address(None, None)
+        .unwrap()
+        .assume_checked();
     let _blocks = bitcoind.client.generate_to_address(1, &addr).unwrap();
 
     let mut args = Arguments::from_iter(Vec::<String>::new());

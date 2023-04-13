@@ -1,17 +1,19 @@
+use std::str::FromStr;
+
 use super::{check_status, CLIENT};
 use crate::error::Error;
+use bitcoin::hashes::hex::FromHex;
 use bitcoin::{
     blockdata::constants::genesis_block,
     consensus::{deserialize, Decodable},
     BlockHash, Network, Transaction, Txid,
 };
-use bitcoin_hashes::hex::FromHex;
 use hyper::body::Buf;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 
 static GENESIS_TX: Lazy<Txid> = Lazy::new(|| {
-    Txid::from_hex("4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b").unwrap()
+    Txid::from_str("4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b").unwrap()
 });
 
 // curl -s http://localhost:8332/rest/tx/3d0db8e24ffab61fb96e8a8fc5a0b14989b6e851495232018192b3e98f6b904e.json | jq

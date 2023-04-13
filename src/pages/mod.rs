@@ -36,6 +36,7 @@ fn nav_header(response_type: ResponseType) -> Markup {
         Network::Testnet => "Fast Bitcoin Block Explorer (Testnet)",
         Network::Signet => "Fast Bitcoin Block Explorer (Signet)",
         Network::Regtest => "Fast Bitcoin Block Explorer (Regtest)",
+        _ => panic!("non existing network"),
     };
 
     let mut other_networks: BTreeSet<_> = networks().iter().collect();

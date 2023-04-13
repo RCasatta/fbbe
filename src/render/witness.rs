@@ -1,5 +1,5 @@
 use super::Html;
-use bitcoin_hashes::hex::ToHex;
+use bitcoin_private::hex::exts::DisplayHex;
 use maud::{html, Render};
 
 pub(crate) struct Witness<'a>(&'a bitcoin::Witness);
@@ -87,11 +87,11 @@ fn hex_empty_long(val: &[u8]) -> String {
 
         format!(
             "{}...truncated, original size is {} bytes...{}",
-            val[0..128].to_hex(),
+            val[0..128].to_lower_hex_string(),
             len,
-            val[len - 128..len].to_hex()
+            val[len - 128..len].to_lower_hex_string()
         )
     } else {
-        val.to_hex()
+        val.to_lower_hex_string()
     }
 }

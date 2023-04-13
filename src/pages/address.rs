@@ -20,6 +20,7 @@ pub fn page(address: &Address, parsed: &ParsedRequest) -> Result<Markup, Error> 
         Testnet => "testnet/",
         Signet => "signet/",
         Regtest => "regtest/",
+        _ => panic!("non existing network"),
     };
     let mempool = match network {
         Bitcoin | Testnet | Signet => Some(format!(

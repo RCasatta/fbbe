@@ -1,13 +1,12 @@
 use super::Html;
 use crate::{globals::network, NetworkExt};
-use bitcoin::hashes::hex::ToHex;
 use maud::{html, Render};
 
 pub(crate) struct Txid(bitcoin::Txid);
 
 impl Render for Txid {
     fn render(&self) -> maud::Markup {
-        let hex = self.0.to_hex();
+        let hex = format!("{:x}", self.0);
         let network_url_path = network().as_url_path();
         let link = format!("{network_url_path}t/{hex}");
 

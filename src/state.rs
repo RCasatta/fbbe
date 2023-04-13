@@ -1,7 +1,7 @@
 use std::{collections::HashMap, num::NonZeroUsize};
 
+use bitcoin::hashes::Hash;
 use bitcoin::{Block, BlockHash, Transaction, Txid};
-use bitcoin_hashes::Hash;
 use futures::prelude::*;
 use lru::LruCache;
 use tokio::sync::{Mutex, MutexGuard};

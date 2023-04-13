@@ -83,6 +83,7 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
         Network::Testnet => create_local_socket(3001),
         Network::Signet => create_local_socket(3002),
         Network::Regtest => create_local_socket(3003),
+        _ => panic!("non existing network"),
     });
     let args = args;
 

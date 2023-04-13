@@ -4,8 +4,8 @@ use crate::error::Error;
 use crate::rpc;
 use crate::rpc::chaininfo::ChainInfo;
 use crate::state::SharedState;
+use bitcoin::hashes::Hash;
 use bitcoin::BlockHash;
-use bitcoin_hashes::Hash;
 use tokio::time::sleep;
 
 pub(crate) async fn update_chain_info_infallible(
