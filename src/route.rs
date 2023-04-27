@@ -85,12 +85,17 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
             let mempool_section = MempoolSection {
                 info: state.mempool_info.lock().await.clone(),
                 fees: state.mempool_fees.lock().await.clone(),
-                minutes_since_block: state.minutes_since_block.lock().await.clone(),
             };
-
+            let minute_since_blocks = state.minutes_since_block.lock().await.clone();
             let height_time = state.height_time(chain_info.best_block_hash).await?;
-            let page = pages::home::page(chain_info, height_time, mempool_section, &parsed_req)
-                .into_string();
+            let page = pages::home::page(
+                chain_info,
+                height_time,
+                mempool_section,
+                minute_since_blocks,
+                &parsed_req,
+            )
+            .into_string();
 
             let builder = Response::builder().header(CACHE_CONTROL, "public, max-age=5");
             match parsed_req.response_type {

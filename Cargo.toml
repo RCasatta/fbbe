@@ -23,7 +23,6 @@ log = "0.4.17"
 lru = "0.8.1"
 chrono = "0.4.23"
 thousands = "0.2.0"
-timeago = "0.3.1"
 structopt = "0.3.26"
 html2text = "0.4.4"
 mime = "0.3.16"
@@ -31,6 +30,7 @@ qr_code = { version="1.1.0", features = ["bmp"] }
 base64 = "0.21.0"
 percent-encoding = "2.2.0"
 bitcoin-private = "0.1.0"
+human_bytes = { version = "0.4.1", default-features = false }
 
 [dev-dependencies]
 bitcoind = { version = "0.30.0", features = ["23_0"] }

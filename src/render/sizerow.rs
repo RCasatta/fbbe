@@ -1,13 +1,12 @@
 use maud::{html, Render};
-use thousands::{digits, Separable, SeparatorPolicy};
 
 pub struct SizeRow<'a> {
     title: &'a str,
-    size: usize,
+    size: u64,
 }
 
 impl<'a> SizeRow<'a> {
-    pub fn new(title: &'a str, size: usize) -> Self {
+    pub fn new(title: &'a str, size: u64) -> Self {
         Self { title, size }
     }
 }
@@ -17,14 +16,8 @@ impl<'a> Render for SizeRow<'a> {
         html! {
             tr {
                 th { (self.title) }
-                td class="right" { (self.size.separate_by_policy(SEPARATOR_POLICY)) }
+                td class="right" { (human_bytes::human_bytes(self.size as f64)) }
             }
         }
     }
 }
-
-const SEPARATOR_POLICY: SeparatorPolicy = SeparatorPolicy {
-    separator: " ", // NARROW NO-BREAK SPACE' (U+202F)
-    groups: &[3],
-    digits: digits::ASCII_DECIMAL,
-};

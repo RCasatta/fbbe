@@ -9,7 +9,6 @@ use maud::{html, Render};
 pub struct MempoolSection {
     pub info: MempoolInfo,
     pub fees: MempoolFees,
-    pub minutes_since_block: Option<String>,
 }
 
 impl Render for MempoolSection {
@@ -40,18 +39,7 @@ impl Render for MempoolSection {
                     }
 
                     // (SizeRow::new("Size (bytes)", self.info.bytes as usize))
-                    (SizeRow::new("Memory usage (bytes)", self.info.usage as usize))
-
-                    @if let Some(minutes_since_block) = self.minutes_since_block.as_ref() {
-                        tr {
-                            th {
-                                "Minutes since last 6 blocks"
-                            }
-                            td class="right" {
-                                (minutes_since_block)
-                            }
-                        }
-                    }
+                    (SizeRow::new("Memory usage", self.info.usage ))
 
                     (self.fees)
 

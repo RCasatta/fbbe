@@ -102,8 +102,7 @@ pub fn size_rows(size: usize, weight: usize) -> Markup {
     let vsize = (weight + 3) / 4;
 
     html! {
-        (SizeRow::new("Size (B)", size))
-        (SizeRow::new("Virtual size (vB)", vsize))
-        (SizeRow::new("Weight units (WU)", weight))
+        (SizeRow::new("Size", size as u64))
+        (SizeRow::new("Virtual size", vsize as u64))
     }
 }

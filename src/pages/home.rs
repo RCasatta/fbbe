@@ -3,12 +3,11 @@ use std::time::Duration;
 use super::html_page;
 use crate::{
     network,
-    render::{Html, MempoolSection},
+    render::{Html, MempoolSection, SizeRow},
     req::ParsedRequest,
     rpc::{chaininfo::ChainInfo, headers::HeightTime},
 };
 use maud::{html, Markup, PreEscaped};
-use timeago::Formatter;
 
 const TWO_HOURS: Duration = Duration::from_secs(60 * 60 * 2);
 
@@ -16,11 +15,11 @@ pub fn page(
     info: ChainInfo,
     height_time: HeightTime,
     mempool_sec: MempoolSection,
+    minutes_since_blocks: Option<String>,
     parsed: &ParsedRequest,
 ) -> Markup {
     let duration = height_time.since_now();
-    let formatter = Formatter::new();
-    let time_ago = formatter.convert(duration);
+    let blockchain_size_row = SizeRow::new("Size on disk", info.size_on_disk);
     let content = html! {
         @if duration > TWO_HOURS {
             (PreEscaped("<!-- LAST BLOCK MORE THAN 2 HOURS AGO -->"))
@@ -41,32 +40,33 @@ pub fn page(
                 }
             }
 
-            hgroup {
-                h2 { "Latest block" }
-                p { (info.blocks) }
-            }
-
             table role="grid" {
                 tbody {
                     tr {
                         th {
-                            "Hash"
+                            "Block " (info.blocks)
                         }
                         td class="right" {
                             (info.best_block_hash.html())
                         }
                     }
-                    tr {
-                        th {
-                            "Elapsed"
-                        }
-                        td class="right" {
-                            (time_ago)
+
+                    @if let Some(minutes_since_block) = minutes_since_blocks.as_ref() {
+                        tr {
+                            th {
+                                "Minutes since last 6 blocks"
+                            }
+                            td class="right" {
+                                (minutes_since_block)
+                            }
                         }
                     }
 
+                    (blockchain_size_row)
+
                 }
             }
+
 
             (mempool_sec)
 

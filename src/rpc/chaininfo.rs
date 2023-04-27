@@ -13,6 +13,8 @@ pub struct ChainInfo {
     pub best_block_hash: BlockHash,
     #[serde(rename = "initialblockdownload")]
     pub initial_block_download: bool,
+
+    pub size_on_disk: u64,
 }
 
 // curl -s http://localhost:8332/rest/chaininfo.json | jq

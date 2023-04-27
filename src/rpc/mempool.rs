@@ -44,7 +44,7 @@ pub struct MempoolInfo {
     pub loaded: bool,
     pub size: u32,
     pub bytes: u32,
-    pub usage: u32,
+    pub usage: u64,
     pub total_fee: f64,
     pub maxmempool: u32,
     pub mempoolminfee: f64,
