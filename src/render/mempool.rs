@@ -2,13 +2,12 @@ use super::Html;
 use crate::{
     render::{AmountRow, SizeRow},
     rpc::mempool::MempoolInfo,
-    state::MempoolFees,
+    state::BlockTemplate,
 };
 use maud::{html, Render};
 
 pub struct MempoolSection {
     pub info: MempoolInfo,
-    pub fees: MempoolFees,
 }
 
 impl Render for MempoolSection {
@@ -41,39 +40,49 @@ impl Render for MempoolSection {
                     // (SizeRow::new("Size (bytes)", self.info.bytes as usize))
                     (SizeRow::new("Memory usage", self.info.usage ))
 
-                    (self.fees)
-
                 }
             }
         }
     }
 }
 
-impl Render for MempoolFees {
+impl Render for BlockTemplate {
     fn render(&self) -> maud::Markup {
         html! {
 
-            @if let Some(highest) = self.highest.as_ref()  {
-                tr {
-                    th { em data-tooltip="Transaction with the highest fee in the mempool" { "Highest" } }
-                    td class="right" { (highest.txid.html()) }
+            @if let Some(transactions) = self.transactions.as_ref()  {
+                hgroup {
+                    h2 { "Block template" }
+                    p { (transactions.get()) " transactions" }
+                }
+                table role="grid" {
+                    tbody {
+                        @if let Some(highest) = self.highest.as_ref()  {
+                            tr {
+                                th  { "Highest" }
+                                td class="right" { (highest.wf) }
+                                td class="right" { (highest.txid.html()) }
+                            }
+                        }
+
+                        @if let Some(middle_in_block) = self.middle_in_block.as_ref() {
+                            tr {
+                                th { "Middle" }
+                                td class="right" { (middle_in_block.wf) }
+                                td class="right" { (middle_in_block.txid.html()) }
+                            }
+                        }
+
+                        @if let Some(last_in_block) = self.last_in_block.as_ref()  {
+                            tr {
+                                th { "Last " }
+                                td class="right" { (last_in_block.wf) }
+                                td class="right" { (last_in_block.txid.html()) }
+                            }
+                        }
+                    }
                 }
             }
-
-            @if let Some(middle_in_block) = self.middle_in_block.as_ref() {
-                tr {
-                    th { em data-tooltip="A transaction in the middle of a block template created with current mempool" { "Middle in block" } }
-                    td class="right" { (middle_in_block.txid.html()) }
-                }
-            }
-
-            @if let Some(last_in_block) = self.last_in_block.as_ref()  {
-                tr {
-                    th { em data-tooltip="The last transaction (lowest fee) of a block template created with current mempool" { "Last in block" } }
-                    td class="right" { (last_in_block.txid.html()) }
-                }
-            }
-
 
         }
     }

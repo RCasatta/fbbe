@@ -15,7 +15,7 @@ use crate::{
     render::{AmountRow, Html},
     req::ParsedRequest,
     rpc::headers::HeightTime,
-    state::MempoolFees,
+    state::BlockTemplate,
     threads::update_mempool_info::{TxidWeightFee, WeightFee},
     NetworkExt,
 };
@@ -29,7 +29,7 @@ pub fn page(
     height_time: Option<(BlockHash, HeightTime)>,
     prevouts: &[TxOut],
     page: usize,
-    mempool_fees: MempoolFees,
+    mempool_fees: BlockTemplate,
     parsed: &ParsedRequest,
     user_provided: bool,
 ) -> Result<Markup, Error> {

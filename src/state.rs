@@ -1,3 +1,4 @@
+use std::num::NonZeroU32;
 use std::{collections::HashMap, num::NonZeroUsize};
 
 use bitcoin::hashes::Hash;
@@ -29,12 +30,12 @@ pub struct SharedState {
     pub height_to_hash: Mutex<Vec<BlockHash>>, // all zero if missing
     pub args: Arguments,
     pub mempool_info: Mutex<MempoolInfo>,
-    pub mempool_fees: Mutex<MempoolFees>,
+    pub mempool_fees: Mutex<BlockTemplate>,
     pub minutes_since_block: Mutex<Option<String>>,
 }
 
 #[derive(Clone)]
-pub struct MempoolFees {
+pub struct BlockTemplate {
     /// Highest fee tx in the mempool
     pub highest: Option<TxidWeightFee>,
 
@@ -43,6 +44,8 @@ pub struct MempoolFees {
 
     /// The fee of the tx included in the middled of a block template of current mempool
     pub middle_in_block: Option<TxidWeightFee>,
+
+    pub transactions: Option<NonZeroU32>,
 }
 
 impl SharedState {
@@ -60,10 +63,11 @@ impl SharedState {
             args,
             mempool_info: Mutex::new(mempool_info),
 
-            mempool_fees: Mutex::new(MempoolFees {
+            mempool_fees: Mutex::new(BlockTemplate {
                 highest: None,
                 last_in_block: None,
                 middle_in_block: None,
+                transactions: None,
             }),
             minutes_since_block: Mutex::new(None),
         }

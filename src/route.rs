@@ -84,8 +84,9 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
 
             let mempool_section = MempoolSection {
                 info: state.mempool_info.lock().await.clone(),
-                fees: state.mempool_fees.lock().await.clone(),
             };
+            let fees = state.mempool_fees.lock().await.clone();
+
             let minute_since_blocks = state.minutes_since_block.lock().await.clone();
             let height_time = state.height_time(chain_info.best_block_hash).await?;
             let page = pages::home::page(
@@ -94,6 +95,7 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
                 mempool_section,
                 minute_since_blocks,
                 &parsed_req,
+                fees,
             )
             .into_string();
 

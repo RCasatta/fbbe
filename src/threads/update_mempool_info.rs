@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -48,7 +49,7 @@ impl Render for WeightFee {
     fn render(&self) -> maud::Markup {
         // em data-tooltip=(rate_sat_vb) style="font-style: normal" { (rate_btc_kvb)
         let btc_over_kvb = format!("{:.8}", self.rate_btc_over_kvb());
-        let sat_over_vb = format!("{:.1} sat/vB", self.rate_sat_over_vb());
+        let sat_over_vb = self.sat_over_vb_str();
 
         html! { em data-tooltip=(sat_over_vb) style="font-style: normal" { (btc_over_kvb) } }
     }
@@ -64,6 +65,9 @@ impl WeightFee {
     }
     fn rate_sat_over_vb(&self) -> f64 {
         (self.fee as f64) / (self.weight as f64 / 4.0)
+    }
+    pub fn sat_over_vb_str(&self) -> String {
+        format!("{:.1} sat/vB", self.rate_sat_over_vb())
     }
 }
 
@@ -141,6 +145,7 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
         mempool_fees.highest = rates.last().cloned();
         mempool_fees.last_in_block = last_in_block.cloned();
         mempool_fees.middle_in_block = middle_in_block.cloned();
+        mempool_fees.transactions = NonZeroU32::new(block_template.len() as u32 + 1);
 
         drop(mempool_fees);
 

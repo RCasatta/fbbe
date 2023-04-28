@@ -6,6 +6,7 @@ use crate::{
     render::{Html, MempoolSection, SizeRow},
     req::ParsedRequest,
     rpc::{chaininfo::ChainInfo, headers::HeightTime},
+    state::BlockTemplate,
 };
 use maud::{html, Markup, PreEscaped};
 
@@ -17,6 +18,7 @@ pub fn page(
     mempool_sec: MempoolSection,
     minutes_since_blocks: Option<String>,
     parsed: &ParsedRequest,
+    block_template: BlockTemplate,
 ) -> Markup {
     let duration = height_time.since_now();
     let blockchain_size_row = SizeRow::new("Size on disk", info.size_on_disk);
@@ -67,8 +69,9 @@ pub fn page(
                 }
             }
 
-
             (mempool_sec)
+
+            (block_template)
 
         }
     };
