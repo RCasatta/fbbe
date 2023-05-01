@@ -66,15 +66,15 @@ pub async fn call_raw(txid: Txid) -> Result<Transaction, Error> {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct TxJson {
-    pub txid: String,
-    pub hash: String,
-    pub version: u32,
-    pub size: u32,
-    pub vsize: u32,
-    pub weight: u32,
-    pub locktime: u32,
-    pub vin: Vec<TxIn>,
-    pub vout: Vec<TxOut>,
+    // pub txid: Txid,
+    // pub hash: String,
+    // pub version: u32,
+    // pub size: u32,
+    // pub vsize: u32,
+    // pub weight: u32,
+    // pub locktime: u32,
+    // pub vin: Vec<TxIn>,
+    // pub vout: Vec<TxOut>,
     #[serde(rename = "blockhash")]
     pub block_hash: Option<BlockHash>,
     pub hex: String,
