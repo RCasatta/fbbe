@@ -2,11 +2,12 @@ use std::str::FromStr;
 
 use super::{check_status, CLIENT};
 use crate::error::Error;
+use crate::state::SerTx;
+use bitcoin::consensus::serialize;
 use bitcoin::hashes::hex::FromHex;
 use bitcoin::{
-    blockdata::constants::genesis_block,
-    consensus::{deserialize, Decodable},
-    BlockHash, Network, Transaction, Txid,
+    blockdata::constants::genesis_block, consensus::Decodable, BlockHash, Network, Transaction,
+    Txid,
 };
 use hyper::body::Buf;
 use once_cell::sync::Lazy;
@@ -35,15 +36,18 @@ pub async fn call_json(txid: Txid) -> Result<TxJson, Error> {
 pub async fn call_parse_json(
     txid: Txid,
     network: Network,
-) -> Result<(Option<BlockHash>, Transaction), Error> {
+) -> Result<(Option<BlockHash>, SerTx), Error> {
     Ok(match call_json(txid).await {
         Ok(tx_json) => (
             tx_json.block_hash,
-            deserialize(&Vec::<u8>::from_hex(&tx_json.hex)?)?,
+            SerTx(Vec::<u8>::from_hex(&tx_json.hex)?),
         ),
         Err(Error::GenesisTx) => {
             let mut block = genesis_block(network);
-            (Some(block.block_hash()), block.txdata.remove(0))
+            (
+                Some(block.block_hash()),
+                SerTx(serialize(&block.txdata.remove(0))),
+            )
         }
         Err(e) => return Err(e),
     })

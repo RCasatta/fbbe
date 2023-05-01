@@ -119,6 +119,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bitcoin_slices"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2d6cb875dba15aa6fbae49c2311d01f5b7d80b56c85eb8e029ec8fd699f27fb"
+dependencies = [
+ "bitcoin",
+]
+
+[[package]]
 name = "bitcoind"
 version = "0.30.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -380,6 +389,7 @@ dependencies = [
  "base64 0.21.0",
  "bitcoin",
  "bitcoin-private",
+ "bitcoin_slices",
  "bitcoind",
  "chrono",
  "env_logger",

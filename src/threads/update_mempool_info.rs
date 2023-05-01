@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::rpc;
-use crate::state::SharedState;
+use crate::state::{outpoints_and_sum, tx_output, OutPointsAndSum, SharedState};
 use bitcoin::{Txid, Weight};
 use maud::{html, Render};
 use tokio::time::sleep;
@@ -147,19 +147,22 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
                     continue;
                 }
                 if let Ok((tx, _)) = shared_state.tx(txid, false).await {
+                    let OutPointsAndSum {
+                        prevouts,
+                        sum,
+                        weight,
+                    } = outpoints_and_sum(tx.as_ref()).expect("invalid tx bytes");
                     let mut sum_inputs = 0u64;
-                    for input in tx.input.iter() {
-                        if let Ok((prev_tx, _)) =
-                            shared_state.tx(input.previous_output.txid, false).await
-                        {
-                            sum_inputs += prev_tx.output[input.previous_output.vout as usize].value;
+                    for prevout in prevouts.iter() {
+                        if let Ok((prev_tx, _)) = shared_state.tx(prevout.txid, false).await {
+                            let res = tx_output(prev_tx.as_ref(), prevout.vout)
+                                .expect("invalid tx bytes");
+                            sum_inputs += res.value;
                         } else {
                             continue 'outer;
                         }
                     }
-                    let sum_outputs: u64 = tx.output.iter().map(|o| o.value).sum();
-                    let fee = (sum_inputs - sum_outputs) as usize;
-                    let weight = tx.weight();
+                    let fee = (sum_inputs - sum) as usize;
                     let wf = WeightFee { weight, fee };
 
                     if let Ok(wf) = wf.try_into() {

@@ -1,9 +1,10 @@
 use std::num::NonZeroU32;
 use std::{collections::HashMap, num::NonZeroUsize};
 
-use bitcoin::consensus::{deserialize, serialize};
+use bitcoin::consensus::serialize;
 use bitcoin::hashes::Hash;
-use bitcoin::{Block, BlockHash, Transaction, Txid};
+use bitcoin::{Block, BlockHash, Transaction, Txid, Weight};
+use bitcoin_slices::{bsl, Visit, Visitor};
 use futures::prelude::*;
 use lru::LruCache;
 use tokio::sync::{Mutex, MutexGuard};
@@ -24,7 +25,15 @@ use crate::{
 /// Contains a serialized transaction.
 /// `Transaction` is not used directly because it keeps long-lived small allocations alive in the
 /// cache.
-pub struct SerTx(Vec<u8>);
+#[derive(Debug, Clone)]
+pub struct SerTx(pub Vec<u8>);
+
+impl AsRef<[u8]> for SerTx {
+    fn as_ref(&self) -> &[u8] {
+        &self.0[..]
+    }
+}
+
 pub struct SharedState {
     // pub requests: AtomicUsize,
     // pub rpc_calls: AtomicUsize,
@@ -127,20 +136,20 @@ impl SharedState {
         &self,
         txid: Txid,
         needs_block_hash: bool,
-    ) -> Result<(Transaction, Option<BlockHash>), Error> {
+    ) -> Result<(SerTx, Option<BlockHash>), Error> {
         {
             let mut txs = self.txs.lock().await;
             if !needs_block_hash {
-                if let Some(tx) = txs.get(&txid) {
+                if let Some(tx) = txs.get(&txid).cloned() {
                     log::trace!("tx hit");
-                    return Ok((deserialize(&tx.0).unwrap(), None));
+                    return Ok((tx, None));
                 }
             } else {
                 let mut tx_in_block = self.tx_in_block.lock().await;
-                match (txs.get(&txid), tx_in_block.get(&txid)) {
+                match (txs.get(&txid).cloned(), tx_in_block.get(&txid)) {
                     (Some(tx), Some(block_hash)) => {
                         log::trace!("tx hit");
-                        return Ok((deserialize(&tx.0).unwrap(), Some(*block_hash)));
+                        return Ok((tx, Some(*block_hash)));
                     }
                     (Some(_), None) => log::debug!("tx miss, missing block"),
                     (None, Some(_)) => log::debug!("tx miss, missing tx"),
@@ -154,10 +163,10 @@ impl SharedState {
     pub async fn tx_fetch_and_cache(
         &self,
         txid: Txid,
-    ) -> Result<(Transaction, Option<BlockHash>), Error> {
+    ) -> Result<(SerTx, Option<BlockHash>), Error> {
         let (block_hash, tx) = rpc::tx::call_parse_json(txid, network()).await?;
         let mut txs = self.txs.lock().await;
-        txs.put(txid, SerTx(serialize(&tx)));
+        txs.put(txid, tx.clone());
         if let Some(block_hash) = block_hash {
             let mut tx_in_block = self.tx_in_block.lock().await;
             tx_in_block.put(txid, block_hash);
@@ -230,5 +239,70 @@ impl SharedState {
 pub(crate) fn reserve(height_to_hash: &mut MutexGuard<Vec<BlockHash>>, height: usize) {
     if height_to_hash.len() <= height {
         height_to_hash.resize(height + 1000, BlockHash::all_zeros());
+    }
+}
+
+pub struct OutPointsAndSum {
+    pub prevouts: Vec<bitcoin::OutPoint>,
+    pub sum: u64,
+    pub weight: Weight,
+}
+impl Visitor for OutPointsAndSum {
+    fn visit_transaction(&mut self, tx: &bsl::Transaction) {
+        self.weight = Weight::from_wu(tx.weight());
+    }
+    fn visit_tx_out(&mut self, _vout: usize, tx_out: &bsl::TxOut) {
+        self.sum += tx_out.value();
+    }
+    fn visit_tx_ins(&mut self, total_inputs: usize) {
+        self.prevouts.reserve(total_inputs);
+    }
+    fn visit_tx_in(&mut self, _vin: usize, tx_in: &bsl::TxIn) {
+        self.prevouts.push(tx_in.prevout().into())
+    }
+}
+pub fn outpoints_and_sum(tx_bytes: &[u8]) -> Result<OutPointsAndSum, bitcoin_slices::Error> {
+    let mut visitor = OutPointsAndSum {
+        prevouts: Vec::new(),
+        sum: 0,
+        weight: Weight::ZERO,
+    };
+    bsl::Transaction::visit(&tx_bytes[..], &mut visitor)?;
+    Ok(visitor)
+}
+
+pub fn tx_output(tx_bytes: &[u8], vout: u32) -> Result<bitcoin::TxOut, bitcoin_slices::Error> {
+    struct Res {
+        vout: u32,
+        tx_out: bitcoin::TxOut,
+    }
+    impl Visitor for Res {
+        fn visit_tx_out(&mut self, vout: usize, tx_out: &bsl::TxOut) {
+            if self.vout == vout as u32 {
+                self.tx_out = tx_out.into();
+            }
+        }
+    }
+    let mut visitor = Res {
+        vout,
+        tx_out: bitcoin::TxOut::default(),
+    };
+    bsl::Transaction::visit(&tx_bytes[..], &mut visitor)?;
+    Ok(visitor.tx_out)
+}
+
+#[cfg(test)]
+mod test {
+    use bitcoin::hashes::hex::FromHex;
+
+    use crate::state::outpoints_and_sum;
+
+    #[test]
+    fn test_prevouts() {
+        const SOME_TX: &str = "0100000001a15d57094aa7a21a28cb20b59aab8fc7d1149a3bdbcddba9c622e4f5f6a99ece010000006c493046022100f93bb0e7d8db7bd46e40132d1f8242026e045f03a0efe71bbb8e3f475e970d790221009337cd7f1f929f00cc6ff01f03729b069a7c21b59b1736ddfee5db5946c5da8c0121033b9b137ee87d5a812d6f506efdd37f0affa7ffc310711c06c7f3e097c9447c52ffffffff0100e1f505000000001976a9140389035a9225b3839e2bbf32d826a1e222031fd888ac00000000";
+        let bytes = Vec::<u8>::from_hex(SOME_TX).unwrap();
+        let res = outpoints_and_sum(&bytes[..]).unwrap();
+        assert_eq!(res.sum, 100000000);
+        assert_eq!(res.prevouts.len(), 1);
     }
 }

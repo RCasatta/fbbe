@@ -3,9 +3,11 @@ use crate::{
     network, pages,
     render::MempoolSection,
     req::{self, Resource},
-    rpc, NetworkExt, SharedState,
+    rpc,
+    state::tx_output,
+    NetworkExt, SharedState,
 };
-use bitcoin::hashes::Hash;
+use bitcoin::{consensus::deserialize, hashes::Hash};
 use bitcoin::{consensus::serialize, Network, OutPoint, TxOut, Txid};
 use bitcoin_private::hex::exts::DisplayHex;
 use html2text::render::text_renderer::RichDecorator;
@@ -150,7 +152,8 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
                     return Err(Error::BadRequest);
                 }
             }
-            let (tx, block_hash) = state.tx(txid, true).await?;
+            let (ser_tx, block_hash) = state.tx(txid, true).await?;
+            let tx: bitcoin::Transaction = deserialize(ser_tx.as_ref()).expect("invalid tx bytes");
             let ts = match block_hash.as_ref() {
                 Some(block_hash) => Some((*block_hash, state.height_time(*block_hash).await?)),
                 None => None,
@@ -186,7 +189,7 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
                     .body(page.into())?,
                 ResponseType::Bytes => builder
                     .header(CONTENT_TYPE, APPLICATION_OCTET_STREAM.as_ref())
-                    .body(Bytes::from(serialize(&tx)).into())?,
+                    .body(Bytes::from(ser_tx.0).into())?,
             }
         }
 
@@ -397,7 +400,9 @@ async fn fetch_prevouts(
         if input.previous_output.txid != Txid::all_zeros() {
             match state.tx(input.previous_output.txid, false).await {
                 Ok((previous_tx, _)) => {
-                    prevouts.push(previous_tx.output[input.previous_output.vout as usize].clone())
+                    let tx_out = tx_output(previous_tx.as_ref(), input.previous_output.vout)
+                        .expect("invalid bytes");
+                    prevouts.push(tx_out);
                 }
                 Err(e) => {
                     if fill_missing {
