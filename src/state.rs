@@ -24,10 +24,18 @@ pub struct SharedState {
     // pub requests: AtomicUsize,
     // pub rpc_calls: AtomicUsize,
     pub chain_info: Mutex<ChainInfo>,
+
+    // default 100k -> at least 100_000 * ~300 B = 28.6 MB
     pub txs: Mutex<LruCache<Txid, Transaction>>,
+
+    /// default 200k -> at least 200_000 * 64 B = 12.8 MB
     pub tx_in_block: Mutex<LruCache<Txid, BlockHash>>,
+
     pub hash_to_height_time: Mutex<HashMap<BlockHash, HeightTime>>,
+
+    /// mainnet 800k -> at least 800_000 * 32 B = 25.6 MB
     pub height_to_hash: Mutex<Vec<BlockHash>>, // all zero if missing
+
     pub args: Arguments,
     pub mempool_info: Mutex<MempoolInfo>,
     pub mempool_fees: Mutex<BlockTemplate>,
