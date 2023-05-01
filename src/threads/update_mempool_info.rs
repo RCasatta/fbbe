@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use crate::rpc;
 use crate::state::SharedState;
-use bitcoin::Txid;
+use bitcoin::{Txid, Weight};
 use maud::{html, Render};
 use tokio::time::sleep;
 
@@ -33,7 +33,7 @@ async fn update_mempool_info(shared_state: Arc<SharedState>) {
 #[derive(Debug, Clone)]
 pub struct WeightFee {
     /// The weight of the tx in vbytes
-    pub weight: usize, // TODO: change to Weight
+    pub weight: Weight,
 
     /// The absolute fee in satoshi
     pub fee: usize,
@@ -56,16 +56,21 @@ impl Render for WeightFee {
 }
 
 impl WeightFee {
+    /// Fast computing (integer math) rate, used for sorting
     fn rate(&self) -> usize {
-        (self.fee * 1_000_000) / self.weight
+        (self.fee * 1_000_000) / self.weight.to_wu() as usize
     }
 
+    /// for example `0.00179955` (BTC/KvB)
     fn rate_btc_over_kvb(&self) -> f64 {
-        (self.fee as f64 / 100_000_000.0) / (self.weight as f64 / 4_000.0)
+        (self.fee as f64 / 100_000_000.0) / (self.weight.to_wu() as f64 / 4_000.0)
     }
+
+    /// for example `180.0` (sat/vB)
     fn rate_sat_over_vb(&self) -> f64 {
-        (self.fee as f64) / (self.weight as f64 / 4.0)
+        (self.fee as f64) / (self.weight.to_wu() as f64 / 4.0)
     }
+
     pub fn sat_over_vb_str(&self) -> String {
         format!("{:.1} sat/vB", self.rate_sat_over_vb())
     }
@@ -100,7 +105,7 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
                     }
                     let sum_outputs: u64 = tx.output.iter().map(|o| o.value).sum();
                     let fee = (sum_inputs - sum_outputs) as usize;
-                    let weight = tx.weight().to_wu() as usize;
+                    let weight = tx.weight();
 
                     cache.insert(txid, WeightFee { weight, fee });
 
@@ -124,7 +129,8 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
         );
         rates.sort_by_cached_key(|a| a.wf.rate());
 
-        let mut sum = 0;
+        let mut sum = Weight::ZERO;
+        let max = Weight::from_wu(4_000_000);
 
         // TODO this doesn't take into account txs dependency
         let block_template: Vec<_> = rates
@@ -132,7 +138,7 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
             .rev()
             .take_while(|i| {
                 sum += i.wf.weight;
-                sum < 4_000_000
+                sum < max
             })
             .collect();
         log::debug!("block template contains {}", block_template.len());

@@ -216,7 +216,7 @@ pub fn page(
     };
 
     let wf = WeightFee {
-        weight: tx.weight().to_wu() as usize,
+        weight: tx.weight(),
         fee: fee as usize,
     };
 
