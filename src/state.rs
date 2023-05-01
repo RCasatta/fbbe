@@ -271,21 +271,34 @@ pub fn outpoints_and_sum(tx_bytes: &[u8]) -> Result<OutPointsAndSum, bitcoin_sli
     Ok(visitor)
 }
 
-pub fn tx_output(tx_bytes: &[u8], vout: u32) -> Result<bitcoin::TxOut, bitcoin_slices::Error> {
+pub fn tx_output(
+    tx_bytes: &[u8],
+    vout: u32,
+    needs_script: bool,
+) -> Result<bitcoin::TxOut, bitcoin_slices::Error> {
     struct Res {
         vout: u32,
         tx_out: bitcoin::TxOut,
+        needs_script: bool,
     }
     impl Visitor for Res {
         fn visit_tx_out(&mut self, vout: usize, tx_out: &bsl::TxOut) {
             if self.vout == vout as u32 {
-                self.tx_out = tx_out.into();
+                if self.needs_script {
+                    self.tx_out = tx_out.into();
+                } else {
+                    self.tx_out = bitcoin::TxOut {
+                        script_pubkey: bitcoin::ScriptBuf::new(),
+                        value: tx_out.value(),
+                    };
+                }
             }
         }
     }
     let mut visitor = Res {
         vout,
         tx_out: bitcoin::TxOut::default(),
+        needs_script,
     };
     bsl::Transaction::visit(&tx_bytes[..], &mut visitor)?;
     Ok(visitor.tx_out)

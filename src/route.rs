@@ -400,7 +400,7 @@ async fn fetch_prevouts(
         if input.previous_output.txid != Txid::all_zeros() {
             match state.tx(input.previous_output.txid, false).await {
                 Ok((previous_tx, _)) => {
-                    let tx_out = tx_output(previous_tx.as_ref(), input.previous_output.vout)
+                    let tx_out = tx_output(previous_tx.as_ref(), input.previous_output.vout, true)
                         .expect("invalid bytes");
                     prevouts.push(tx_out);
                 }
