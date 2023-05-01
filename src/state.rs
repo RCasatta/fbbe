@@ -1,6 +1,7 @@
 use std::num::NonZeroU32;
 use std::{collections::HashMap, num::NonZeroUsize};
 
+use bitcoin::consensus::{deserialize, serialize};
 use bitcoin::hashes::Hash;
 use bitcoin::{Block, BlockHash, Transaction, Txid};
 use futures::prelude::*;
@@ -25,8 +26,9 @@ pub struct SharedState {
     // pub rpc_calls: AtomicUsize,
     pub chain_info: Mutex<ChainInfo>,
 
-    // default 100k -> at least 100_000 * ~300 B = 28.6 MB
-    pub txs: Mutex<LruCache<Txid, Transaction>>,
+    /// default 100k -> at least 100_000 * ~300 B = 28.6 MB
+    /// It is stored as `Vec<u8>` instead of `Transaction` to avoid multiple smaller allocations
+    pub txs: Mutex<LruCache<Txid, Vec<u8>>>,
 
     /// default 200k -> at least 200_000 * 64 B = 12.8 MB
     pub tx_in_block: Mutex<LruCache<Txid, BlockHash>>,
@@ -127,14 +129,14 @@ impl SharedState {
             if !needs_block_hash {
                 if let Some(tx) = txs.get(&txid) {
                     log::trace!("tx hit");
-                    return Ok((tx.clone(), None));
+                    return Ok((deserialize(tx).unwrap(), None));
                 }
             } else {
                 let mut tx_in_block = self.tx_in_block.lock().await;
                 match (txs.get(&txid), tx_in_block.get(&txid)) {
                     (Some(tx), Some(block_hash)) => {
                         log::trace!("tx hit");
-                        return Ok((tx.clone(), Some(*block_hash)));
+                        return Ok((deserialize(tx).unwrap(), Some(*block_hash)));
                     }
                     (Some(_), None) => log::debug!("tx miss, missing block"),
                     (None, Some(_)) => log::debug!("tx miss, missing tx"),
@@ -151,7 +153,7 @@ impl SharedState {
     ) -> Result<(Transaction, Option<BlockHash>), Error> {
         let (block_hash, tx) = rpc::tx::call_parse_json(txid, network()).await?;
         let mut txs = self.txs.lock().await;
-        txs.put(txid, tx.clone());
+        txs.put(txid, serialize(&tx));
         if let Some(block_hash) = block_hash {
             let mut tx_in_block = self.tx_in_block.lock().await;
             tx_in_block.put(txid, block_hash);
@@ -184,7 +186,7 @@ impl SharedState {
         let mut txs = self.txs.lock().await;
 
         for tx in got_txs.into_iter().flatten() {
-            txs.push(tx.txid(), tx);
+            txs.push(tx.txid(), serialize(&tx));
         }
 
         if needed_len > 30 {
@@ -201,7 +203,7 @@ impl SharedState {
         let mut tx_in_block = self.tx_in_block.lock().await;
 
         for (txid, tx) in hash_tx {
-            txs.put(txid, tx);
+            txs.put(txid, serialize(&tx));
             tx_in_block.put(txid, block_hash);
         }
 
