@@ -39,9 +39,26 @@ pub struct WeightFee {
     pub fee: usize,
 }
 
+/// Used to save memory in a vec containing a lot of this elements, moreover:
+/// - weight should never exceed u32::MAX, unless you are computing the weight of a blockchain
+/// - fee has exceeded u32::MAX satoshi at least once cc455ae816e6cdafdb58d54e35d4f46d860047458eacf1c7405dc634631c570d
+///   but it's a very rare case should almost never happen
+#[derive(Debug, Clone)]
+pub struct WeightFeeCompact {
+    pub weight: u32,
+
+    pub fee: u32,
+}
+
 #[derive(Debug, Clone)]
 pub struct TxidWeightFee {
     pub wf: WeightFee,
+    pub txid: Txid,
+}
+
+#[derive(Debug, Clone)]
+pub struct TxidWeightFeeCompact {
+    pub wf: WeightFeeCompact,
     pub txid: Txid,
 }
 
@@ -55,12 +72,42 @@ impl Render for WeightFee {
     }
 }
 
-impl WeightFee {
-    /// Fast computing (integer math) rate, used for sorting
-    fn rate(&self) -> usize {
-        (self.fee * 1_000_000) / self.weight.to_wu() as usize
+impl From<WeightFeeCompact> for WeightFee {
+    fn from(value: WeightFeeCompact) -> Self {
+        From::from(&value)
     }
+}
 
+impl From<&WeightFeeCompact> for WeightFee {
+    fn from(value: &WeightFeeCompact) -> Self {
+        Self {
+            weight: Weight::from_wu(value.weight as u64),
+            fee: value.fee as usize,
+        }
+    }
+}
+
+impl TryFrom<WeightFee> for WeightFeeCompact {
+    type Error = std::num::TryFromIntError;
+
+    fn try_from(value: WeightFee) -> Result<Self, Self::Error> {
+        Ok(Self {
+            weight: u32::try_from(value.weight.to_wu())?,
+            fee: u32::try_from(value.fee)?,
+        })
+    }
+}
+
+impl From<&TxidWeightFeeCompact> for TxidWeightFee {
+    fn from(value: &TxidWeightFeeCompact) -> Self {
+        Self {
+            wf: (&value.wf).into(),
+            txid: value.txid,
+        }
+    }
+}
+
+impl WeightFee {
     /// for example `0.00179955` (BTC/KvB)
     fn rate_btc_over_kvb(&self) -> f64 {
         (self.fee as f64 / 100_000_000.0) / (self.weight.to_wu() as f64 / 4_000.0)
@@ -76,11 +123,18 @@ impl WeightFee {
     }
 }
 
+impl WeightFeeCompact {
+    /// Fast computing (integer math) rate, used for sorting
+    fn rate(&self) -> u64 {
+        ((self.fee as u64) << 32) / self.weight as u64
+    }
+}
+
 async fn update_mempool_details(shared_state: Arc<SharedState>) {
     log::info!("Starting update_mempool_details");
 
-    let mut cache: HashMap<Txid, WeightFee> = HashMap::new();
-    let mut rates: Vec<TxidWeightFee> = vec![];
+    let mut cache: HashMap<Txid, WeightFeeCompact> = HashMap::new();
+    let mut rates: Vec<TxidWeightFeeCompact> = vec![];
 
     loop {
         if let Ok(mempool) = rpc::mempool::content().await {
@@ -106,8 +160,11 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
                     let sum_outputs: u64 = tx.output.iter().map(|o| o.value).sum();
                     let fee = (sum_inputs - sum_outputs) as usize;
                     let weight = tx.weight();
+                    let wf = WeightFee { weight, fee };
 
-                    cache.insert(txid, WeightFee { weight, fee });
+                    if let Ok(wf) = wf.try_into() {
+                        cache.insert(txid, wf);
+                    }
 
                     if start.elapsed() > Duration::from_secs(60) {
                         log::info!(
@@ -125,7 +182,7 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
             cache
                 .clone()
                 .into_iter()
-                .map(|(txid, wf)| TxidWeightFee { wf, txid }),
+                .map(|(txid, wf)| TxidWeightFeeCompact { wf, txid }),
         );
         rates.sort_by_cached_key(|a| a.wf.rate());
 
@@ -137,7 +194,7 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
             .iter()
             .rev()
             .take_while(|i| {
-                sum += i.wf.weight;
+                sum += Weight::from_wu(i.wf.weight as u64);
                 sum < max
             })
             .collect();
@@ -148,9 +205,9 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
 
         let mut mempool_fees = shared_state.mempool_fees.lock().await;
 
-        mempool_fees.highest = rates.last().cloned();
-        mempool_fees.last_in_block = last_in_block.cloned();
-        mempool_fees.middle_in_block = middle_in_block.cloned();
+        mempool_fees.highest = rates.last().map(Into::into);
+        mempool_fees.last_in_block = last_in_block.map(Into::into);
+        mempool_fees.middle_in_block = middle_in_block.map(Into::into);
         mempool_fees.transactions = NonZeroU32::new(block_template.len() as u32 + 1);
 
         drop(mempool_fees);
@@ -158,5 +215,19 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
         sleep(tokio::time::Duration::from_secs(2)).await;
 
         log::trace!("mempool tx with fee: {}", rates.len());
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::mem::size_of;
+
+    #[test]
+    fn size_weight_fee() {
+        assert_eq!(size_of::<WeightFee>(), 16);
+        assert_eq!(size_of::<WeightFeeCompact>(), 8);
+        assert_eq!(size_of::<TxidWeightFee>(), 48);
+        assert_eq!(size_of::<TxidWeightFeeCompact>(), 40);
     }
 }
