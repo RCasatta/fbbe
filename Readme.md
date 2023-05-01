@@ -43,3 +43,19 @@ yui-compressor custom.css > custom.min.css
 * max inputs per tx 52539a56b1eb890504b775171923430f0355eb836a57134ba598170a2f8980c1
 
 * max outputs per tx dd9f6bbf80ab36b722ca95d93268667a3ea6938288e0d4cf0e7d2e28a7a91ab3
+
+## Memory tracking
+
+To allow running the explorer on low-resource devices the memory usage must be kept low.
+
+### Heaptrack
+
+Better results with debug symbols even in release mode, if not already specified in `Cargo.toml`
+use env var `CARGO_PROFILE_RELEASE_DEBUG=true`.
+
+`heaptrack` works by tracking memory management syscall, after installing the tool use:
+```sh
+cargo build --release
+timeout 10m heaptrack ./target/release/fbbe # in this example the tracker runs for 10 minutes
+heaptrack_gui heaptrack.fbbe.105581.zst # file created by the previous command
+```
