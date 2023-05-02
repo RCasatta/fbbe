@@ -6,11 +6,7 @@ use crate::error::Error;
 use bitcoin::Txid;
 use hyper::body::Buf;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use std::{
-    collections::{HashMap, HashSet},
-    str::FromStr,
-};
+use std::collections::HashMap;
 
 // curl -s http://localhost:8332/rest/mempool/info.json | jq
 pub async fn info() -> Result<MempoolInfo, Error> {
@@ -25,8 +21,12 @@ pub async fn info() -> Result<MempoolInfo, Error> {
     Ok(info)
 }
 
+#[derive(Deserialize)]
+pub struct Empty {}
+
+// TODO add verbose=false with bitcoin 0.25
 // curl -s http://localhost:8332/rest/mempool/contents.json | jq
-pub async fn content() -> Result<HashSet<Txid>, Error> {
+pub async fn content() -> Result<HashMap<Txid, Empty>, Error> {
     let client = CLIENT.clone();
     let bitcoind_addr = crate::globals::bitcoind_addr();
 
@@ -34,9 +34,9 @@ pub async fn content() -> Result<HashSet<Txid>, Error> {
     let resp = client.get(uri).await?;
     check_status(resp.status(), Error::RpcMempoolContent).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
-    let content: HashMap<String, Value> = serde_json::from_reader(body_bytes.reader())?;
-    let txids: HashSet<_> = content.keys().flat_map(|e| Txid::from_str(e)).collect();
-    Ok(txids)
+
+    let content: HashMap<Txid, Empty> = serde_json::from_reader(body_bytes.reader())?;
+    Ok(content)
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

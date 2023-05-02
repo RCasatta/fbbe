@@ -138,15 +138,15 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
 
     loop {
         if let Ok(mempool) = rpc::mempool::content().await {
-            cache.retain(|k, _v| mempool.contains(k)); // keep only current mempool elements
+            cache.retain(|k, _v| mempool.contains_key(k)); // keep only current mempool elements
             log::trace!("mempool content returns {} txids", mempool.len());
 
             let start = Instant::now();
-            'outer: for txid in mempool {
-                if cache.contains_key(&txid) {
+            'outer: for txid in mempool.keys() {
+                if cache.contains_key(txid) {
                     continue;
                 }
-                if let Ok((tx, _)) = shared_state.tx(txid, false).await {
+                if let Ok((tx, _)) = shared_state.tx(*txid, false).await {
                     let OutPointsAndSum {
                         prevouts,
                         sum,
@@ -166,7 +166,7 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
                     let wf = WeightFee { weight, fee };
 
                     if let Ok(wf) = wf.try_into() {
-                        cache.insert(txid, wf);
+                        cache.insert(*txid, wf);
                     }
 
                     if start.elapsed() > Duration::from_secs(60) {
@@ -178,6 +178,8 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
                     }
                 }
             }
+        } else {
+            log::warn!("mempool content doesn't parse");
         }
 
         rates.clear();
