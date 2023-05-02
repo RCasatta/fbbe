@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashSet};
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -43,11 +43,25 @@ pub struct WeightFee {
 /// - weight should never exceed u32::MAX, unless you are computing the weight of a blockchain
 /// - fee has exceeded u32::MAX satoshi at least once cc455ae816e6cdafdb58d54e35d4f46d860047458eacf1c7405dc634631c570d
 ///   but it's a very rare case should almost never happen
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WeightFeeCompact {
     pub weight: u32,
-
     pub fee: u32,
+}
+
+impl PartialOrd for WeightFeeCompact {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(&other))
+    }
+}
+
+impl Ord for WeightFeeCompact {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match self.rate().cmp(&other.rate()) {
+            std::cmp::Ordering::Equal => self.weight.cmp(&other.weight),
+            res => res,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -56,10 +70,31 @@ pub struct TxidWeightFee {
     pub txid: Txid,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq)]
 pub struct TxidWeightFeeCompact {
     pub wf: WeightFeeCompact,
     pub txid: Txid,
+}
+
+impl Ord for TxidWeightFeeCompact {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match self.wf.cmp(&other.wf) {
+            std::cmp::Ordering::Equal => self.txid.cmp(&other.txid),
+            res => res,
+        }
+    }
+}
+
+impl PartialOrd for TxidWeightFeeCompact {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for TxidWeightFeeCompact {
+    fn eq(&self, other: &Self) -> bool {
+        self.txid == other.txid && self.wf == other.wf
+    }
 }
 
 impl Render for WeightFee {
@@ -133,17 +168,17 @@ impl WeightFeeCompact {
 async fn update_mempool_details(shared_state: Arc<SharedState>) {
     log::info!("Starting update_mempool_details");
 
-    let mut cache: HashMap<Txid, WeightFeeCompact> = HashMap::new();
-    let mut rates: Vec<TxidWeightFeeCompact> = vec![];
+    let mut rates: BTreeSet<TxidWeightFeeCompact> = BTreeSet::new();
 
     loop {
         if let Ok(mempool) = rpc::mempool::content().await {
-            cache.retain(|k, _v| mempool.contains_key(k)); // keep only current mempool elements
+            rates.retain(|k| mempool.contains_key(&k.txid)); // keep only current mempool elements
             log::trace!("mempool content returns {} txids", mempool.len());
 
             let start = Instant::now();
+            let ids: HashSet<_> = rates.iter().map(|e| e.txid).collect();
             'outer: for txid in mempool.keys() {
-                if cache.contains_key(txid) {
+                if ids.contains(txid) {
                     continue;
                 }
                 if let Ok((tx, _)) = shared_state.tx(*txid, false).await {
@@ -165,14 +200,17 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
                     let fee = (sum_inputs - sum) as usize;
                     let wf = WeightFee { weight, fee };
 
-                    if let Ok(wf) = wf.try_into() {
-                        cache.insert(*txid, wf);
+                    if let Ok(wfc) = wf.try_into() {
+                        rates.insert(TxidWeightFeeCompact {
+                            wf: wfc,
+                            txid: *txid,
+                        });
                     }
 
                     if start.elapsed() > Duration::from_secs(60) {
                         log::info!(
                             "mempool info is taking more than a minute, breaking. Cache len: {}",
-                            cache.len()
+                            rates.len()
                         );
                         break;
                     }
@@ -182,17 +220,8 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
             log::warn!("mempool content doesn't parse");
         }
 
-        rates.clear();
-        rates.extend(
-            cache
-                .clone()
-                .into_iter()
-                .map(|(txid, wf)| TxidWeightFeeCompact { wf, txid }),
-        );
-        rates.sort_by_cached_key(|a| a.wf.rate());
-
         let mut sum = Weight::ZERO;
-        let max = Weight::from_wu(4_000_000);
+        let max = Weight::from_wu(4_000_000); // TODO use bitcoin::Weight::MAX_BLOCK once 0.31 released
 
         // TODO this doesn't take into account txs dependency
         let block_template: Vec<_> = rates

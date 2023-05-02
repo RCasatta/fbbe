@@ -258,7 +258,7 @@ impl Visitor for OutPointsAndSum {
         self.prevouts.reserve(total_inputs);
     }
     fn visit_tx_in(&mut self, _vin: usize, tx_in: &bsl::TxIn) {
-        self.prevouts.push(tx_in.prevout().into())
+        self.prevouts.push(tx_in.prevout().into()) // TODO don't parse the script if it isn't of interest?
     }
 }
 pub fn outpoints_and_sum(tx_bytes: &[u8]) -> Result<OutPointsAndSum, bitcoin_slices::Error> {
