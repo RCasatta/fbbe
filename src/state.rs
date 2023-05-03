@@ -1,6 +1,6 @@
 use std::{collections::HashMap, num::NonZeroUsize};
 
-use bitcoin::consensus::serialize;
+use bitcoin::consensus::Encodable;
 use bitcoin::hashes::Hash;
 use bitcoin::{Block, BlockHash, Transaction, Txid, Weight};
 use bitcoin_slices::{bsl, Visit, Visitor};
@@ -166,9 +166,11 @@ impl SharedState {
         let (block_hash, tx) = rpc::tx::call_parse_json(txid, network()).await?;
         let mut txs = self.txs.lock().await;
 
-        // TODO
-        // if the txs cache is full, you can pop_lru() it and reuse the returned vector to save the allocation of a new vec
-        txs.put(txid, tx.clone());
+        let mut vec = pop_to_reuse(&mut txs, tx.0.len());
+        vec.extend(&tx.0);
+        let tx2 = SerTx(vec); // tx2 is a clone of tx, but reuse an existing vector instead of creating a new one
+
+        txs.put(txid, tx2);
 
         if let Some(block_hash) = block_hash {
             let mut tx_in_block = self.tx_in_block.lock().await;
@@ -202,7 +204,9 @@ impl SharedState {
         let mut txs = self.txs.lock().await;
 
         for tx in got_txs.into_iter().flatten() {
-            txs.put(tx.txid(), SerTx(serialize(&tx)));
+            let mut vec = pop_to_reuse(&mut txs, 250);
+            tx.consensus_encode(&mut vec).expect("vecs don't error");
+            txs.put(tx.txid(), SerTx(vec));
         }
 
         if needed_len > 30 {
@@ -219,7 +223,9 @@ impl SharedState {
         let mut tx_in_block = self.tx_in_block.lock().await;
 
         for (txid, tx) in hash_tx {
-            txs.put(txid, SerTx(serialize(&tx)));
+            let mut vec = pop_to_reuse(&mut txs, 250);
+            tx.consensus_encode(&mut vec).expect("vecs don't error");
+            txs.put(txid, SerTx(vec));
             tx_in_block.put(txid, block_hash);
         }
 
@@ -236,6 +242,23 @@ impl SharedState {
         }
 
         Ok(())
+    }
+}
+
+/// return an empty vector of `at_least` capacity.
+///
+/// if the txs cache is full, it pops the least recently used vector to reuse as the returned
+/// vector instead of allocating a new one
+fn pop_to_reuse(txs: &mut MutexGuard<LruCache<Txid, SerTx>>, at_least: usize) -> Vec<u8> {
+    if txs.cap().get() == txs.len() {
+        let mut vec = txs.pop_lru().expect("checked len>1").1 .0;
+        vec.clear();
+        if vec.capacity() < at_least {
+            vec.reserve(at_least - vec.capacity());
+        }
+        vec
+    } else {
+        Vec::with_capacity(at_least)
     }
 }
 
