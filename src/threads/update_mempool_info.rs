@@ -1,5 +1,4 @@
 use std::collections::{BTreeSet, HashSet};
-use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -224,25 +223,28 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
         let max = Weight::from_wu(4_000_000); // TODO use bitcoin::Weight::MAX_BLOCK once 0.31 released
 
         // TODO this doesn't take into account txs dependency
-        let block_template: Vec<_> = rates
+        let block_template_last = rates
             .iter()
             .rev()
-            .take_while(|i| {
-                sum += Weight::from_wu(i.wf.weight as u64);
+            .enumerate()
+            .take_while(|(_, e)| {
+                sum += Weight::from_wu(e.wf.weight as u64);
                 sum < max
             })
-            .collect();
-        log::debug!("block template contains {}", block_template.len());
+            .map(|(i, _)| i)
+            .max();
 
-        let last_in_block = block_template.last().cloned();
-        let middle_in_block = block_template.get(block_template.len() / 2).cloned();
+        log::debug!("block template contains {:?}", block_template_last);
 
         let mut mempool_fees = shared_state.mempool_fees.lock().await;
 
         mempool_fees.highest = rates.last().map(Into::into);
-        mempool_fees.last_in_block = last_in_block.map(Into::into);
-        mempool_fees.middle_in_block = middle_in_block.map(Into::into);
-        mempool_fees.transactions = NonZeroU32::new(block_template.len() as u32 + 1);
+
+        if let Some(n) = block_template_last {
+            mempool_fees.last_in_block = rates.iter().nth_back(n).map(Into::into);
+            mempool_fees.middle_in_block = rates.iter().nth_back(n / 2).map(Into::into);
+            mempool_fees.transactions = Some(n + 1);
+        }
 
         drop(mempool_fees);
 

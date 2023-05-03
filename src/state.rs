@@ -1,4 +1,3 @@
-use std::num::NonZeroU32;
 use std::{collections::HashMap, num::NonZeroUsize};
 
 use bitcoin::consensus::serialize;
@@ -68,7 +67,7 @@ pub struct BlockTemplate {
     /// The fee of the tx included in the middled of a block template of current mempool
     pub middle_in_block: Option<TxidWeightFee>,
 
-    pub transactions: Option<NonZeroU32>,
+    pub transactions: Option<usize>,
 }
 
 impl SharedState {
@@ -166,7 +165,11 @@ impl SharedState {
     ) -> Result<(SerTx, Option<BlockHash>), Error> {
         let (block_hash, tx) = rpc::tx::call_parse_json(txid, network()).await?;
         let mut txs = self.txs.lock().await;
+
+        // TODO
+        // if the txs cache is full, you can pop_lru() it and reuse the returned vector to save the allocation of a new vec
         txs.put(txid, tx.clone());
+
         if let Some(block_hash) = block_hash {
             let mut tx_in_block = self.tx_in_block.lock().await;
             tx_in_block.put(txid, block_hash);
@@ -199,7 +202,7 @@ impl SharedState {
         let mut txs = self.txs.lock().await;
 
         for tx in got_txs.into_iter().flatten() {
-            txs.push(tx.txid(), SerTx(serialize(&tx)));
+            txs.put(tx.txid(), SerTx(serialize(&tx)));
         }
 
         if needed_len > 30 {

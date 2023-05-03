@@ -53,7 +53,7 @@ impl Render for BlockTemplate {
             @if let Some(transactions) = self.transactions.as_ref()  {
                 hgroup {
                     h2 { "Block template" }
-                    p { (transactions.get()) " transactions" }
+                    p { (transactions) " transactions" }
                 }
                 table role="grid" {
                     tbody {
