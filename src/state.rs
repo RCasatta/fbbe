@@ -247,19 +247,17 @@ impl SharedState {
 
 /// return an empty vector of `at_least` capacity.
 ///
-/// if the txs cache is full, it pops the least recently used vector to reuse as the returned
-/// vector instead of allocating a new one
+/// if the txs cache is full, it pops the least recently used vector and reuse that if it's capacity
+/// it's enough but not too big
 fn pop_to_reuse(txs: &mut MutexGuard<LruCache<Txid, SerTx>>, at_least: usize) -> Vec<u8> {
     if txs.cap().get() == txs.len() {
         let mut vec = txs.pop_lru().expect("checked len>1").1 .0;
-        vec.clear();
-        if vec.capacity() < at_least {
-            vec.reserve(at_least - vec.capacity());
+        if vec.capacity() >= at_least && vec.capacity() < at_least * 2 {
+            vec.clear();
+            return vec;
         }
-        vec
-    } else {
-        Vec::with_capacity(at_least)
     }
+    Vec::with_capacity(at_least)
 }
 
 pub(crate) fn reserve(height_to_hash: &mut MutexGuard<Vec<BlockHash>>, height: usize) {
