@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::{collections::HashMap, num::NonZeroUsize};
 
 use bitcoin::consensus::Encodable;
@@ -67,7 +68,11 @@ pub struct BlockTemplate {
     /// The fee of the tx included in the middled of a block template of current mempool
     pub middle_in_block: Option<TxidWeightFee>,
 
+    /// Number of transactions in the block template
     pub transactions: Option<usize>,
+
+    /// Transactions in the mempool
+    pub mempool: HashSet<Txid>,
 }
 
 impl SharedState {
@@ -90,6 +95,7 @@ impl SharedState {
                 last_in_block: None,
                 middle_in_block: None,
                 transactions: None,
+                mempool: HashSet::new(),
             }),
             minutes_since_block: Mutex::new(None),
         }
@@ -247,12 +253,12 @@ impl SharedState {
 
 /// return an empty vector of `at_least` capacity.
 ///
-/// if the txs cache is full, it pops the least recently used vector and reuse that if it's capacity
-/// it's enough but not too big
+/// if the txs cache is full, it pops the least recently used vector and reuse that if its capacity
+/// is enough but not too big
 fn pop_to_reuse(txs: &mut MutexGuard<LruCache<Txid, SerTx>>, at_least: usize) -> Vec<u8> {
     if txs.cap().get() == txs.len() {
         let mut vec = txs.pop_lru().expect("checked len>1").1 .0;
-        if vec.capacity() >= at_least && vec.capacity() < at_least * 2 {
+        if vec.capacity() >= at_least && vec.capacity() < at_least * 4 {
             vec.clear();
             return vec;
         }

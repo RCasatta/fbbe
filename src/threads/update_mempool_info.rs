@@ -168,16 +168,18 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
     log::info!("Starting update_mempool_details");
 
     let mut rates: BTreeSet<TxidWeightFeeCompact> = BTreeSet::new();
+    let mut rates_id: HashSet<Txid> = HashSet::new();
 
     loop {
         if let Ok(mempool) = rpc::mempool::content().await {
-            rates.retain(|k| mempool.contains_key(&k.txid)); // keep only current mempool elements
+            rates.retain(|k| mempool.contains(&k.txid)); // keep only current mempool elements
             log::trace!("mempool content returns {} txids", mempool.len());
 
             let start = Instant::now();
-            let ids: HashSet<_> = rates.iter().map(|e| e.txid).collect();
-            'outer: for txid in mempool.keys() {
-                if ids.contains(txid) {
+            rates_id.clear();
+            rates_id.extend(rates.iter().map(|e| e.txid));
+            'outer: for txid in mempool.iter() {
+                if rates_id.contains(txid) {
                     continue;
                 }
                 if let Ok((tx, _)) = shared_state.tx(*txid, false).await {
@@ -208,13 +210,16 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
 
                     if start.elapsed() > Duration::from_secs(60) {
                         log::info!(
-                            "mempool info is taking more than a minute, breaking. Cache len: {}",
-                            rates.len()
+                            "mempool info is taking more than a minute, breaking. Cache len: {} mempool: {}",
+                            rates.len(),
+                            mempool.len(),
                         );
                         break;
                     }
                 }
             }
+            let mut mempool_fees = shared_state.mempool_fees.lock().await;
+            mempool_fees.mempool = mempool;
         } else {
             log::warn!("mempool content doesn't parse");
         }
@@ -245,7 +250,6 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
             mempool_fees.middle_in_block = rates.iter().nth_back(n / 2).map(Into::into);
             mempool_fees.transactions = Some(n + 1);
         }
-
         drop(mempool_fees);
 
         sleep(tokio::time::Duration::from_secs(2)).await;

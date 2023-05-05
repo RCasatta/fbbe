@@ -170,6 +170,11 @@ pub fn page(
         None
     };
 
+    let depends_on_unconfirmed = tx
+        .input
+        .iter()
+        .any(|i| mempool_fees.mempool.contains(&i.previous_output.txid));
+
     let block_link = if let Some((block_hash, height_time)) = height_time {
         html! {
             tr {
@@ -195,9 +200,12 @@ pub fn page(
                     @if user_provided {
                         "User provided"
                     } @else {
-                        "Unconfirmed"
+                        @if depends_on_unconfirmed {
+                            "Unconfirmed with unconfirmed inputs"
+                        } @else {
+                            "Unconfirmed"
+                        }
                     }
-
                 }
             }
         }
