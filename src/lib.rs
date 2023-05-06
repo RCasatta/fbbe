@@ -10,6 +10,7 @@ use globals::networks;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::Server;
 use std::convert::Infallible;
+use std::fmt::Display;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use structopt::StructOpt;
@@ -179,19 +180,27 @@ fn check_network(bitcoind: Network) -> Result<(), Error> {
 }
 
 trait NetworkExt {
-    fn as_url_path(&self) -> String;
+    fn as_url_path(&self) -> NetworkPath;
     fn to_maiusc_string(&self) -> String;
 }
 
-impl NetworkExt for Network {
-    fn as_url_path(&self) -> String {
-        if let Network::Bitcoin = self {
-            "/".to_string()
+pub struct NetworkPath(Network);
+
+impl Display for NetworkPath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Network::Bitcoin = self.0 {
+            write!(f, "/")
         } else if networks().len() == 1 {
-            "/".to_string()
+            write!(f, "/")
         } else {
-            format!("/{}/", self)
+            write!(f, "/{}/", self.0)
         }
+    }
+}
+
+impl NetworkExt for Network {
+    fn as_url_path(&self) -> NetworkPath {
+        NetworkPath(*self)
     }
 
     fn to_maiusc_string(&self) -> String {

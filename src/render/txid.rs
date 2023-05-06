@@ -6,12 +6,11 @@ pub(crate) struct Txid(bitcoin::Txid);
 
 impl Render for Txid {
     fn render(&self) -> maud::Markup {
-        let hex = format!("{:x}", self.0);
         let network_url_path = network().as_url_path();
-        let link = format!("{network_url_path}t/{hex}");
+        let link = format!("{network_url_path}t/{:x}", self.0);
 
         html! {
-            a href=(link) { code { small { u { (hex) } } } }
+            a href=(link) { code { small { u { (self.0) } } } }
         }
     }
 }

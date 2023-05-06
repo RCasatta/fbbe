@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use crate::NetworkPath;
 use crate::{error::Error, route::ResponseType};
 use bitcoin::hashes::hex::FromHex;
 use bitcoin::hashes::{sha256d, Hash};
@@ -172,7 +173,7 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
 }
 
 impl Resource {
-    pub fn link(&self, base: &str) -> Option<String> {
+    pub fn link(&self, base: NetworkPath) -> Option<String> {
         match self {
             Resource::Home => Some(format!("{}text", base)),
 
