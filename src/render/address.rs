@@ -1,17 +1,24 @@
+use std::fmt::Display;
+
 use super::Html;
-use crate::{network, NetworkExt};
+use crate::{network, NetworkExt, NetworkPath};
 use maud::{html, Render};
 
 pub(crate) struct Address<'a>(&'a bitcoin::Address);
+struct Link<'a>(NetworkPath, &'a bitcoin::Address);
+impl<'a> Display for Link<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}a/{}", self.0, self.1)
+    }
+}
 
 impl<'a> Render for Address<'a> {
     fn render(&self) -> maud::Markup {
-        let address_string = self.0.to_string();
         let network_url_path = network().as_url_path();
-        let link = format!("{network_url_path}a/{address_string}");
+        let link = Link(network_url_path, &self.0);
 
         html! {
-            a href=(link) {  code { (address_string) } }
+            a href=(link) {  code { (self.0) } }
         }
     }
 }
