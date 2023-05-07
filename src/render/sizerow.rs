@@ -1,3 +1,4 @@
+use crate::render::humanbytes::HumanBytes;
 use maud::{html, Render};
 
 pub struct SizeRow<'a> {
@@ -13,10 +14,11 @@ impl<'a> SizeRow<'a> {
 
 impl<'a> Render for SizeRow<'a> {
     fn render(&self) -> maud::Markup {
+        let hb = HumanBytes::new(self.size as f64);
         html! {
             tr {
                 th { (self.title) }
-                td class="right" { (human_bytes::human_bytes(self.size as f64)) }
+                td class="right" { (hb) }
             }
         }
     }

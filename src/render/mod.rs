@@ -1,6 +1,7 @@
 mod address;
 mod amountrow;
 mod blockhash;
+mod humanbytes;
 mod mempool;
 mod outpoint;
 mod script;
