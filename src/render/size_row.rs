@@ -1,4 +1,4 @@
-use crate::render::humanbytes::HumanBytes;
+use crate::render::human_bytes::HumanBytes;
 use maud::{html, Render};
 
 pub struct SizeRow<'a> {

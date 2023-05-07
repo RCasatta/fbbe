@@ -1,26 +1,30 @@
+use std::fmt::Display;
+
 use super::Html;
 use crate::{globals::network, pages::tx::IO_PER_PAGE, NetworkExt};
 use maud::{html, Render};
 
 pub(crate) struct OutPoint(bitcoin::OutPoint);
 
+struct Link<'a>(&'a bitcoin::OutPoint);
+impl<'a> Display for Link<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}t/{}", network().as_url_path(), self.0.txid)?;
+        let page = self.0.vout as usize / IO_PER_PAGE;
+        if page > 0 {
+            write!(f, "/{}", page)?;
+        }
+        write!(f, "#o{}", self.0.vout)
+    }
+}
+
 impl Render for OutPoint {
     fn render(&self) -> maud::Markup {
-        let txid_hex = format!("{:x}", self.0.txid);
-        let network_url_path = network().as_url_path();
-        let vout = self.0.vout;
-        let page = vout as usize / IO_PER_PAGE;
-        let page = if page == 0 {
-            "".to_string()
-        } else {
-            format!("/{page}")
-        };
-
-        let link = format!("{network_url_path}t/{txid_hex}{page}#o{vout}");
+        let link = Link(&self.0);
 
         html! {
             a href=(link) {
-                code { u { (txid_hex) } ":" b { (vout) } }
+                code { u { (self.0.txid) } ":" b { (self.0.vout) } }
             }
         }
     }
