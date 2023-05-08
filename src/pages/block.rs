@@ -2,7 +2,7 @@ use crate::{
     error::Error,
     network,
     pages::{html_page, size_rows},
-    render::Html,
+    render::{Html, Plural},
     req::ParsedRequest,
     rpc::block::BlockNoTxDetails,
     NetworkExt,
@@ -24,6 +24,7 @@ pub fn page(
     let network_url_path = network().as_url_path();
     let txids = block.tx.iter().skip(from_tx).take(PER_PAGE).enumerate();
     let translate = |i: usize| i + from_tx;
+    let transaction_plural = Plural::new("transaction", block.tx.len());
 
     let prev_txs = (page > 0).then(|| format!("{}b/{}/{}", network_url_path, block.hash, page - 1));
     let next_txs = (to_tx != block.tx.len())
@@ -55,7 +56,7 @@ pub fn page(
             }
 
             hgroup {
-                h2 { (block.tx.len()) " transactions" }
+                h2 { (block.tx.len()) " " (transaction_plural) }
                 p {
                     @if let Some(prev) = prev_txs {
                         a href=(prev) { "Prev" }

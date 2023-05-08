@@ -12,7 +12,7 @@ use crate::{
     error::Error,
     network,
     pages::size_rows,
-    render::{AmountRow, Html},
+    render::{AmountRow, Html, Plural},
     req::ParsedRequest,
     rpc::headers::HeightTime,
     state::BlockTemplate,
@@ -161,8 +161,8 @@ pub fn page(
             )
         });
 
-    let inputs_plural = if tx.input.len() > 1 { "s" } else { "" };
-    let outputs_plural = if tx.output.len() > 1 { "s" } else { "" };
+    let inputs_plural = Plural::new("input", tx.input.len());
+    let outputs_plural = Plural::new("output", tx.output.len());
 
     let last_in_block = if height_time.is_none() {
         mempool_fees.last_in_block
@@ -246,7 +246,7 @@ pub fn page(
             }
 
             hgroup {
-                h2 id="inputs" { (tx.input.len()) " input" (inputs_plural) }
+                h2 id="inputs" { (tx.input.len()) " " (inputs_plural) }
                 p {
                     @if let Some(prev) = prev_input {
                         a href=(prev) { "Prev" }
@@ -332,7 +332,7 @@ pub fn page(
             }
 
             hgroup {
-                h2 id="outputs"  { (tx.output.len()) " output" (outputs_plural) }
+                h2 id="outputs"  { (tx.output.len()) " " (outputs_plural) }
                 p {
                     @if let Some(prev) = prev_output {
                         a href=(prev) { "Prev" }

@@ -1,6 +1,6 @@
 use super::Html;
 use crate::{
-    render::{AmountRow, SizeRow},
+    render::{plural::Plural, AmountRow, SizeRow},
     rpc::mempool::MempoolInfo,
     state::BlockTemplate,
 };
@@ -12,11 +12,7 @@ pub struct MempoolSection {
 
 impl Render for MempoolSection {
     fn render(&self) -> maud::Markup {
-        let transaction_s = if self.info.size == 1 {
-            "transaction"
-        } else {
-            "transactions"
-        };
+        let transaction_s = Plural::new("transaction", self.info.size as usize);
         let mempoolminfee = if self.info.mempoolminfee > 0.00000999 {
             Some(self.info.mempoolminfee)
         } else {
