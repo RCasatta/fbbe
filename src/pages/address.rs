@@ -38,7 +38,7 @@ pub fn page(address: &Address, parsed: &ParsedRequest) -> Result<Markup, Error> 
         .address_type()
         .map(|t| t.to_string())
         .unwrap_or_else(|| "Unknown".to_owned());
-    let address_qr_uri = address.to_qr_uri();
+    let address_qr_uri = format!("bitcoin:{:#}", address); // TODO use address.to_qr_uri() with rust_bitcoin 0.31
     let script_pubkey = address.script_pubkey();
 
     let content = html! {
