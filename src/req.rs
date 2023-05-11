@@ -1,6 +1,8 @@
+use std::fmt::Display;
 use std::str::FromStr;
 
-use crate::NetworkPath;
+use crate::globals::network;
+use crate::NetworkExt;
 use crate::{error::Error, route::ResponseType};
 use bitcoin::hashes::hex::FromHex;
 use bitcoin::hashes::{sha256d, Hash};
@@ -172,26 +174,37 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
     })
 }
 
-impl Resource {
-    pub fn link(&self, base: NetworkPath) -> Option<String> {
-        match self {
-            Resource::Home => Some(format!("{}text", base)),
+pub struct TextLink<'a>(&'a Resource);
+impl<'a> Display for TextLink<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let base = network().as_url_path();
+        match self.0 {
+            Resource::Home => write!(f, "{}text", base),
 
             Resource::Tx(txid, pagination) => {
                 if *pagination == 0 {
-                    Some(format!("{base}t/{txid}/text"))
+                    write!(f, "{base}t/{txid}/text")
                 } else {
-                    Some(format!("{base}t/{txid}/{pagination}/text"))
+                    write!(f, "{base}t/{txid}/{pagination}/text")
                 }
             }
             Resource::Block(block_hash, pagination) => {
                 if *pagination == 0 {
-                    Some(format!("{base}b/{block_hash}/text"))
+                    write!(f, "{base}b/{block_hash}/text")
                 } else {
-                    Some(format!("{base}b/{block_hash}/{pagination}/text"))
+                    write!(f, "{base}b/{block_hash}/{pagination}/text")
                 }
             }
-            Resource::Address(address) => Some(format!("{base}a/{address}/text")),
+            Resource::Address(address) => write!(f, "{base}a/{address}/text"),
+            _ => panic!("resource without text link"),
+        }
+    }
+}
+impl Resource {
+    pub fn link(&self) -> Option<TextLink> {
+        use Resource::*;
+        match self {
+            Home | Tx(_, _) | Block(_, _) | Address(_) => Some(TextLink(&self)),
             _ => None,
         }
     }

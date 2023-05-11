@@ -87,7 +87,7 @@ pub fn footer(parsed: &ParsedRequest) -> Markup {
         footer {
             div class="container" {
                 a href=(base) { "Home" }
-                @if let Some(link) = parsed.resource.link(base) {
+                @if let Some(link) = parsed.resource.link() {
                     " | " a href=(link) { "Text" }
                 }
                 " | " a href="/contact" { "Contact" }
