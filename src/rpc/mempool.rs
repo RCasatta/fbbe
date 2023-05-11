@@ -25,18 +25,23 @@ pub async fn info() -> Result<MempoolInfo, Error> {
 pub struct Empty {}
 
 // TODO add verbose=false with bitcoin 0.25
-// curl -s http://localhost:8332/rest/mempool/contents.json | jq
-pub async fn content() -> Result<HashSet<Txid>, Error> {
+// curl -s http://localhost:8332/rest/mempool/contents.json?verbose=false | jq
+pub async fn content(support_verbose: bool) -> Result<HashSet<Txid>, Error> {
     let client = CLIENT.clone();
     let bitcoind_addr = crate::globals::bitcoind_addr();
 
-    let uri = format!("http://{bitcoind_addr}/rest/mempool/contents.json").parse()?;
+    let uri = format!("http://{bitcoind_addr}/rest/mempool/contents.json?verbose=false").parse()?;
     let resp = client.get(uri).await?;
     check_status(resp.status(), Error::RpcMempoolContent).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
 
-    let content: HashMap<Txid, Empty> = serde_json::from_reader(body_bytes.reader())?;
-    let content: HashSet<Txid> = content.into_keys().collect();
+    let content: HashSet<Txid> = if support_verbose {
+        serde_json::from_reader(body_bytes.reader())?
+    } else {
+        let content: HashMap<Txid, Empty> = serde_json::from_reader(body_bytes.reader())?;
+        content.into_keys().collect()
+    };
+
     Ok(content)
 }
 

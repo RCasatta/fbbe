@@ -37,6 +37,9 @@ pub enum Error {
     #[error(transparent)]
     Qr(#[from] qr_code::types::QrError),
 
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
     #[error("Bitcoin core RPC chaininfo failed status_code:{0}")]
     RpcChainInfo(StatusCode),
 

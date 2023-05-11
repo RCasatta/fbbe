@@ -169,9 +169,11 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
 
     let mut rates: BTreeSet<TxidWeightFeeCompact> = BTreeSet::new();
     let mut rates_id: HashSet<Txid> = HashSet::new();
+    let support_verbose = rpc::mempool::content(true).await.is_ok();
+    log::info!("Node support compact mempool: {support_verbose}");
 
     loop {
-        if let Ok(mempool) = rpc::mempool::content().await {
+        if let Ok(mempool) = rpc::mempool::content(support_verbose).await {
             rates.retain(|k| mempool.contains(&k.txid)); // keep only current mempool elements
             log::trace!("mempool content returns {} txids", mempool.len());
 
