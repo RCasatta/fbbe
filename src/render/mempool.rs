@@ -56,7 +56,7 @@ impl Render for BlockTemplate {
                         @if let Some(highest) = self.highest.as_ref()  {
                             tr {
                                 th  { "Highest" }
-                                td class="right" { (highest.wf) }
+                                td class="number" { (highest.wf) }
                                 td class="right" { (highest.txid.html()) }
                             }
                         }
@@ -64,7 +64,7 @@ impl Render for BlockTemplate {
                         @if let Some(middle_in_block) = self.middle_in_block.as_ref() {
                             tr {
                                 th { "Middle" }
-                                td class="right" { (middle_in_block.wf) }
+                                td class="number" { (middle_in_block.wf) }
                                 td class="right" { (middle_in_block.txid.html()) }
                             }
                         }
@@ -72,7 +72,7 @@ impl Render for BlockTemplate {
                         @if let Some(last_in_block) = self.last_in_block.as_ref()  {
                             tr {
                                 th { "Last " }
-                                td class="right" { (last_in_block.wf) }
+                                td class="number" { (last_in_block.wf) }
                                 td class="right" { (last_in_block.txid.html()) }
                             }
                         }
