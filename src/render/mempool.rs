@@ -3,6 +3,7 @@ use crate::{
     render::{plural::Plural, AmountRow, SizeRow},
     rpc::mempool::MempoolInfo,
     state::BlockTemplate,
+    threads::update_mempool_info::WeightFee,
 };
 use maud::{html, Render};
 
@@ -30,7 +31,10 @@ impl Render for MempoolSection {
                     (AmountRow::new_with_btc("Total fees (BTC)", self.info.total_fee))
 
                     @if let Some(mempoolminfee) = mempoolminfee {
-                        (AmountRow::new_with_btc("Mempool min fee (BTC)", mempoolminfee))
+                        tr {
+                            th { "Mempool min fee (BTC)" }
+                            td class="number" { (WeightFee::from_btc_kvb(mempoolminfee)) }
+                        }
                     }
 
                     // (SizeRow::new("Size (bytes)", self.info.bytes as usize))

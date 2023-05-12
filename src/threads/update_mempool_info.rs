@@ -144,7 +144,7 @@ impl From<&TxidWeightFeeCompact> for TxidWeightFee {
 impl WeightFee {
     /// for example `0.00179955` (BTC/KvB)
     fn rate_btc_over_kvb(&self) -> f64 {
-        (self.fee as f64 / 100_000_000.0) / (self.weight.to_wu() as f64 / 4_000.0)
+        (self.fee as f64 / 100_000.0) / (self.weight.to_wu() as f64 / 4.0)
     }
 
     /// for example `180.0` (sat/vB)
@@ -154,6 +154,14 @@ impl WeightFee {
 
     pub fn sat_over_vb_str(&self) -> String {
         format!("{:.1} sat/vB", self.rate_sat_over_vb())
+    }
+
+    /// Built from a given rate, so that we can reuse the render functionality
+    pub fn from_btc_kvb(f: f64) -> Self {
+        Self {
+            weight: Weight::from_wu(4_000),
+            fee: (f * 100_000_000.0) as usize,
+        }
     }
 }
 
