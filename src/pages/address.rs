@@ -100,7 +100,7 @@ fn create_bmp_base64_qr(message: &str) -> Result<String, Error> {
     // The `.mul(3)` with pixelated rescale shouldn't be needed, however, some printers doesn't
     // recognize it resulting in a blurry image, starting with a bigger image mostly prevents the
     // issue at the cost of a bigger image size.
-    let bmp = qr.to_bmp().add_white_border(2)?.mul(3)?;
+    let bmp = qr.to_bmp().add_white_border(4)?.mul(3)?;
 
     let mut cursor = Cursor::new(vec![]);
     bmp.write(&mut cursor).unwrap();
