@@ -102,7 +102,7 @@ impl Render for WeightFee {
         let btc_over_kvb = format!("{:.8}", self.rate_btc_over_kvb());
         let sat_over_vb = self.sat_over_vb_str();
 
-        html! { em data-tooltip=(sat_over_vb) style="font-style: normal" { (btc_over_kvb) } }
+        html! { span data-tooltip=(sat_over_vb) { (btc_over_kvb) } }
     }
 }
 
