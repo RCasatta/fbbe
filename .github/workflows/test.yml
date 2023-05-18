@@ -1,6 +1,10 @@
 name: Test
 
-on: [pull_request]
+on:
+  push:
+    branches:
+      - master
+  pull_request: {}
 
 env:
   CARGO_TERM_COLOR: always
@@ -13,31 +17,21 @@ jobs:
       RUST_LOG: fbbe=info
 
     steps:
-      - uses: actions/checkout@v2
-      - uses: Swatinem/rust-cache@v1.2.0
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
+      - uses: actions/checkout@v3
+      - uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test
 
   cosmetics:
     runs-on: ubuntu-20.04
     steps:
-      - uses: actions/checkout@v2
-      - uses: Swatinem/rust-cache@v1.2.0
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v3
+      - uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          override: true
-          profile: minimal
           components: rustfmt, clippy
-      - name: fmt
-        run: cargo fmt -- --check
-      - name: clippy
-        run: cargo clippy -- -D warnings
+      - run: cargo fmt -- --check
+      - run: cargo clippy -- -D warnings
 
   rust-version:
     runs-on: ubuntu-20.04
@@ -47,14 +41,11 @@ jobs:
         toolchain: [ "stable", "nightly" ]
 
     steps:
-      - uses: actions/checkout@v2
-      - uses: Swatinem/rust-cache@v1.2.0
+      - uses: actions/checkout@v3
+      - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.version }}
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.toolchain }}
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
+      - run: cargo build
