@@ -167,10 +167,17 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
 
     log::info!("Listening on http://{}", addr);
 
-    if let Err(e) = server.await {
+    if let Err(e) = server.with_graceful_shutdown(shutdown_signal()).await {
         log::error!("server error: {}", e);
     }
     Ok(())
+}
+
+async fn shutdown_signal() {
+    // Wait for the CTRL+C signal
+    tokio::signal::ctrl_c()
+        .await
+        .expect("failed to install CTRL+C signal handler");
 }
 
 fn check_network(bitcoind: Network) -> Result<(), Error> {
