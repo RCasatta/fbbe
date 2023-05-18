@@ -43,7 +43,7 @@
             inherit cargoArtifacts;
           });
           dockerImage = pkgs.dockerTools.streamLayeredImage {
-            name = "fbbe";
+            name = "xenoky/fbbe";
             tag = "latest";
             contents = [ bin ];
             config = {
