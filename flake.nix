@@ -28,11 +28,9 @@
           };
           rustToolchain = pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
           craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchain;
-
-          # TODO, the clean is commented otherwise it doesn't keep txt/css files https://github.com/ipetkov/crane/blob/master/docs/API.md#cranelibfiltercargosources , however this cause rebuild whenever any file is changed, including unrelated one such as .gitignore, fix.
-          #src = craneLib.cleanCargoSource ./.;
-          src = ./.;
-
+          
+          src = craneLib.cleanCargoSource ./.;
+          
           nativeBuildInputs = with pkgs; [ rustToolchain ];
           buildInputs = with pkgs; [ ];
           commonArgs = {
