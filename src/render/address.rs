@@ -14,7 +14,7 @@ impl<'a> Display for Link<'a> {
 
 impl<'a> Render for Address<'a> {
     fn render(&self) -> maud::Markup {
-        let link = Link(&self.0);
+        let link = Link(self.0);
 
         html! {
             a href=(link) {  code { (self.0) } }

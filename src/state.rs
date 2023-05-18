@@ -297,7 +297,7 @@ pub fn outpoints_and_sum(tx_bytes: &[u8]) -> Result<OutPointsAndSum, bitcoin_sli
         sum: 0,
         weight: Weight::ZERO,
     };
-    bsl::Transaction::visit(&tx_bytes[..], &mut visitor)?;
+    bsl::Transaction::visit(tx_bytes, &mut visitor)?;
     Ok(visitor)
 }
 
@@ -330,7 +330,7 @@ pub fn tx_output(
         tx_out: bitcoin::TxOut::default(),
         needs_script,
     };
-    bsl::Transaction::visit(&tx_bytes[..], &mut visitor)?;
+    bsl::Transaction::visit(tx_bytes, &mut visitor)?;
     Ok(visitor.tx_out)
 }
 

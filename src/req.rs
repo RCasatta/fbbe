@@ -204,7 +204,7 @@ impl Resource {
     pub fn link(&self) -> Option<TextLink> {
         use Resource::*;
         match self {
-            Home | Tx(_, _) | Block(_, _) | Address(_) => Some(TextLink(&self)),
+            Home | Tx(_, _) | Block(_, _) | Address(_) => Some(TextLink(self)),
             _ => None,
         }
     }

@@ -199,13 +199,12 @@ pub fn page(
                 td class="right red" {
                     @if user_provided {
                         "User provided"
+                    } @else if depends_on_unconfirmed {
+                        "Unconfirmed with unconfirmed inputs"
                     } @else {
-                        @if depends_on_unconfirmed {
-                            "Unconfirmed with unconfirmed inputs"
-                        } @else {
-                            "Unconfirmed"
-                        }
+                        "Unconfirmed"
                     }
+
                 }
             }
         }
