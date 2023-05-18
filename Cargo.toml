@@ -22,7 +22,6 @@ bitcoin = { version="0.30.0", features = ["serde", "base64"] }
 log = "0.4.17"
 lru = "0.10.0"
 chrono = "0.4.23"
-thousands = "0.2.0"
 html2text = "0.5.1"
 mime = "0.3.16"
 qr_code = { version="1.1.0", features = ["bmp"] }

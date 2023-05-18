@@ -6,21 +6,6 @@ use hyper::{
     body::{self, Buf},
     Client,
 };
-use thousands::{digits, Separable, SeparatorPolicy};
-
-#[test]
-fn test_separator() {
-    let policy = SeparatorPolicy {
-        separator: " ", // NARROW NO-BREAK SPACE' (U+202F)
-        groups: &[3],
-        digits: digits::ASCII_DECIMAL,
-    };
-
-    assert_eq!(
-        1234567890.separate_by_policy(policy),
-        "1\u{202f}234\u{202f}567\u{202f}890"
-    );
-}
 
 #[tokio::test]
 async fn test_unordered() {
