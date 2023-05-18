@@ -18,16 +18,6 @@ cd fbbe
 cargo run --release
 ```
 
-## Nix
-
-A flake is provided to build the fbbe binary.
-
-Whenever `Cargo.toml` or `Cargo.lock` are updated the `cargo2nix` tool must be launched to keep `Cargo.nix` in sync. See https://github.com/cargo2nix/cargo2nix
-
-```
-nix run github:cargo2nix/cargo2nix   # needs nix-command and flakes experimental feature enabled 
-```
-
 ## CSS
 
 After changing `custom.css` use a minifier:

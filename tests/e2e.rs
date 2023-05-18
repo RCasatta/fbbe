@@ -6,6 +6,7 @@ use clap::Parser;
 use env_logger::Env;
 use fbbe::{create_local_socket, Arguments};
 
+#[ignore] // requires bitcoind dep, in nix cannot autodownload the executable
 #[test]
 fn check_pages() {
     env_logger::Builder::from_env(Env::default()).init();

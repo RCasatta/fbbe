@@ -2,3 +2,6 @@
 /res
 /result-bin
 /heaptracks
+.direnv
+/result
+*.swp
