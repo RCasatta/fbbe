@@ -6,6 +6,7 @@ use crate::threads::bootstrap_state::bootstrap_state_infallible;
 use crate::threads::update_chain_info::update_chain_info_infallible;
 use crate::threads::update_mempool_info::update_mempool;
 use bitcoin::Network;
+use clap::Parser;
 use globals::networks;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::Server;
@@ -13,7 +14,6 @@ use std::convert::Infallible;
 use std::fmt::Display;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
-use structopt::StructOpt;
 use tokio::time::sleep;
 
 mod error;
@@ -26,26 +26,28 @@ mod rpc;
 mod state;
 mod threads;
 
-#[derive(StructOpt)]
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
 pub struct Arguments {
     /// Number of transaction kept in memory in a least recently used cache to reduce the number of
     /// requests of transactions to bitcoin core
-    #[structopt(short, long, default_value = "100000")]
+    #[arg(short, long, default_value = "100000", env)]
     pub tx_cache_size: usize,
 
     /// Some requests to the bitcoin core are concurrent, this set the desired parallelism.
     /// Note there is a limit of open files that this setting too high could trigger.
     /// See https://github.com/bitcoin/bitcoin/blob/master/doc/REST-interface.md#risks
-    #[structopt(short, long, default_value = "10")]
+    #[arg(short, long, default_value = "10", env)]
     pub fetch_parallelism: usize,
 
     /// default to "127.0.0.1:<port>" where port depend on the network used, eg 8332 for mainnnet.
-    #[structopt(short, long)]
+    #[arg(short, long, env)]
     pub bitcoind_addr: Option<SocketAddr>,
 
     /// default value: bitcoin
-    /// option so that is consumed with take when passed to `NETWORK` global var
-    #[structopt(short, long)]
+    ///
+    /// other possible values: testnet, signet
+    #[arg(short, long, env)]
     pub network: Option<Network>,
 
     /// The socket address this service will bind on. Default value depends on the network:
@@ -54,7 +56,7 @@ pub struct Arguments {
     /// * signet:  "127.0.0.1:3002"
     /// * regtest: "127.0.0.1:3003"
 
-    #[structopt(short, long)]
+    #[arg(short, long, env)]
     pub local_addr: Option<SocketAddr>,
 
     /// If the setup involve multiple networks this must be set accordingly.
@@ -72,7 +74,7 @@ pub struct Arguments {
     ///   }
     ///   ```
     ///
-    #[structopt(short, long)]
+    #[arg(short, long, env)]
     pub other_network: Vec<Network>,
 }
 

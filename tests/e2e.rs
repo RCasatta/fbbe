@@ -2,9 +2,9 @@ use std::time::Duration;
 
 use bitcoin::Network;
 use bitcoind::{bitcoincore_rpc::RpcApi, Conf};
+use clap::Parser;
 use env_logger::Env;
 use fbbe::{create_local_socket, Arguments};
-use structopt::StructOpt;
 
 #[test]
 fn check_pages() {
@@ -22,7 +22,7 @@ fn check_pages() {
         .assume_checked();
     let _blocks = bitcoind.client.generate_to_address(1, &addr).unwrap();
 
-    let mut args = Arguments::from_iter(Vec::<String>::new());
+    let mut args = Arguments::parse_from(Vec::<String>::new());
     args.bitcoind_addr = Some(bitcoind.params.rpc_socket.into());
     args.network = Some(Network::Regtest);
     let fbbe_addr = create_local_socket(bitcoind::get_available_port().unwrap());
