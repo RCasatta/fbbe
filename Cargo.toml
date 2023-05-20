@@ -32,7 +32,8 @@ bitcoin_slices = { version = "0.5.0", features = ["bitcoin"] }
 clap = { version = "4.2.7", features = ["derive", "env"] }
 
 [dev-dependencies]
-bitcoind = { version = "0.30.0" }
-ureq = "2.6.2"
+bitcoind = { version = "0.31.0" }
+minreq = "2.8.1"
 
-
+[features]
+download_bitcoind = ["bitcoind/23_1"]

@@ -6,7 +6,6 @@ use clap::Parser;
 use env_logger::Env;
 use fbbe::{create_local_socket, Arguments};
 
-#[ignore] // requires bitcoind dep, in nix cannot autodownload the executable
 #[test]
 fn check_pages() {
     env_logger::Builder::from_env(Env::default()).init();
@@ -14,8 +13,8 @@ fn check_pages() {
 
     config.args.push("-rest");
 
-    let bitcoind =
-        bitcoind::BitcoinD::with_conf(bitcoind::downloaded_exe_path().unwrap(), &config).unwrap();
+    let path = bitcoind::exe_path();
+    let bitcoind = bitcoind::BitcoinD::with_conf(path.unwrap(), &config).unwrap();
     let addr = bitcoind
         .client
         .get_new_address(None, None)
@@ -42,7 +41,14 @@ fn check_pages() {
     // TODO wait until online
     std::thread::sleep(Duration::from_secs(1));
 
-    let get = |url: String| ureq::get(&url).call().unwrap().into_string().unwrap();
+    let get = |url: String| {
+        minreq::get(&url)
+            .send()
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
 
     let home_page = format!("http://{fbbe_addr}");
     let page = get(home_page);

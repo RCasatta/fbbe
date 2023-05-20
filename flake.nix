@@ -37,8 +37,9 @@
             inherit src buildInputs nativeBuildInputs;
           };
           cargoArtifacts = craneLib.buildDepsOnly commonArgs;
+          BITCOIND_EXE = pkgs.bitcoind + "/bin/bitcoind";
           bin = craneLib.buildPackage (commonArgs // {
-            inherit cargoArtifacts;
+            inherit cargoArtifacts BITCOIND_EXE;
           });
           dockerImage = pkgs.dockerTools.streamLayeredImage {
             name = "xenoky/fbbe";
