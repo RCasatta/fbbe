@@ -102,6 +102,9 @@ pub enum Error {
 
     #[error("address and fbbe doesn't have the same network. fbbe:{fbbe} address:{address}")]
     AddressWrongNetwork { fbbe: Network, address: Network },
+
+    #[error("Network '{0}' not parsed, valid values are: bitcoin, mainnet, main | testnet, test | signet | regtest")]
+    NetworkParseError(String),
 }
 
 impl From<Error> for StatusCode {

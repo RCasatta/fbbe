@@ -27,7 +27,7 @@ fn init_node() -> BitcoinD {
 fn init_fbbe(bitcoind: &BitcoinD, network: Network) -> Arguments {
     let mut args = Arguments::parse_from(Vec::<String>::new());
     args.bitcoind_addr = Some(bitcoind.params.rpc_socket.into());
-    args.network = Some(network);
+    args.network = Some(network.into());
     let fbbe_addr = create_local_socket(bitcoind::get_available_port().unwrap());
     args.local_addr = Some(fbbe_addr);
     args

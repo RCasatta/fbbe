@@ -10,6 +10,7 @@ use clap::Parser;
 use globals::networks;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::Server;
+use network_parse::NetworkParse;
 use std::convert::Infallible;
 use std::fmt::Display;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -18,6 +19,7 @@ use tokio::time::sleep;
 
 mod error;
 mod globals;
+mod network_parse;
 mod pages;
 mod render;
 mod req;
@@ -48,7 +50,7 @@ pub struct Arguments {
     ///
     /// other possible values: testnet, signet
     #[arg(short, long, env)]
-    pub network: Option<Network>,
+    pub network: Option<NetworkParse>,
 
     /// The socket address this service will bind on. Default value depends on the network:
     /// * mainnet: "127.0.0.1:3000"

@@ -24,7 +24,12 @@ pub(crate) fn networks() -> &'static [Network] {
 
 pub(crate) fn init_globals(args: &mut Arguments) {
     NETWORK
-        .set(args.network.take().unwrap_or(Network::Bitcoin))
+        .set(
+            args.network
+                .take()
+                .map(Into::into)
+                .unwrap_or(Network::Bitcoin),
+        )
         .expect("static global must be empty here");
 
     let mut networks = HashSet::new();
