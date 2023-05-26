@@ -121,13 +121,8 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
         }
     }
 
-    match chain_info.chain.as_str() {
-        "main" => check_network(Network::Bitcoin)?,
-        "test" => check_network(Network::Testnet)?,
-        "signet" => check_network(Network::Signet)?,
-        "regtest" => check_network(Network::Regtest)?,
-        net => panic!("Network returned by bitcoind is not supported: {}", net),
-    }
+    let core_net = Network::from_core_arg(chain_info.chain.as_str())?;
+    check_network(core_net)?;
 
     let mempool_info = rpc::mempool::info().await?;
     log::info!("{:?}", mempool_info);

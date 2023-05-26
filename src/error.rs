@@ -26,6 +26,9 @@ pub enum Error {
     Bitcoin(#[from] encode::Error),
 
     #[error(transparent)]
+    ParseNetworkError(#[from] bitcoin::network::constants::ParseNetworkError),
+
+    #[error(transparent)]
     Join(#[from] tokio::task::JoinError),
 
     #[error(transparent)]
