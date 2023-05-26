@@ -1,4 +1,4 @@
-use crate::error::Error;
+pub use crate::error::Error;
 use crate::globals::{init_globals, network};
 use crate::route::route_infallible;
 use crate::state::SharedState;
