@@ -40,6 +40,9 @@
           BITCOIND_EXE = pkgs.bitcoind + "/bin/bitcoind";
           bin = craneLib.buildPackage (commonArgs // {
             inherit cargoArtifacts BITCOIND_EXE;
+            preCheckPhase = ''
+              export FBBE_EXE=$out/bin/fbbe
+            '';
           });
           dockerImage = pkgs.dockerTools.streamLayeredImage {
             name = "xenoky/fbbe";

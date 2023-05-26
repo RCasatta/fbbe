@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, str::from_utf8, time::Duration};
+use std::{str::from_utf8, time::Duration};
 
 use bitcoin::Network;
 use bitcoind::{bitcoincore_rpc::RpcApi, BitcoinD, Conf};
@@ -93,13 +93,13 @@ fn check_pages() {
     assert!(page.contains(genesis_block));
     assert!(page.contains(genesis_tx));
 }
-
 #[test]
 fn check_wrong_network() {
     let bitcoind = init_node();
     let args = fbbe_args(&bitcoind, Network::Testnet);
+    let exe = std::env::var("FBBE_EXE").unwrap_or("./target/debug/fbbe".to_string());
 
-    let output = std::process::Command::new("./target/debug/fbbe")
+    let output = std::process::Command::new(exe)
         .args(args)
         .output()
         .unwrap()
