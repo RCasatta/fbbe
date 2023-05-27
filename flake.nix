@@ -40,8 +40,8 @@
           BITCOIND_EXE = pkgs.bitcoind + "/bin/bitcoind";
           bin = craneLib.buildPackage (commonArgs // {
             inherit cargoArtifacts BITCOIND_EXE;
-            preCheckPhase = ''
-              export FBBE_EXE=$out/bin/fbbe
+            preCheck = ''
+              export FBBE_EXE=./target/release/fbbe
             '';
           });
           dockerImage = pkgs.dockerTools.streamLayeredImage {

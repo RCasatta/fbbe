@@ -1,10 +1,12 @@
-use std::{str::from_utf8, time::Duration};
-
 use bitcoin::Network;
 use bitcoind::{bitcoincore_rpc::RpcApi, BitcoinD, Conf};
-use clap::Parser;
 use env_logger::Env;
-use fbbe::{create_local_socket, Arguments};
+use fbbe::create_local_socket;
+use nix::{
+    sys::signal::{self, Signal},
+    unistd::Pid,
+};
+use std::{net::SocketAddr, path::Path, str::from_utf8, time::Duration};
 
 fn init_node() -> BitcoinD {
     let _ = env_logger::Builder::from_env(Env::default()).try_init();
@@ -24,16 +26,19 @@ fn init_node() -> BitcoinD {
     bitcoind
 }
 
-fn init_fbbe(bitcoind: &BitcoinD, network: Network) -> Arguments {
-    let mut args = Arguments::parse_from(Vec::<String>::new());
-    args.bitcoind_addr = Some(bitcoind.params.rpc_socket.into());
-    args.network = Some(network.into());
-    let fbbe_addr = create_local_socket(bitcoind::get_available_port().unwrap());
-    args.local_addr = Some(fbbe_addr);
-    args
-}
+fn init_fbbe(bitcoind: &BitcoinD, network: Network) -> (SocketAddr, String, Vec<String>) {
+    let exe = {
+        let debug = "./target/debug/fbbe";
+        let release = "./target/release/fbbe";
+        if Path::new(debug).exists() {
+            debug.to_string()
+        } else if Path::new(debug).exists() {
+            release.to_string()
+        } else {
+            panic!("can't find fbbe executable!");
+        }
+    };
 
-fn fbbe_args(bitcoind: &BitcoinD, network: Network) -> Vec<String> {
     let fbbe_addr = create_local_socket(bitcoind::get_available_port().unwrap());
     let mut args = vec![];
     args.push("--bitcoind-addr".into());
@@ -42,28 +47,16 @@ fn fbbe_args(bitcoind: &BitcoinD, network: Network) -> Vec<String> {
     args.push(network.to_string());
     args.push("--local-addr".to_string());
     args.push(fbbe_addr.to_string());
-    args
+    (fbbe_addr, exe, args)
 }
 
 #[test]
 fn check_pages() {
     let bitcoind = init_node();
 
-    let args = init_fbbe(&bitcoind, Network::Regtest);
-    let fbbe_addr = args.local_addr.clone().unwrap();
+    let (fbbe_addr, exe, args) = init_fbbe(&bitcoind, Network::Regtest);
 
-    // TODO shutdown the thread
-    let _h = std::thread::spawn(|| {
-        // TODO launching this way, only one fbbe per test run can be launched because of globals
-        // consider migrating to explicit process also here
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap()
-            .block_on(async { fbbe::inner_main(args).await })
-            .unwrap();
-    });
-
+    let child = std::process::Command::new(exe).args(args).spawn().unwrap();
     // TODO wait until online
     std::thread::sleep(Duration::from_secs(1));
 
@@ -92,12 +85,13 @@ fn check_pages() {
     let page = get(tx_page);
     assert!(page.contains(genesis_block));
     assert!(page.contains(genesis_tx));
+
+    signal::kill(Pid::from_raw(child.id() as i32), Signal::SIGINT).unwrap();
 }
 #[test]
 fn check_wrong_network() {
     let bitcoind = init_node();
-    let args = fbbe_args(&bitcoind, Network::Testnet);
-    let exe = std::env::var("FBBE_EXE").unwrap_or("./target/debug/fbbe".to_string());
+    let (_, exe, args) = init_fbbe(&bitcoind, Network::Testnet);
 
     let output = std::process::Command::new(exe)
         .args(args)
