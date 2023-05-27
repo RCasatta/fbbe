@@ -38,7 +38,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        toolchain: [ "stable", "nightly" ]
+        toolchain: ["stable", "nightly"]
 
     steps:
       - uses: actions/checkout@v3
@@ -49,3 +49,13 @@ jobs:
         with:
           toolchain: ${{ matrix.toolchain }}
       - run: cargo build
+
+  nix-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: cachix/install-nix-action@v20
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      - run: nix build
+      - run: nix flake check
