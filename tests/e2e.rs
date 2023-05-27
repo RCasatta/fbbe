@@ -35,7 +35,12 @@ fn init_fbbe(bitcoind: &BitcoinD, network: Network) -> (SocketAddr, String, Vec<
         } else if Path::new(debug).exists() {
             release.to_string()
         } else {
-            panic!("can't find fbbe executable!");
+            let env = std::env::var("FBBE_EXE").expect("specify `fbbe` executable in FBBE_EXE env");
+            if Path::new(&env).exists() {
+                env
+            } else {
+                panic!("env var FBBE_EXE is pointing to non existing file");
+            }
         }
     };
 
