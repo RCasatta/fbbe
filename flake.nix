@@ -59,6 +59,7 @@
             {
               inherit bin dockerImage;
               default = bin;
+              fbbe = bin;
             };
           devShells.default = mkShell {
             inputsFrom = [ bin ];
