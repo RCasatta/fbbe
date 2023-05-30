@@ -35,7 +35,7 @@ pub enum Resource {
     Robots,
     BlockToB(BlockHash),
     TxToT(Txid),
-    Address(Address),
+    Address(Address, Option<String>),
     AddressToA(Address),
     FullTx(Transaction),
 }
@@ -141,9 +141,12 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
             };
             Resource::Block(block_hash, page)
         }
-        (&Method::GET, None, Some(&"a"), Some(address), None) => {
+        (&Method::GET, query, Some(&"a"), Some(address), None) => {
             let address = Address::from_str(address)?;
-            Resource::Address(address.assume_checked())
+            Resource::Address(
+                address.assume_checked(),
+                query.map(|q| urlencoding::decode(q).unwrap_or_default().to_string()),
+            )
         }
         (&Method::GET, None, Some(&"block"), Some(block_hash), None) => {
             let block_hash = BlockHash::from_str(block_hash)?;
@@ -195,7 +198,13 @@ impl<'a> Display for TextLink<'a> {
                     write!(f, "{base}b/{block_hash}/{pagination}/text")
                 }
             }
-            Resource::Address(address) => write!(f, "{base}a/{address}/text"),
+            Resource::Address(address, query) => {
+                write!(f, "{base}a/{address}/text")?;
+                if let Some(query) = query {
+                    write!(f, "?{query}")?;
+                }
+                Ok(())
+            }
             _ => panic!("resource without text link"),
         }
     }
@@ -204,7 +213,7 @@ impl Resource {
     pub fn link(&self) -> Option<TextLink> {
         use Resource::*;
         match self {
-            Home | Tx(_, _) | Block(_, _) | Address(_) => Some(TextLink(self)),
+            Home | Tx(_, _) | Block(_, _) | Address(_, _) => Some(TextLink(self)),
             _ => None,
         }
     }

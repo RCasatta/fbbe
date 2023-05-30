@@ -290,14 +290,14 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
                 .status(StatusCode::TEMPORARY_REDIRECT)
                 .body(Body::empty())?
         }
-        Resource::Address(ref address) => {
+        Resource::Address(ref address, ref query) => {
             if address.network != address_compatible(network()) {
                 return Err(Error::AddressWrongNetwork {
                     address: address.network,
                     fbbe: network(),
                 });
             } else {
-                let page = pages::address::page(address, &parsed_req)?.into_string();
+                let page = pages::address::page(address, &parsed_req, query)?.into_string();
 
                 match parsed_req.response_type {
                     ResponseType::Text(col) => Response::builder()

@@ -12,7 +12,11 @@ use crate::{
 
 use super::html_page;
 
-pub fn page(address: &Address, parsed: &ParsedRequest) -> Result<Markup, Error> {
+pub fn page(
+    address: &Address,
+    parsed: &ParsedRequest,
+    query: &Option<String>,
+) -> Result<Markup, Error> {
     use bitcoin::Network::*;
     let network = network();
     let network_path = match network {
@@ -38,7 +42,11 @@ pub fn page(address: &Address, parsed: &ParsedRequest) -> Result<Markup, Error> 
         .address_type()
         .map(|t| t.to_string())
         .unwrap_or_else(|| "Unknown".to_owned());
-    let address_qr_uri = format!("bitcoin:{:#}", address); // TODO use address.to_qr_uri() with rust_bitcoin 0.31
+    log::warn!("{:?}", query);
+    let address_qr_uri = match query {
+        None => format!("bitcoin:{:#}", address), // TODO use address.to_qr_uri() with rust_bitcoin 0.31
+        Some(query) => format!("bitcoin:{:#}?{}", address, query),
+    };
     let script_pubkey = address.script_pubkey();
 
     let content = html! {
