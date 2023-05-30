@@ -24,7 +24,7 @@ lru = "0.10.0"
 chrono = "0.4.23"
 html2text = "0.5.1"
 mime = "0.3.16"
-qr_code = { version="1.1.0", features = ["bmp"] }
+qr_code = { version="2.0.0", features = ["bmp"] }
 base64 = "0.21.0"
 percent-encoding = "2.2.0"
 bitcoin-private = "0.1.0"
