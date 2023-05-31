@@ -1,4 +1,5 @@
 use crate::{
+    base_text_decorator::BaseTextDecorator,
     error::Error,
     network, pages,
     render::MempoolSection,
@@ -10,7 +11,6 @@ use crate::{
 use bitcoin::{consensus::deserialize, hashes::Hash};
 use bitcoin::{consensus::serialize, Network, OutPoint, TxOut, Txid};
 use bitcoin_private::hex::exts::DisplayHex;
-use html2text::render::text_renderer::RichDecorator;
 use hyper::{
     body::Bytes,
     header::{CACHE_CONTROL, CONTENT_TYPE, IF_MODIFIED_SINCE, LAST_MODIFIED, LOCATION},
@@ -373,7 +373,7 @@ fn convert_text_html(page: &str, columns: u16) -> Body {
 }
 
 pub(crate) fn convert_text_html_string(page: &str, columns: u16) -> String {
-    html2text::from_read_with_decorator(page.as_bytes(), columns as usize, RichDecorator {})
+    html2text::from_read_with_decorator(page.as_bytes(), columns as usize, BaseTextDecorator {})
 }
 
 fn cache_time_from_confirmations(confirmation: Option<u32>) -> u32 {

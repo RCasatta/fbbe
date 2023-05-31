@@ -17,6 +17,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use tokio::time::sleep;
 
+mod base_text_decorator;
 mod error;
 mod globals;
 mod network_parse;
