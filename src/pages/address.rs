@@ -1,4 +1,4 @@
-use std::io::Cursor;
+use std::{borrow::Cow, collections::HashMap, io::Cursor};
 
 use base64::Engine;
 use bitcoin::Address;
@@ -42,11 +42,25 @@ pub fn page(
         .address_type()
         .map(|t| t.to_string())
         .unwrap_or_else(|| "Unknown".to_owned());
-    log::warn!("{:?}", query);
-    let address_qr_uri = match query {
-        None => format!("bitcoin:{:#}", address), // TODO use address.to_qr_uri() with rust_bitcoin 0.31
-        Some(query) => format!("bitcoin:{:#}?{}", address, query),
+    let mut params = match query {
+        None => HashMap::new(),
+        Some(q) => url::form_urlencoded::parse(q.as_bytes()).collect(),
     };
+    params.retain(|_, v| !v.is_empty());
+    let address_qr_uri = if params.is_empty() {
+        format!("bitcoin:{:#}", address)
+    } else {
+        format!(
+            "bitcoin:{:#}?{}",
+            address,
+            params
+                .iter()
+                .map(|(k, v)| format!("{k}={v}"))
+                .collect::<Vec<String>>()
+                .join("&")
+        )
+    };
+
     let script_pubkey = address.script_pubkey();
 
     let content = html! {
@@ -71,6 +85,24 @@ pub fn page(
                         td { (script_pubkey.html()) }
                     }
                 }
+            }
+
+            hgroup {
+                h1 { "URI" }
+                p  { "Update QR code data" }
+            }
+
+            form method="get" {
+                label for="amount" { "Amount" }
+                input id="amount" name="amount" value=(params.get("amount").unwrap_or(&Cow::Borrowed("")));
+                label for="label" { "Label" }
+                input id="label" name="label" value=(params.get("label").unwrap_or(&Cow::Borrowed("")));
+                label for="message" { "Message" }
+                input id="message" name="message" value=(params.get("message").unwrap_or(&Cow::Borrowed("")));
+                label for="lightning" { "Lightning" }
+                input id="lightning" name="lightning" value=(params.get("lightning").unwrap_or(&Cow::Borrowed("")));
+
+                input type="submit" value="Submit";
             }
 
             @if !parsed.response_type.is_text() && (mempool.is_some() || blockstream.is_some()) {

@@ -30,7 +30,7 @@ percent-encoding = "2.2.0"
 bitcoin-private = "0.1.0"
 bitcoin_slices = { version = "0.5.0", features = ["bitcoin"] }
 clap = { version = "4.2.7", features = ["derive", "env"] }
-urlencoding = "2.1.2"
+url = "2.3.1"
 
 [dev-dependencies]
 bitcoind = { version = "0.31.0" }

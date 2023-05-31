@@ -143,10 +143,7 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
         }
         (&Method::GET, query, Some(&"a"), Some(address), None) => {
             let address = Address::from_str(address)?;
-            Resource::Address(
-                address.assume_checked(),
-                query.map(|q| urlencoding::decode(q).unwrap_or_default().to_string()),
-            )
+            Resource::Address(address.assume_checked(), query.map(ToString::to_string))
         }
         (&Method::GET, None, Some(&"block"), Some(block_hash), None) => {
             let block_hash = BlockHash::from_str(block_hash)?;
