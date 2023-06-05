@@ -6,6 +6,7 @@ edition = "2021"
 authors = ["Riccardo Casatta <riccardo@casatta.it>"]
 license = "MIT"
 repository = "https://github.com/RCasatta/fbbe"
+categories = ["cryptography::cryptocurrencies", "command-line-utilities"]
 
 [dependencies]
 hyper = { version = "0.14.23", features = ["full"] }
