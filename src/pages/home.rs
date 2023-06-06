@@ -38,7 +38,7 @@ pub fn page(
             @if !parsed.response_type.is_text() {
                 form {
                     label for="s" { "Search for tx id, block height or hash" }
-                    input type="search" placeholder=(info.blocks);
+                    input type="search" id="s" name="s" placeholder=(info.blocks) autofocus;
                 }
             }
 

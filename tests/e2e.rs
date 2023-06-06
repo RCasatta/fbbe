@@ -86,6 +86,10 @@ fn check_pages() {
     assert!(page.contains(genesis_tx));
     assert!(page.contains(genesis_block));
 
+    let block_page_search = format!("http://{fbbe_addr}/?s=0");
+    let page_from_search = get(block_page_search);
+    assert_eq!(page, page_from_search);
+
     let tx_page = format!("http://{fbbe_addr}/t/{genesis_tx}");
     let page = get(tx_page);
     assert!(page.contains(genesis_block));
