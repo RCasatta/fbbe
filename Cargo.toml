@@ -37,6 +37,7 @@ url = "2.3.1"
 bitcoind = { version = "0.31.0" }
 minreq = "2.8.1"
 nix = { version = "0.26.2", default-features = false, features = ["signal"] }
+scraper = "0.16.0"
 
 [features]
 download_bitcoind = ["bitcoind/23_1"]

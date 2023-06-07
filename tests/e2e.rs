@@ -6,7 +6,7 @@ use nix::{
     sys::signal::{self, Signal},
     unistd::Pid,
 };
-use std::{net::SocketAddr, path::Path, str::from_utf8, time::Duration};
+use std::{net::SocketAddr, path::Path, process::Child, str::from_utf8, time::Duration};
 
 fn init_node() -> BitcoinD {
     let _ = env_logger::Builder::from_env(Env::default()).try_init();
@@ -55,15 +55,30 @@ fn init_fbbe(bitcoind: &BitcoinD, network: Network) -> (SocketAddr, String, Vec<
     (fbbe_addr, exe, args)
 }
 
+struct FbbeProcess(Child);
+
+impl Drop for FbbeProcess {
+    fn drop(&mut self) {
+        let _ = signal::kill(Pid::from_raw(self.0.id() as i32), Signal::SIGINT);
+    }
+}
+
+impl FbbeProcess {
+    fn new(exe: String, args: Vec<String>) -> Self {
+        let child = std::process::Command::new(exe).args(args).spawn().unwrap();
+        // TODO wait until online
+        std::thread::sleep(Duration::from_secs(1));
+        Self(child)
+    }
+}
+
 #[test]
 fn check_pages() {
     let bitcoind = init_node();
 
     let (fbbe_addr, exe, args) = init_fbbe(&bitcoind, Network::Regtest);
 
-    let child = std::process::Command::new(exe).args(args).spawn().unwrap();
-    // TODO wait until online
-    std::thread::sleep(Duration::from_secs(1));
+    let _fbbe_proc = FbbeProcess::new(exe, args);
 
     let get = |url: String| {
         minreq::get(&url)
@@ -77,6 +92,14 @@ fn check_pages() {
     let home_page = format!("http://{fbbe_addr}");
     let page = get(home_page);
     assert!(page.contains("Fast Bitcoin Block Explorer"));
+
+    // ensure the input it's there with the right name
+    let document = scraper::Html::parse_document(&page);
+    let selector = scraper::Selector::parse("input").unwrap();
+    let mut iter = document.select(&selector);
+    let element = iter.next().unwrap();
+    assert_eq!("s", format!("{}", element.value().attr("name").unwrap()));
+    assert!(iter.next().is_none());
 
     let genesis_block = "0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206";
     let genesis_tx = "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b";
@@ -94,8 +117,6 @@ fn check_pages() {
     let page = get(tx_page);
     assert!(page.contains(genesis_block));
     assert!(page.contains(genesis_tx));
-
-    signal::kill(Pid::from_raw(child.id() as i32), Signal::SIGINT).unwrap();
 }
 #[test]
 fn check_wrong_network() {
