@@ -1,0 +1,18 @@
+version: "3.7"
+
+networks:
+  default:
+    driver: bridge
+
+services:
+  explorer:
+    container_name: fbbe-explorer
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile
+    environment:
+      BITCOIND_ADDR: '172.17.0.1:8332'
+      LOCAL_ADDR: '0.0.0.0:3000'
+    ports:
+      - "3000:3000"
+    #image: fbbe-explorer:latest
