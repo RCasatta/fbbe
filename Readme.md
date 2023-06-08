@@ -10,13 +10,15 @@ Locally can run on regtest.
 
 ## Running locally
 
-Supposing to have [rust installed](https://www.rust-lang.org/tools/install) and a synced [bitcoin core](https://bitcoincore.org/en/download/) on mainnet with `txindex=1` and `rest=1` do:
+Supposing to have [rust installed](https://www.rust-lang.org/tools/install) >= 1.65.0 and a synced [bitcoin core](https://bitcoincore.org/en/download/) on mainnet with `txindex=1` and `rest=1` do:
 
 ```
 git clone https://github.com/RCasatta/fbbe
 cd fbbe
 cargo run --release
 ```
+
+browse: `http://localhost:3000/`
 
 ## CSS
 
