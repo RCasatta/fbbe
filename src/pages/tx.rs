@@ -235,7 +235,7 @@ pub fn page(
                 p { (txid.html()) }
             }
 
-            table role="grid" {
+            table class="striped" {
                 tbody {
                     (block_link)
                     @if !tx.is_coin_base() && !prevouts.iter().any(|p| p.value == u64::MAX) {
@@ -259,7 +259,7 @@ pub fn page(
                 }
             }
 
-            table role="grid" {
+            table class="striped" {
                 tbody {
                     @for val in inputs {
                         @if let Some((i, outpoint, amount, link, previous_script_pubkey, previous_script_pubkey_type, script_sig, witness, p2wsh_witness_script, sequence)) = val {
@@ -344,7 +344,7 @@ pub fn page(
                     }
                 }
             }
-            table role="grid" {
+            table class="striped" {
                 tbody {
                     @for (i, address, amount, output_link, script_pubkey, script_type, op_return_string) in outputs {
                         tr id=(format!("o{i}")) {
@@ -396,7 +396,7 @@ pub fn page(
             }
 
             h2 id="details" { "Details "}
-            table role="grid" {
+            table class="striped" {
                 tbody {
                     (size_rows(tx.size(), tx.weight().to_wu() as usize))
                     tr {

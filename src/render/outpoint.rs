@@ -24,7 +24,7 @@ impl Render for OutPoint {
 
         html! {
             a href=(link) {
-                code { u { (self.0.txid) } ":" b { (self.0.vout) } }
+                code { span class="txid" { (self.0.txid) } span { ":" (self.0.vout) } }
             }
         }
     }

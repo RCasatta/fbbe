@@ -23,7 +23,6 @@ pub fn page(parsed: &ParsedRequest) -> Result<Markup, Error> {
                 button type="submit" { "Pay 20 satoshi ⚡ to send" }
                 p { (NBSP) }
             }
-
         }
     };
 

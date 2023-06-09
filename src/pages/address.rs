@@ -74,7 +74,7 @@ pub fn page(
                 p { a href=(&address_qr_uri) { img class="qr" src=(create_bmp_base64_qr(&address_qr_uri)?); } }
             }
 
-            table role="grid" {
+            table class="striped" {
                 tbody {
                     tr {
                         th { "Type" }

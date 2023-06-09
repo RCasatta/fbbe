@@ -19,7 +19,7 @@ impl Render for Txid {
         let link = Link(network_url_path, self.0);
 
         html! {
-            a href=(link) { code { u { (self.0) } } }
+            a href=(link) { code { span class="txid" { (self.0) } } }
         }
     }
 }

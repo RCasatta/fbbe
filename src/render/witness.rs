@@ -46,9 +46,9 @@ impl<'a> Render for Witness<'a> {
                         " "
                     }
                     @if i % 2 == 0 {
-                        b { (el) }
+                        span class="wit0" { (el) }
                     } @else {
-                        i { (el) }
+                        span class="wit1" { (el) }
                     }
                 }
 

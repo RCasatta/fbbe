@@ -42,7 +42,7 @@ pub fn page(
                 }
             }
 
-            table role="grid" {
+            table class="striped" {
                 tbody {
                     tr {
                         th {

@@ -45,7 +45,7 @@ pub fn page(
                 p { (block.previous_block_hash_link()) (block.hash.html()) (block.next_block_hash_link()) }
             }
 
-            table role="grid" {
+            table class="striped" {
                 tbody {
                     tr {
                         th { "Timestamp" }
@@ -70,7 +70,7 @@ pub fn page(
                 }
             }
 
-            table role="grid" {
+            table class="striped" {
                 tbody {
                     @for (i, txid) in txids {
                         tr {
@@ -78,7 +78,7 @@ pub fn page(
                                 (translate(i))
                             }
                             td {
-                               (txid.html())
+                                (txid.html())
                             }
                         }
                     }
@@ -87,7 +87,7 @@ pub fn page(
 
             h2 { "Details" }
 
-            table role="grid" {
+            table class="striped" {
                 tbody {
 
                     tr {

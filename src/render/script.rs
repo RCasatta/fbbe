@@ -18,7 +18,7 @@ impl<'a> Render for Script<'a> {
                         " "
                     }
                     @if piece.starts_with("OP_") {
-                        b { (piece) }
+                        span class="script" { (piece) }
                     } @else {
                         (piece)
                     }

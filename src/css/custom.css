@@ -30,6 +30,23 @@ td details {
     color: #c62828;
 }
 
+code .txid {
+    color: hsl(40, 10%, 50%);
+}
+
+code .script {
+    color: hsl(330, 30%, 50%);
+}
+
+
+code .wit0 {
+    color: hsl(330, 30%, 50%);
+}
+
+code .wit1 {
+    color: hsl(185, 30%, 50%);
+}
+
 .qr {
     height: 250px;
     image-rendering: pixelated;

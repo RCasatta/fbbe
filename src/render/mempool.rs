@@ -26,7 +26,7 @@ impl Render for MempoolSection {
                 p { (self.info.size) " " (transaction_s) }
             }
 
-            table role="grid" {
+            table class="striped" {
                 tbody {
                     (AmountRow::new_with_btc("Total fees (BTC)", self.info.total_fee))
 
@@ -55,7 +55,7 @@ impl Render for BlockTemplate {
                     h2 { "Block template" }
                     p { (transactions) " transactions" }
                 }
-                table role="grid" {
+                table class="striped" {
                     tbody {
                         @if let Some(highest) = self.highest.as_ref()  {
                             tr {
