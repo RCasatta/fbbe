@@ -18,7 +18,7 @@ impl Render for BlockHash {
         let link = Link(self.0);
 
         html! {
-            a href=(link) { code { small { (self.0) } } }
+            a href=(link) { code { (self.0) } }
         }
     }
 }

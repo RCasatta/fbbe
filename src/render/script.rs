@@ -13,19 +13,18 @@ impl<'a> Render for Script<'a> {
         let pieces = asm.split(' ');
         html! {
             code {
-                small {
-                    @for (i, piece) in pieces.enumerate() {
-                        @if i != 0 {
-                            " "
-                        }
-                        @if piece.starts_with("OP_") {
-                            b { (piece) }
-                        } @else {
-                            (piece)
-                        }
-
+                @for (i, piece) in pieces.enumerate() {
+                    @if i != 0 {
+                        " "
                     }
+                    @if piece.starts_with("OP_") {
+                        b { (piece) }
+                    } @else {
+                        (piece)
+                    }
+
                 }
+
             }
         }
     }

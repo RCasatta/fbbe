@@ -96,11 +96,11 @@ pub fn page(
                     }
                     tr {
                         th { "Merkle root" }
-                        td class="right" { code { small { (block.merkleroot) } } }
+                        td class="right" { code { (block.merkleroot) } }
                     }
                     tr {
                         th { "Bits" }
-                        td class="right" {  "0x" (block.bits) }
+                        td class="right" { "0x" (block.bits) }
                     }
                     tr {
                         th { "Difficulty" }

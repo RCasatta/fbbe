@@ -283,7 +283,7 @@ pub fn page(
                                         div {
                                             "Previous script pubkey"
                                             @if let Some(previous_script_pubkey_type) = previous_script_pubkey_type {
-                                                small { " (" (previous_script_pubkey_type) ")" }
+                                                 " (" (previous_script_pubkey_type) ")"
                                             }
                                         }
 
@@ -291,7 +291,7 @@ pub fn page(
                                     }
 
                                     div { "Sequence"}
-                                    p { code { small { (sequence) }  } }
+                                    p { code { (sequence) } }
 
                                     @if let Some(script_sig) = script_sig {
                                         div { "Script sig"}
@@ -364,7 +364,7 @@ pub fn page(
                                 div {
                                     "Script pubkey"
                                     @if let Some(script_type) = script_type {
-                                        small { " (" (script_type) ")" }
+                                        " (" (script_type) ")"
                                     }
                                 }
                                 p { (script_pubkey.html()) }
@@ -412,7 +412,7 @@ pub fn page(
 
             h2 id="hex" { "Hex "}
 
-            small { code { (hex) } }
+            code { (hex) }
 
         }
     };

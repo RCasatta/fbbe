@@ -41,18 +41,17 @@ impl<'a> Render for Witness<'a> {
 
         html! {
             code {
-                small {
-                    @for (i, el) in witness.iter().enumerate()  {
-                        @if i != 0 {
-                            " "
-                        }
-                        @if i % 2 == 0 {
-                            b { (el) }
-                        } @else {
-                            i { (el) }
-                        }
+                @for (i, el) in witness.iter().enumerate()  {
+                    @if i != 0 {
+                        " "
+                    }
+                    @if i % 2 == 0 {
+                        b { (el) }
+                    } @else {
+                        i { (el) }
                     }
                 }
+
             }
         }
     }
