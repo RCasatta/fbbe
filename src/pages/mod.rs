@@ -1,7 +1,11 @@
 use std::collections::BTreeSet;
 
 use crate::{
-    globals::networks, network, render::SizeRow, req::ParsedRequest, route::ResponseType,
+    globals::networks,
+    network,
+    render::SizeRow,
+    req::{ParsedRequest, Resource},
+    route::ResponseType,
     NetworkExt,
 };
 use bitcoin::Network;
@@ -45,7 +49,7 @@ fn nav_header(response_type: ResponseType) -> Markup {
     html! {
         nav {
             ul {
-                li { a href=(network().as_url_path()) { (title) } }
+                li { a href=(network().as_url_path()) aria-current="page" { (title) } }
             }
 
             @if !other_networks.is_empty() && !response_type.is_text() {
@@ -83,10 +87,16 @@ pub fn footer(parsed: &ParsedRequest) -> Markup {
         return html! {};
     }
     let base = network().as_url_path();
+
+    let home = if let Resource::Home = parsed.resource {
+        html! { a href=(base) aria-current="page" { "Home" } }
+    } else {
+        html! { a href=(base) { "Home" } }
+    };
     html! {
         footer {
             div class="container" {
-                a href=(base) { "Home" }
+                (home)
                 @if let Some(link) = parsed.resource.link() {
                     " | " a href=(link) { "Text" }
                 }
