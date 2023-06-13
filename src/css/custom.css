@@ -23,11 +23,11 @@ td details {
 }
 
 .green {
-    color: #388e3c;
+    color: var(--pico-ins-color);
 }
 
 .red {
-    color: #c62828;
+    color: var(--pico-del-color);
 }
 
 code {
