@@ -17,7 +17,7 @@ impl<'a> Render for Address<'a> {
         let link = Link(self.0);
 
         html! {
-            a href=(link) {  code { (self.0) } }
+            a href=(link) { code { span class="address" { (self.0) } } }
         }
     }
 }

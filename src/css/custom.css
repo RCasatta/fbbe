@@ -30,25 +30,63 @@ td details {
     color: #c62828;
 }
 
+code {
+    color: var(--pico-code-color);
+}
+
 code .txid {
-    color: hsl(40, 10%, 50%);
+    color: var(--pico-code-tag);
 }
 
 code .script {
-    color: hsl(330, 30%, 50%);
+    color: var(--pico-code-attr);
 }
 
 
 code .wit0 {
-    color: hsl(330, 30%, 50%);
+    color: var(--pico-code-attr);
 }
 
 code .wit1 {
-    color: hsl(185, 30%, 50%);
+    color: var(--pico-code-value);
+}
+
+code .address {
+    color: var(--pico-code-copied);
 }
 
 .qr {
     height: 250px;
     image-rendering: pixelated;
     image-rendering: crisp-edges;
+}
+
+:root:not([data-theme=dark]),
+[data-theme=light] {
+    --pico-code-color: #5c6370;
+    --pico-code-tag: #8b4f00;
+    --pico-code-attr: #982e79;
+    --pico-code-value: #2e685b;
+    --pico-code-comment: #7b8495;
+    --pico-code-copied: #1d6a54;
+}
+
+@media only screen and (prefers-color-scheme:dark) {
+    :root:not([data-theme]) {
+        --pico-code-color: #969eaf;
+        --pico-code-tag: #bb972c;
+        --pico-code-attr: #c784b7;
+        --pico-code-value: #71a4a1;
+        --pico-code-comment: #6f7887;
+        --pico-code-copied: #62af9a;
+    }
+}
+
+[data-theme=dark] {
+    --pico-code-color: #969eaf;
+    --pico-code-tag: #bb972c;
+    --pico-code-attr: #c784b7;
+    --pico-code-value: #71a4a1;
+    --pico-code-comment: #6f7887;
+    --pico-code-copied: #62af9a;
 }
