@@ -12,7 +12,7 @@ use crate::{
     error::Error,
     network,
     pages::size_rows,
-    render::{AmountRow, Html, Plural},
+    render::{self, AmountRow, Html, Plural},
     req::ParsedRequest,
     rpc::headers::HeightTime,
     state::BlockTemplate,
@@ -232,7 +232,7 @@ pub fn page(
         section {
             hgroup {
                 h1 { "Transaction" }
-                p { (txid.html()) }
+                p { (render::Txid::from((txid, false))) }
             }
 
             table class="striped" {

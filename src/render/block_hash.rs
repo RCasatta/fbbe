@@ -4,7 +4,7 @@ use super::Html;
 use crate::{globals::network, NetworkExt};
 use maud::{html, Render};
 
-pub(crate) struct BlockHash(pub bitcoin::BlockHash);
+pub struct BlockHash(pub bitcoin::BlockHash, pub bool);
 
 struct Link(bitcoin::BlockHash);
 impl Display for Link {
@@ -15,22 +15,31 @@ impl Display for Link {
 
 impl Render for BlockHash {
     fn render(&self) -> maud::Markup {
-        let link = Link(self.0);
-
-        html! {
-            a href=(link) { code { (self.0) } }
+        if self.1 {
+            let link = Link(self.0);
+            html! {
+                a href=(link) { code { (self.0) } }
+            }
+        } else {
+            html! { code { (self.0) } }
         }
     }
 }
 
 impl Html for bitcoin::BlockHash {
     fn html(&self) -> maud::Markup {
-        BlockHash(*self).render()
+        BlockHash(*self, true).render()
     }
 }
 
 impl From<bitcoin::BlockHash> for BlockHash {
     fn from(t: bitcoin::BlockHash) -> Self {
-        BlockHash(t)
+        BlockHash(t, true)
+    }
+}
+
+impl From<(bitcoin::BlockHash, bool)> for BlockHash {
+    fn from(value: (bitcoin::BlockHash, bool)) -> Self {
+        BlockHash(value.0, value.1)
     }
 }

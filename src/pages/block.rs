@@ -2,7 +2,7 @@ use crate::{
     error::Error,
     network,
     pages::{html_page, size_rows},
-    render::{Html, Plural},
+    render::{self, Html, Plural},
     req::ParsedRequest,
     rpc::block::BlockNoTxDetails,
     NetworkExt,
@@ -42,7 +42,7 @@ pub fn page(
         section {
             hgroup {
                 h1 { "Block " (current_block) }
-                p { (block.previous_block_hash_link()) (block.hash.html()) (block.next_block_hash_link()) }
+                p { (block.previous_block_hash_link()) (render::BlockHash::from((block.hash, false))) (block.next_block_hash_link()) }
             }
 
             table class="striped" {

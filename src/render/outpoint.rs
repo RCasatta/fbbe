@@ -4,7 +4,7 @@ use super::Html;
 use crate::{globals::network, pages::tx::IO_PER_PAGE, NetworkExt};
 use maud::{html, Render};
 
-pub(crate) struct OutPoint(bitcoin::OutPoint);
+pub struct OutPoint(pub bitcoin::OutPoint);
 
 struct Link<'a>(&'a bitcoin::OutPoint);
 impl<'a> Display for Link<'a> {
