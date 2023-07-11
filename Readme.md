@@ -28,10 +28,27 @@ After changing `custom.css` use a minifier:
 yui-compressor custom.css > custom.min.css
 ```
 
-## Run via Docker
+## Docker
 
-1. `docker build . -f ./docker/Dockerfile -t fbbe`
-2. `docker run -it -p 3000:3000 -e BITCOIND_ADDR=172.17.0.1:8332 -e LOCAL_ADDR=0.0.0.0:3000 fbbe`
+There are 2 ways to build and run with docker, the standard way with a
+Dockerfile is easier but produce a bigger docker image, the second one produce
+a smaller image but requires `nix`.
+
+### with Dockerfile
+
+```
+docker build . -f ./docker/Dockerfile -t fbbe
+docker run -it -p 3000:3000 -e BITCOIND_ADDR=172.17.0.1:8332 -e LOCAL_ADDR=0.0.0.0:3000 fbbe
+```
+
+### with Nix
+
+```
+nix --experimental-features 'nix-command flakes' build .#dockerImage
+./result | docker load
+docker run -it -p 3000:3000 -e BITCOIND_ADDR=172.17.0.1:8332 -e LOCAL_ADDR=0.0.0.0:3000 xenoky/fbbe:latest
+
+```
 
 ## Mainnet test cases
 
