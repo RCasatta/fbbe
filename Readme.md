@@ -28,6 +28,11 @@ After changing `custom.css` use a minifier:
 yui-compressor custom.css > custom.min.css
 ```
 
+## Run via Docker
+
+1. `docker build . -f ./docker/Dockerfile -t fbbe`
+2. `docker run -it -p 3000:3000 -e BITCOIND_ADDR=172.17.0.1:8332 -e LOCAL_ADDR=0.0.0.0:3000 fbbe`
+
 ## Mainnet test cases
 
 * Block with most tx 00000000000000001080e6de32add416cd6cda29f35ec9bce694fea4b964c7be
