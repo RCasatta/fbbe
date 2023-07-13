@@ -80,7 +80,7 @@ impl TextDecorator for BaseTextDecorator {
         format!("{}. ", i)
     }
 
-    fn finalise(self) -> Vec<TaggedLine<RichAnnotation>> {
+    fn finalise(&mut self, _links: Vec<String>) -> Vec<TaggedLine<Self::Annotation>> {
         Vec::new()
     }
 
