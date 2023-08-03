@@ -47,9 +47,12 @@ pub async fn bootstrap_state(shared_state: Arc<SharedState>) -> Result<(), Error
         current = block.header.prev_blockhash;
         shared_state.update_cache(block, None).await?;
         count += 1;
-        let len = shared_state.txs.lock().await.len();
-        if len > shared_state.args.tx_cache_size / 2 {
-            log::info!("tx cache full at 50% {len} with {count} blocks");
+        let cache = shared_state.txs.lock().await;
+        if cache.full() {
+            log::info!(
+                "tx cache full of {} elements with {count} blocks",
+                cache.len()
+            );
             break;
         }
         if current == BlockHash::all_zeros() {

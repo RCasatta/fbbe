@@ -1,10 +1,11 @@
 use std::collections::HashSet;
+use std::ops::ControlFlow;
 use std::{collections::HashMap, num::NonZeroUsize};
 
 use bitcoin::consensus::Encodable;
 use bitcoin::hashes::Hash;
 use bitcoin::{Block, BlockHash, Transaction, Txid, Weight};
-use bitcoin_slices::{bsl, Visit, Visitor};
+use bitcoin_slices::{bsl, SliceCache, Visit, Visitor};
 use futures::prelude::*;
 use lru::LruCache;
 use tokio::sync::{Mutex, MutexGuard};
@@ -39,9 +40,8 @@ pub struct SharedState {
     // pub rpc_calls: AtomicUsize,
     pub chain_info: Mutex<ChainInfo>,
 
-    /// default 100k -> at least 100_000 * ~300 B = 28.6 MB
-    /// It is stored as `Vec<u8>` instead of `Transaction` to avoid multiple smaller allocations
-    pub txs: Mutex<LruCache<Txid, SerTx>>,
+    /// By default 100MB of cached transactions
+    pub txs: Mutex<SliceCache<Txid>>,
 
     /// default 200k -> at least 200_000 * 64 B = 12.8 MB
     pub tx_in_block: Mutex<LruCache<Txid, BlockHash>>,
@@ -81,9 +81,7 @@ impl SharedState {
             // requests: AtomicUsize::new(0),
             // rpc_calls: AtomicUsize::new(0),
             chain_info: Mutex::new(chain_info),
-            txs: Mutex::new(LruCache::new(
-                NonZeroUsize::new(args.tx_cache_size).unwrap(),
-            )),
+            txs: Mutex::new(SliceCache::new(args.tx_cache_byte_size)),
             tx_in_block: Mutex::new(LruCache::new(NonZeroUsize::new(200_000).unwrap())),
             hash_to_height_time: Mutex::new(HashMap::new()),
             height_to_hash: Mutex::new(Vec::new()),
@@ -143,18 +141,18 @@ impl SharedState {
         needs_block_hash: bool,
     ) -> Result<(SerTx, Option<BlockHash>), Error> {
         {
-            let mut txs = self.txs.lock().await;
+            let txs = self.txs.lock().await;
             if !needs_block_hash {
-                if let Some(tx) = txs.get(&txid).cloned() {
+                if let Some(tx) = txs.get(&txid) {
                     log::trace!("tx hit");
-                    return Ok((tx, None));
+                    return Ok((SerTx(tx.to_vec()), None));
                 }
             } else {
                 let mut tx_in_block = self.tx_in_block.lock().await;
-                match (txs.get(&txid).cloned(), tx_in_block.get(&txid)) {
+                match (txs.get(&txid), tx_in_block.get(&txid)) {
                     (Some(tx), Some(block_hash)) => {
                         log::trace!("tx hit");
-                        return Ok((tx, Some(*block_hash)));
+                        return Ok((SerTx(tx.to_vec()), Some(*block_hash)));
                     }
                     (Some(_), None) => log::debug!("tx miss, missing block"),
                     (None, Some(_)) => log::debug!("tx miss, missing tx"),
@@ -172,11 +170,7 @@ impl SharedState {
         let (block_hash, tx) = rpc::tx::call_parse_json(txid, network()).await?;
         let mut txs = self.txs.lock().await;
 
-        let mut vec = pop_to_reuse(&mut txs, tx.0.len());
-        vec.extend(&tx.0);
-        let tx2 = SerTx(vec); // tx2 is a clone of tx, but reuse an existing vector instead of creating a new one
-
-        txs.put(txid, tx2);
+        let _ = txs.insert(txid, &tx.0);
 
         if let Some(block_hash) = block_hash {
             let mut tx_in_block = self.tx_in_block.lock().await;
@@ -209,10 +203,11 @@ impl SharedState {
 
         let mut txs = self.txs.lock().await;
 
+        let mut buffer = vec![];
         for tx in got_txs.into_iter().flatten() {
-            let mut vec = pop_to_reuse(&mut txs, 250);
-            tx.consensus_encode(&mut vec).expect("vecs don't error");
-            txs.put(tx.txid(), SerTx(vec));
+            buffer.clear();
+            tx.consensus_encode(&mut buffer).expect("vecs don't error");
+            let _ = txs.insert(tx.txid(), &buffer);
         }
 
         if needed_len > 30 {
@@ -227,11 +222,12 @@ impl SharedState {
 
         let mut txs = self.txs.lock().await;
         let mut tx_in_block = self.tx_in_block.lock().await;
+        let mut buffer = vec![];
 
         for (txid, tx) in hash_tx {
-            let mut vec = pop_to_reuse(&mut txs, 250);
-            tx.consensus_encode(&mut vec).expect("vecs don't error");
-            txs.put(txid, SerTx(vec));
+            buffer.clear();
+            tx.consensus_encode(&mut buffer).expect("vecs don't error");
+            let _ = txs.insert(txid, &buffer);
             tx_in_block.put(txid, block_hash);
         }
 
@@ -251,21 +247,6 @@ impl SharedState {
     }
 }
 
-/// return an empty vector of `at_least` capacity.
-///
-/// if the txs cache is full, it pops the least recently used vector and reuse that if its capacity
-/// is enough but not too big
-fn pop_to_reuse(txs: &mut MutexGuard<LruCache<Txid, SerTx>>, at_least: usize) -> Vec<u8> {
-    if txs.cap().get() == txs.len() {
-        let mut vec = txs.pop_lru().expect("checked len>1").1 .0;
-        if vec.capacity() >= at_least && vec.capacity() < at_least * 4 {
-            vec.clear();
-            return vec;
-        }
-    }
-    Vec::with_capacity(at_least)
-}
-
 pub(crate) fn reserve(height_to_hash: &mut MutexGuard<Vec<BlockHash>>, height: usize) {
     if height_to_hash.len() <= height {
         height_to_hash.resize(height + 1000, BlockHash::all_zeros());
@@ -278,17 +259,20 @@ pub struct OutPointsAndSum {
     pub weight: Weight,
 }
 impl Visitor for OutPointsAndSum {
-    fn visit_transaction(&mut self, tx: &bsl::Transaction) {
+    fn visit_transaction(&mut self, tx: &bsl::Transaction) -> ControlFlow<()> {
         self.weight = Weight::from_wu(tx.weight());
+        ControlFlow::Continue(())
     }
-    fn visit_tx_out(&mut self, _vout: usize, tx_out: &bsl::TxOut) {
+    fn visit_tx_out(&mut self, _vout: usize, tx_out: &bsl::TxOut) -> ControlFlow<()> {
         self.sum += tx_out.value();
+        ControlFlow::Continue(())
     }
     fn visit_tx_ins(&mut self, total_inputs: usize) {
         self.prevouts.reserve(total_inputs);
     }
-    fn visit_tx_in(&mut self, _vin: usize, tx_in: &bsl::TxIn) {
-        self.prevouts.push(tx_in.prevout().into()) // TODO don't parse the script if it isn't of interest?
+    fn visit_tx_in(&mut self, _vin: usize, tx_in: &bsl::TxIn) -> ControlFlow<()> {
+        self.prevouts.push(tx_in.prevout().into()); // TODO don't parse the script if it isn't of interest?
+        ControlFlow::Continue(())
     }
 }
 pub fn outpoints_and_sum(tx_bytes: &[u8]) -> Result<OutPointsAndSum, bitcoin_slices::Error> {
@@ -312,7 +296,7 @@ pub fn tx_output(
         needs_script: bool,
     }
     impl Visitor for Res {
-        fn visit_tx_out(&mut self, vout: usize, tx_out: &bsl::TxOut) {
+        fn visit_tx_out(&mut self, vout: usize, tx_out: &bsl::TxOut) -> ControlFlow<()> {
             if self.vout == vout as u32 {
                 if self.needs_script {
                     self.tx_out = tx_out.into();
@@ -322,7 +306,9 @@ pub fn tx_output(
                         value: tx_out.value(),
                     };
                 }
+                return ControlFlow::Break(());
             }
+            ControlFlow::Continue(())
         }
     }
     let mut visitor = Res {
@@ -330,8 +316,10 @@ pub fn tx_output(
         tx_out: bitcoin::TxOut::default(),
         needs_script,
     };
-    bsl::Transaction::visit(tx_bytes, &mut visitor)?;
-    Ok(visitor.tx_out)
+    match bsl::Transaction::visit(tx_bytes, &mut visitor) {
+        Ok(_) | Err(bitcoin_slices::Error::VisitBreak) => Ok(visitor.tx_out),
+        Err(e) => Err(e),
+    }
 }
 
 #[cfg(test)]
