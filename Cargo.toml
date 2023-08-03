@@ -26,7 +26,6 @@ maud = "0.25.0"
 env_logger = "0.10.0"
 bitcoin = { version = "0.30", features = ["serde", "base64"] }
 log = "0.4.17"
-lru = "0.10.0"
 chrono = "0.4.23"
 html2text = "0.6"
 mime = "0.3.16"
