@@ -33,8 +33,7 @@ qr_code = { version = "2.0.0", features = ["bmp"] }
 base64 = "0.21.0"
 percent-encoding = "2.2.0"
 bitcoin-private = "0.1.0"
-#bitcoin_slices = { version = "0.6", features = ["bitcoin"] }
-bitcoin_slices = { path = "../bitcoin_slices", features = [
+bitcoin_slices = { version = "0.6.2", features = [
     "bitcoin",
     "slice_cache",
 ] }
