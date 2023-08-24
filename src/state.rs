@@ -150,7 +150,7 @@ impl SharedState {
                 let tx_in_block = self.tx_in_block.lock().await;
                 match (txs.get(&txid), tx_in_block.get(&txid)) {
                     (Some(tx), Some(block_hash)) => {
-                        let block_hash = BlockHash::from_slice(&block_hash)
+                        let block_hash = BlockHash::from_slice(block_hash)
                             .expect("cache contains only block hashes");
                         log::trace!("tx hit");
                         return Ok((SerTx(tx.to_vec()), Some(block_hash)));

@@ -81,7 +81,7 @@ fn check_pages() {
     let _fbbe_proc = FbbeProcess::new(exe, args);
 
     let get = |url: String| {
-        minreq::get(&url)
+        minreq::get(url)
             .send()
             .unwrap()
             .as_str()
