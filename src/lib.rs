@@ -3,6 +3,7 @@ use crate::globals::{init_globals, network};
 use crate::route::route_infallible;
 use crate::state::SharedState;
 use crate::threads::bootstrap_state::bootstrap_state_infallible;
+use crate::threads::index_addresses::{index_addresses_infallible, Database};
 use crate::threads::update_chain_info::update_chain_info_infallible;
 use crate::threads::update_mempool_info::update_mempool;
 use bitcoin::Network;
@@ -14,6 +15,7 @@ use network_parse::NetworkParse;
 use std::convert::Infallible;
 use std::fmt::Display;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::time::sleep;
 
@@ -82,6 +84,9 @@ pub struct Arguments {
     ///
     #[arg(short, long, env)]
     pub other_network: Vec<Network>,
+
+    #[arg(short, long, env)]
+    pub addr_index_path: Option<PathBuf>,
 }
 
 pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
@@ -127,6 +132,12 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
         }
     }
 
+    let db = args
+        .addr_index_path
+        .as_ref()
+        .map(|p| Database::new(p))
+        .transpose()?;
+
     let core_net = Network::from_core_arg(chain_info.chain.as_str())?;
     check_network(core_net)?;
 
@@ -142,16 +153,21 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
     // keep chain info updated
     let shared_state_chain = shared_state.clone();
     let shared_state_mempool = shared_state.clone();
+    let chain_info_chain = chain_info.clone();
 
     #[allow(clippy::let_underscore_future)]
     let _ = tokio::spawn(async move {
         h.await.unwrap();
         #[allow(clippy::let_underscore_future)]
         let _ = tokio::spawn(async move {
-            update_chain_info_infallible(shared_state_chain, chain_info).await
+            update_chain_info_infallible(shared_state_chain, chain_info_chain).await
         });
         update_mempool(shared_state_mempool).await
     });
+
+    if let Some(db) = db {
+        let _ = tokio::spawn(async move { index_addresses_infallible(&db, chain_info).await });
+    }
 
     let make_service = make_service_fn(move |_| {
         let shared_state = shared_state.clone();
