@@ -39,6 +39,8 @@ bitcoin_slices = { version = "0.6.2", features = [
 ] }
 clap = { version = "4.2.7", features = ["derive", "env"] }
 url = "2.3.1"
+fxhash = "0.2.1"
+rocksdb = "0.21.0"
 
 [dev-dependencies]
 bitcoind = { version = "0.31.0" }
