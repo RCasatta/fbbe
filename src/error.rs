@@ -43,6 +43,9 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
+    #[error(transparent)]
+    Redb(#[from] redb::Error),
+
     #[error("Bitcoin core RPC chaininfo failed status_code:{0}")]
     RpcChainInfo(StatusCode),
 
