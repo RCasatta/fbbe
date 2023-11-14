@@ -42,15 +42,6 @@ fn script_hash(script: &Script) -> u64 {
     hasher.finish()
 }
 
-impl ScriptHashHeight {
-    pub fn new(script_hash: u64, height: u32) -> Self {
-        let mut data = [0u8; 12];
-        data[..8].copy_from_slice(&script_hash.to_le_bytes()[..]);
-        data[8..].copy_from_slice(&height.to_le_bytes()[..]);
-        Self(data)
-    }
-}
-
 impl AsRef<[u8]> for ScriptHashHeight {
     fn as_ref(&self) -> &[u8] {
         &self.0[..]
@@ -82,7 +73,8 @@ impl Database {
         // get hash if synced skip
 
         let mut batch = WriteBatch::default();
-
+        let height_bytes = height.to_le_bytes().to_vec();
+        let mut buffer: Vec<u8> = vec![];
         {
             for tx in block.txdata.iter() {
                 let txid = tx.txid();
@@ -90,15 +82,13 @@ impl Database {
                     if !output.script_pubkey.is_provably_unspendable() {
                         let hash = script_hash(&output.script_pubkey);
                         utxh.insert(OutPoint::new(txid, i as u32).into(), hash);
-                        let key = ScriptHashHeight::new(hash, height);
-                        batch.put(key, &[]);
+                        self.update(hash, &mut buffer, &height_bytes, &mut batch)?;
                     }
                 }
                 if !tx.is_coin_base() {
                     for input in tx.input.iter() {
                         let hash = utxh.remove(&(&input.previous_output).into()).unwrap();
-                        let key = ScriptHashHeight::new(hash, height);
-                        batch.put(key, &[]);
+                        self.update(hash, &mut buffer, &height_bytes, &mut batch)?;
                     }
                 }
             }
@@ -109,6 +99,27 @@ impl Database {
         }
         self.0.write(batch)?;
 
+        Ok(())
+    }
+
+    fn update(
+        &self,
+        hash: u64,
+        buffer: &mut Vec<u8>,
+        height_bytes: &[u8],
+        batch: &mut rocksdb::WriteBatchWithTransaction<false>,
+    ) -> Result<(), rocksdb::Error> {
+        let key = hash.to_le_bytes();
+        let value = match self.0.get(&key)? {
+            Some(old_value) => {
+                buffer.clear();
+                buffer.extend(height_bytes);
+                buffer.extend(&old_value);
+                &*buffer
+            }
+            None => height_bytes,
+        };
+        batch.put(&key, &value);
         Ok(())
     }
 }
