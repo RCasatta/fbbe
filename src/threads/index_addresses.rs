@@ -12,6 +12,24 @@ use crate::{
 #[derive(Debug)]
 struct ScriptHashHeight([u8; 12]);
 
+#[derive(Eq, Hash, PartialEq)]
+struct TruncOutPoint([u8; 16]);
+
+impl From<&OutPoint> for TruncOutPoint {
+    fn from(value: &OutPoint) -> Self {
+        let mut v = u128::from_le_bytes((&value.txid[..16]).try_into().unwrap());
+        v += value.vout as u128;
+
+        TruncOutPoint(v.to_le_bytes())
+    }
+}
+
+impl From<OutPoint> for TruncOutPoint {
+    fn from(value: OutPoint) -> Self {
+        From::from(&value)
+    }
+}
+
 // TODO: move to 8 bytes key for script hash (initialized with xor to avoid attacks)
 // and value equal to varint of every height delta in which the hash is found
 // examples:
@@ -23,6 +41,7 @@ fn script_hash(script: &Script) -> u64 {
     hasher.write(script.as_bytes());
     hasher.finish()
 }
+
 impl ScriptHashHeight {
     pub fn new(script_hash: u64, height: u32) -> Self {
         let mut data = [0u8; 12];
@@ -58,7 +77,7 @@ impl Database {
         &self,
         block: &Block,
         height: u32,
-        utxh: &mut HashMap<OutPoint, u64>,
+        utxh: &mut HashMap<TruncOutPoint, u64>,
     ) -> Result<(), rocksdb::Error> {
         // get hash if synced skip
 
@@ -70,15 +89,14 @@ impl Database {
                 for (i, output) in tx.output.iter().enumerate() {
                     if !output.script_pubkey.is_provably_unspendable() {
                         let hash = script_hash(&output.script_pubkey);
-                        utxh.insert(OutPoint::new(txid, i as u32), hash);
+                        utxh.insert(OutPoint::new(txid, i as u32).into(), hash);
                         let key = ScriptHashHeight::new(hash, height);
                         batch.put(key, &[]);
                     }
                 }
                 if !tx.is_coin_base() {
                     for input in tx.input.iter() {
-                        let hash = utxh.remove(&input.previous_output).unwrap();
-
+                        let hash = utxh.remove(&(&input.previous_output).into()).unwrap();
                         let key = ScriptHashHeight::new(hash, height);
                         batch.put(key, &[]);
                     }
@@ -105,7 +123,7 @@ async fn index_addresses(db: &Database, chain_info: ChainInfo) -> Result<(), Err
     let last_synced_height = db.last_synced_height()?.unwrap_or(0);
     log::info!("Starting index_addresses from: {last_synced_height}");
 
-    let mut utxh: HashMap<OutPoint, u64> = HashMap::new();
+    let mut utxh: HashMap<TruncOutPoint, u64> = HashMap::new();
 
     for height in last_synced_height..chain_info.blocks {
         let hash = rpc::blockhashbyheight::call(height as usize).await?;
