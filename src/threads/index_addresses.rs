@@ -1,8 +1,12 @@
-use std::{collections::HashMap, hash::Hasher, path::Path};
+use std::{
+    collections::{BTreeSet, HashMap, HashSet},
+    hash::Hasher,
+    path::Path,
+};
 
-use bitcoin::{Block, OutPoint, Script};
+use bitcoin::{Block, BlockHash, OutPoint, Script, Transaction, Txid};
 use fxhash::FxHasher64;
-use rocksdb::{WriteBatch, DB};
+use rocksdb::{ColumnFamily, ColumnFamilyDescriptor, Options, WriteBatch, DB};
 
 use crate::{
     error::Error,
@@ -36,7 +40,8 @@ impl From<OutPoint> for TruncOutPoint {
 // 1) s found at h1 save varint(h1)
 // 2) s found at h1 and h2 where h1<h2, save varint(h1) and varint(h2-h1)
 
-fn script_hash(script: &Script) -> u64 {
+type ScriptHash = u64;
+fn script_hash(script: &Script) -> ScriptHash {
     let mut hasher = FxHasher64::default();
     hasher.write(script.as_bytes());
     hasher.finish()
@@ -48,78 +53,124 @@ impl AsRef<[u8]> for ScriptHashHeight {
     }
 }
 
-pub struct Database(DB);
+const BLOCK_HASH_CF: &str = "BLOCK_HASH_CF";
+const SCRIPT_HASH_CF: &str = "SCRIPT_HASH_CF";
+
+const COLUMN_FAMILIES: &[&str] = &[BLOCK_HASH_CF, SCRIPT_HASH_CF];
+
+pub struct Database {
+    db: DB,
+}
 
 impl Database {
+    fn create_cf_descriptors() -> Vec<ColumnFamilyDescriptor> {
+        COLUMN_FAMILIES
+            .iter()
+            .map(|&name| ColumnFamilyDescriptor::new(name, Options::default()))
+            .collect()
+    }
+
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, rocksdb::Error> {
-        let db = DB::open_default(path).unwrap();
+        let mut db_opts = Options::default();
 
-        Ok(Self(db))
+        db_opts.create_if_missing(true);
+        db_opts.create_missing_column_families(true);
+
+        let db = DB::open_cf_descriptors(&db_opts, path, Self::create_cf_descriptors())?;
+        Ok(Self { db })
     }
 
-    fn last_synced_height(&self) -> Result<Option<u32>, rocksdb::Error> {
-        Ok(self
-            .0
-            .get(b"last_synced_height")?
-            .map(|v| u32::from_le_bytes(v.try_into().unwrap())))
+    fn block_hash_cf(&self) -> &ColumnFamily {
+        self.db
+            .cf_handle(BLOCK_HASH_CF)
+            .expect("missing BLOCK_HASH_CF")
     }
 
-    fn index_block(
-        &self,
-        block: &Block,
-        height: u32,
-        utxh: &mut HashMap<TruncOutPoint, u64>,
-    ) -> Result<(), rocksdb::Error> {
-        // get hash if synced skip
+    fn is_block_hash_indexed(&self, block_hash: &BlockHash) -> bool {
+        self.db
+            .get_pinned_cf(self.block_hash_cf(), block_hash)
+            .unwrap()
+            .is_some()
+    }
+
+    fn script_hash_cf(&self) -> &ColumnFamily {
+        self.db
+            .cf_handle("SCRIPT_HASH_CF")
+            .expect("missing SCRIPT_HASH_CF")
+    }
+
+    async fn index_block(&self, block: &Block, height: u32) -> Result<(), crate::Error> {
+        let block_hash = block.block_hash();
+        if self.is_block_hash_indexed(&block_hash) {
+            return Ok(());
+        }
+
+        // ## script_pubkeys in outputs, easy
+        let mut block_script_hashes: BTreeSet<ScriptHash> = block
+            .txdata
+            .iter()
+            .flat_map(|tx| tx.output.iter())
+            .map(|txout| script_hash(&txout.script_pubkey))
+            .collect();
+
+        // ## script_pubkeys in previouts outputs
+
+        // ### we don't consider outputs created in the same block
+        let mut outputs_in_block: HashSet<OutPoint> = HashSet::new();
+        for tx in block.txdata.iter() {
+            let txid = tx.txid();
+            for i in 0..tx.output.len() {
+                outputs_in_block.insert(OutPoint::new(txid, i as u32));
+            }
+        }
+        let prevouts_in_block: HashSet<OutPoint> = block
+            .txdata
+            .iter()
+            .flat_map(|tx| tx.input.iter())
+            .map(|e| e.previous_output)
+            .collect();
+        let txid_needed: HashSet<Txid> = prevouts_in_block
+            .difference(&outputs_in_block)
+            .map(|o| o.txid)
+            .collect();
+
+        // ### getting all transactions for prevouts
+        let mut transactions: HashMap<Txid, Transaction> = HashMap::new();
+        for txid in txid_needed {
+            let tx = rpc::tx::call_raw(txid).await?;
+            transactions.insert(txid, tx);
+        }
+
+        for tx in block.txdata.iter() {
+            if tx.is_coin_base() {
+                continue;
+            }
+
+            for input in tx.input.iter() {
+                if outputs_in_block.contains(&input.previous_output) {
+                    // script already considered with the output iteration
+                    continue;
+                }
+                let tx = transactions.get(&input.previous_output.txid).unwrap(); // all previous transactions have been fetched
+                let prevout = &tx.output[input.previous_output.vout as usize];
+                block_script_hashes.insert(script_hash(&prevout.script_pubkey));
+            }
+        }
 
         let mut batch = WriteBatch::default();
-        let height_bytes = height.to_le_bytes().to_vec();
-        let mut buffer: Vec<u8> = vec![];
-        {
-            for tx in block.txdata.iter() {
-                let txid = tx.txid();
-                for (i, output) in tx.output.iter().enumerate() {
-                    if !output.script_pubkey.is_provably_unspendable() {
-                        let hash = script_hash(&output.script_pubkey);
-                        utxh.insert(OutPoint::new(txid, i as u32).into(), hash);
-                        self.update(hash, &mut buffer, &height_bytes, &mut batch)?;
-                    }
-                }
-                if !tx.is_coin_base() {
-                    for input in tx.input.iter() {
-                        let hash = utxh.remove(&(&input.previous_output).into()).unwrap();
-                        self.update(hash, &mut buffer, &height_bytes, &mut batch)?;
-                    }
-                }
-            }
+        let height_bytes = height.to_le_bytes();
 
-            // TODO, inputs? // save in temporary cache? ask core for previous output if missing?
-
-            batch.put(b"last_synced_height", height.to_be_bytes()); // Switch to synced block hash?
+        for script_hash in block_script_hashes {
+            batch.put_cf(
+                self.script_hash_cf(),
+                &script_hash.to_le_bytes(),
+                &height_bytes[..],
+            );
         }
-        self.0.write(batch)?;
+        batch.put_cf(self.block_hash_cf(), block_hash, &[]);
 
-        Ok(())
-    }
+        self.db.write(batch)?;
 
-    fn update(
-        &self,
-        hash: u64,
-        buffer: &mut Vec<u8>,
-        height_bytes: &[u8],
-        batch: &mut rocksdb::WriteBatchWithTransaction<false>,
-    ) -> Result<(), rocksdb::Error> {
-        let key = hash.to_le_bytes();
-        let value = match self.0.get(&key)? {
-            Some(old_value) => {
-                buffer.clear();
-                buffer.extend(height_bytes);
-                buffer.extend(&old_value);
-                &*buffer
-            }
-            None => height_bytes,
-        };
-        batch.put(&key, &value);
         Ok(())
     }
 }
@@ -131,15 +182,12 @@ pub(crate) async fn index_addresses_infallible(db: &Database, chain_info: ChainI
 }
 
 async fn index_addresses(db: &Database, chain_info: ChainInfo) -> Result<(), Error> {
-    let last_synced_height = db.last_synced_height()?.unwrap_or(0);
-    log::info!("Starting index_addresses from: {last_synced_height}");
+    log::info!("Starting index_addresses");
 
-    let mut utxh: HashMap<TruncOutPoint, u64> = HashMap::new();
-
-    for height in last_synced_height..chain_info.blocks {
+    for height in 0..chain_info.blocks {
         let hash = rpc::blockhashbyheight::call(height as usize).await?;
         let block = rpc::block::call_raw(hash.block_hash).await?;
-        db.index_block(&block, height, &mut utxh)?;
+        db.index_block(&block, height).await?;
         if height % 10_000 == 0 {
             log::info!("indexed block {height}")
         }
