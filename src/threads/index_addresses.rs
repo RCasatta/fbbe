@@ -126,6 +126,7 @@ impl Database {
         let prevouts_in_block: HashSet<OutPoint> = block
             .txdata
             .iter()
+            .filter(|tx| !tx.is_coin_base())
             .flat_map(|tx| tx.input.iter())
             .map(|e| e.previous_output)
             .collect();
