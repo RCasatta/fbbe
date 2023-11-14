@@ -13,14 +13,14 @@ use crate::{
 struct ScriptHashHeight([u8; 12]);
 
 #[derive(Eq, Hash, PartialEq)]
-struct TruncOutPoint([u8; 16]);
+struct TruncOutPoint(u128);
 
 impl From<&OutPoint> for TruncOutPoint {
     fn from(value: &OutPoint) -> Self {
         let mut v = u128::from_le_bytes((&value.txid[..16]).try_into().unwrap());
         v += value.vout as u128;
 
-        TruncOutPoint(v.to_le_bytes())
+        TruncOutPoint(v)
     }
 }
 
