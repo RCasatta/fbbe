@@ -161,12 +161,12 @@ impl Database {
         let mut batch = WriteBatch::default();
         let height_bytes = height.to_le_bytes();
 
+        let mut buffer = vec![];
         for script_hash in block_script_hashes {
-            batch.put_cf(
-                self.script_hash_cf(),
-                &script_hash.to_le_bytes(),
-                &height_bytes[..],
-            );
+            buffer.clear();
+            buffer.extend(script_hash.to_le_bytes());
+            buffer.extend(&height_bytes[..]);
+            batch.put_cf(self.script_hash_cf(), &buffer, &[]);
         }
         batch.put_cf(self.block_hash_cf(), block_hash, &[]);
 
@@ -177,6 +177,7 @@ impl Database {
 }
 
 pub(crate) async fn index_addresses_infallible(db: &Database, chain_info: ChainInfo) {
+    // TODO pass shared state to access tx
     if let Err(e) = index_addresses(db, chain_info).await {
         log::error!("{:?}", e);
     }
