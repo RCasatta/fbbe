@@ -16,6 +16,7 @@ pub fn page(
     address: &Address,
     parsed: &ParsedRequest,
     query: &Option<String>,
+    heights: Vec<u32>,
 ) -> Result<Markup, Error> {
     use bitcoin::Network::*;
     let network = network();
@@ -73,6 +74,8 @@ pub fn page(
             @if !parsed.response_type.is_text() {
                 p { a href=(&address_qr_uri) { img class="qr" src=(create_bmp_base64_qr(&address_qr_uri)?); } }
             }
+
+            p { "heights:" (format!("{heights:?}")) }
 
             table class="striped" {
                 tbody {

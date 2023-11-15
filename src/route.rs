@@ -6,6 +6,7 @@ use crate::{
     req::{self, Resource},
     rpc,
     state::tx_output,
+    threads::index_addresses::Database,
     NetworkExt, SharedState,
 };
 use bitcoin::{consensus::deserialize, hashes::Hash};
@@ -36,7 +37,11 @@ impl ResponseType {
     }
 }
 
-pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Response<Body>, Error> {
+pub async fn route(
+    req: Request<Body>,
+    state: Arc<SharedState>,
+    db: Option<Arc<Database>>,
+) -> Result<Response<Body>, Error> {
     let now = Instant::now();
     // let _count = state.requests.fetch_add(1, Ordering::Relaxed);
     let parsed_req = req::parse(&req).await?;
@@ -297,7 +302,13 @@ pub async fn route(req: Request<Body>, state: Arc<SharedState>) -> Result<Respon
                     fbbe: network(),
                 });
             } else {
-                let page = pages::address::page(address, &parsed_req, query)?.into_string();
+                let heights = if let Some(db) = db {
+                    db.script_hash_heights(&address.script_pubkey())
+                } else {
+                    vec![]
+                };
+                let page =
+                    pages::address::page(address, &parsed_req, query, heights)?.into_string();
 
                 match parsed_req.response_type {
                     ResponseType::Text(col) => Response::builder()
@@ -423,8 +434,9 @@ async fn fetch_prevouts(
 pub async fn route_infallible(
     req: Request<Body>,
     state: Arc<SharedState>,
+    db: Option<Arc<Database>>,
 ) -> Result<Response<Body>, Infallible> {
-    let resp = route(req, state).await.unwrap_or_else(|e| {
+    let resp = route(req, state, db).await.unwrap_or_else(|e| {
         let body = format!("{}", e);
         Response::builder()
             .status(StatusCode::from(e)) // TODO map errors to bad request or internal error

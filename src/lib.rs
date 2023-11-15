@@ -136,7 +136,8 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
         .addr_index_path
         .as_ref()
         .map(|p| Database::new(p))
-        .transpose()?;
+        .transpose()?
+        .map(Arc::new);
 
     let core_net = Network::from_core_arg(chain_info.chain.as_str())?;
     check_network(core_net)?;
@@ -166,19 +167,22 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
     });
 
     let shared_state_addresses = shared_state.clone();
-    if let Some(db) = db {
+    let db_clone = db.clone();
+    if let Some(db) = db_clone {
         let _ = tokio::spawn(async move {
-            index_addresses_infallible(&db, chain_info, shared_state_addresses).await
+            index_addresses_infallible(db.clone(), chain_info, shared_state_addresses).await
         });
     }
 
     let make_service = make_service_fn(move |_| {
         let shared_state = shared_state.clone();
+        let db = db.clone();
 
         async move {
             Ok::<_, Infallible>(service_fn(move |req| {
                 let shared_state = shared_state.clone();
-                route_infallible(req, shared_state)
+                let db = db.clone();
+                route_infallible(req, shared_state, db)
             }))
         }
     });
