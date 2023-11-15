@@ -111,6 +111,7 @@ impl Database {
         let block_hash = block.block_hash();
         let mut hit_rate = HitRate::default();
         if self.is_block_hash_indexed(&block_hash) {
+            hit_rate.already_indexed = 1;
             return Ok(hit_rate);
         }
 
@@ -218,6 +219,7 @@ pub(crate) async fn index_addresses_infallible(
 struct HitRate {
     pub hit: u64,
     pub miss: u64,
+    pub already_indexed: u64,
 }
 
 impl HitRate {
@@ -233,6 +235,7 @@ impl std::ops::Add<HitRate> for HitRate {
         HitRate {
             hit: self.hit + rhs.hit,
             miss: self.miss + rhs.hit,
+            already_indexed: self.already_indexed + rhs.already_indexed,
         }
     }
 }
@@ -241,7 +244,8 @@ impl Display for HitRate {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "hit:{} miss:{} rate:{:.2}",
+            "already_indexed:{} hit:{} miss:{} rate:{:.2}",
+            self.already_indexed,
             self.hit,
             self.miss,
             self.rate()
