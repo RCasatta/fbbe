@@ -136,6 +136,7 @@ impl Database {
         let prevouts_in_block: HashSet<OutPoint> = block
             .txdata
             .iter()
+            .filter(|tx| !tx.is_coin_base())
             .flat_map(|tx| tx.input.iter())
             .map(|e| e.previous_output)
             .collect();
@@ -226,7 +227,6 @@ pub(crate) async fn index_addresses_infallible(
     chain_info: ChainInfo,
     shared_state: Arc<SharedState>,
 ) {
-    // TODO pass shared state to access tx
     if let Err(e) = index_addresses(db, chain_info, shared_state).await {
         log::error!("{:?}", e);
     }
