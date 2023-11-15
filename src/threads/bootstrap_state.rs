@@ -3,8 +3,6 @@ use crate::rpc::headers::HeightTime;
 use crate::state::{reserve, SharedState};
 use crate::{network, rpc};
 use bitcoin::blockdata::constants::genesis_block;
-use bitcoin::hashes::Hash;
-use bitcoin::BlockHash;
 use std::sync::Arc;
 
 const HEADERS_PER_REQUEST: usize = 101;

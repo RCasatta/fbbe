@@ -106,10 +106,11 @@ impl Database {
         block: &Block,
         height: u32,
         shared_state: Arc<SharedState>,
-    ) -> Result<(), crate::Error> {
+    ) -> Result<HitRate, crate::Error> {
         let block_hash = block.block_hash();
+        let mut hit_rate = HitRate::default();
         if self.is_block_hash_indexed(&block_hash) {
-            return Ok(());
+            return Ok(hit_rate);
         }
 
         // ## script_pubkeys in outputs, easy
@@ -142,8 +143,6 @@ impl Database {
             .map(|o| o.txid)
             .collect();
 
-        let mut count_cached = 0;
-        let mut count_not_cached = 0;
         // ### getting all transactions for prevouts
         let mut transactions: HashMap<Txid, Transaction> = HashMap::new();
         for txid in txid_needed {
@@ -156,9 +155,9 @@ impl Database {
             };
 
             if cached_tx.is_some() {
-                count_cached += 1;
+                hit_rate.hit += 1;
             } else {
-                count_not_cached += 1;
+                hit_rate.miss += 1;
             }
 
             let tx = match cached_tx {
@@ -166,13 +165,6 @@ impl Database {
                 None => rpc::tx::call_raw(txid).await?,
             };
             transactions.insert(txid, tx);
-        }
-
-        if (height % 10_000) == 0 {
-            log::info!(
-                "hit rate: {}",
-                count_cached as f32 / (count_cached + count_not_cached) as f32
-            )
         }
 
         for tx in block.txdata.iter() {
@@ -207,7 +199,7 @@ impl Database {
 
         self.db.write(batch)?;
 
-        Ok(())
+        Ok(hit_rate)
     }
 }
 
@@ -221,6 +213,29 @@ pub(crate) async fn index_addresses_infallible(
     }
 }
 
+#[derive(Default)]
+struct HitRate {
+    pub hit: u64,
+    pub miss: u64,
+}
+
+impl HitRate {
+    pub fn rate(&self) -> f64 {
+        (self.hit as f64) / (self.hit + self.miss) as f64
+    }
+}
+
+impl std::ops::Add<HitRate> for HitRate {
+    type Output = HitRate;
+
+    fn add(self, rhs: HitRate) -> Self::Output {
+        HitRate {
+            hit: self.hit + rhs.hit,
+            miss: self.miss + rhs.hit,
+        }
+    }
+}
+
 async fn index_addresses(
     db: &Database,
     chain_info: ChainInfo,
@@ -228,12 +243,15 @@ async fn index_addresses(
 ) -> Result<(), Error> {
     log::info!("Starting index_addresses");
 
+    let mut total_hit_rate = HitRate::default();
+
     for height in 0..chain_info.blocks {
         let hash = rpc::blockhashbyheight::call(height as usize).await?;
         let block = rpc::block::call_raw(hash.block_hash).await?;
-        db.index_block(&block, height, shared_state.clone()).await?;
+        let hr = db.index_block(&block, height, shared_state.clone()).await?;
+        total_hit_rate = total_hit_rate + hr;
         if height % 10_000 == 0 {
-            log::info!("indexed block {height}")
+            log::info!("indexed block {height} {}", total_hit_rate.rate())
         }
     }
     Ok(())
