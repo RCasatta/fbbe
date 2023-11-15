@@ -1,5 +1,6 @@
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
+    fmt::Display,
     hash::Hasher,
     path::Path,
     sync::Arc,
@@ -236,6 +237,18 @@ impl std::ops::Add<HitRate> for HitRate {
     }
 }
 
+impl Display for HitRate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "hit:{} miss:{} rate:{:.2}",
+            self.hit,
+            self.miss,
+            self.rate()
+        )
+    }
+}
+
 async fn index_addresses(
     db: &Database,
     chain_info: ChainInfo,
@@ -251,7 +264,7 @@ async fn index_addresses(
         let hr = db.index_block(&block, height, shared_state.clone()).await?;
         total_hit_rate = total_hit_rate + hr;
         if height % 10_000 == 0 {
-            log::info!("indexed block {height} {}", total_hit_rate.rate())
+            log::info!("indexed block {height} {}", total_hit_rate)
         }
     }
     Ok(())
