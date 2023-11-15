@@ -44,7 +44,7 @@ async fn update_chain_info(
                         let prev_blockhash = last_block.header.prev_blockhash;
 
                         shared_state
-                            .update_cache(last_block, Some(last_height))
+                            .update_cache(&last_block, Some(last_height))
                             .await?;
 
                         match shared_state

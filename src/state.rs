@@ -216,10 +216,10 @@ impl SharedState {
         }
     }
 
-    pub async fn update_cache(&self, block: Block, height: Option<u32>) -> Result<(), Error> {
+    pub async fn update_cache(&self, block: &Block, height: Option<u32>) -> Result<(), Error> {
         let block_hash = block.block_hash();
         let time = block.header.time;
-        let hash_tx: Vec<_> = block.txdata.into_iter().map(|tx| (tx.txid(), tx)).collect();
+        let hash_tx: Vec<_> = block.txdata.iter().map(|tx| (tx.txid(), tx)).collect();
 
         let mut txs = self.txs.lock().await;
         let mut tx_in_block = self.tx_in_block.lock().await;

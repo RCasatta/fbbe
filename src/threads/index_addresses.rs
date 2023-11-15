@@ -5,10 +5,7 @@ use std::{
     sync::Arc,
 };
 
-use bitcoin::{
-    consensus::{Decodable, Encodable},
-    Block, BlockHash, OutPoint, Script, Transaction, Txid,
-};
+use bitcoin::{consensus::Decodable, Block, BlockHash, OutPoint, Script, Transaction, Txid};
 use fxhash::FxHasher64;
 use rocksdb::{ColumnFamily, ColumnFamilyDescriptor, Options, WriteBatch, DB};
 
@@ -194,15 +191,7 @@ impl Database {
             }
         }
 
-        let mut cached_txs = shared_state.txs.lock().await;
-        let mut buffer = vec![];
-        for tx in block.txdata.iter() {
-            buffer.clear();
-            let txid = tx.txid();
-            tx.consensus_encode(&mut buffer)?;
-            let _ = cached_txs.insert(txid, &buffer);
-        }
-        drop(cached_txs);
+        shared_state.update_cache(block, None).await?;
 
         let mut batch = WriteBatch::default();
         let height_bytes = height.to_le_bytes();
