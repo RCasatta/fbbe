@@ -234,7 +234,7 @@ impl std::ops::Add<HitRate> for HitRate {
     fn add(self, rhs: HitRate) -> Self::Output {
         HitRate {
             hit: self.hit + rhs.hit,
-            miss: self.miss + rhs.hit,
+            miss: self.miss + rhs.miss,
             already_indexed: self.already_indexed + rhs.already_indexed,
         }
     }
