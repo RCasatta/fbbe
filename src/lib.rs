@@ -165,8 +165,11 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
         update_mempool(shared_state_mempool).await
     });
 
+    let shared_state_addresses = shared_state.clone();
     if let Some(db) = db {
-        let _ = tokio::spawn(async move { index_addresses_infallible(&db, chain_info).await });
+        let _ = tokio::spawn(async move {
+            index_addresses_infallible(&db, chain_info, shared_state_addresses).await
+        });
     }
 
     let make_service = make_service_fn(move |_| {

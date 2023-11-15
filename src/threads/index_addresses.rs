@@ -2,15 +2,20 @@ use std::{
     collections::{BTreeSet, HashMap, HashSet},
     hash::Hasher,
     path::Path,
+    sync::Arc,
 };
 
-use bitcoin::{Block, BlockHash, OutPoint, Script, Transaction, Txid};
+use bitcoin::{
+    consensus::{Decodable, Encodable},
+    Block, BlockHash, OutPoint, Script, Transaction, Txid,
+};
 use fxhash::FxHasher64;
 use rocksdb::{ColumnFamily, ColumnFamilyDescriptor, Options, WriteBatch, DB};
 
 use crate::{
     error::Error,
     rpc::{self, chaininfo::ChainInfo},
+    state::SharedState,
 };
 
 #[derive(Debug)]
@@ -99,7 +104,12 @@ impl Database {
             .expect("missing SCRIPT_HASH_CF")
     }
 
-    async fn index_block(&self, block: &Block, height: u32) -> Result<(), crate::Error> {
+    async fn index_block(
+        &self,
+        block: &Block,
+        height: u32,
+        shared_state: Arc<SharedState>,
+    ) -> Result<(), crate::Error> {
         let block_hash = block.block_hash();
         if self.is_block_hash_indexed(&block_hash) {
             return Ok(());
@@ -126,7 +136,6 @@ impl Database {
         let prevouts_in_block: HashSet<OutPoint> = block
             .txdata
             .iter()
-            .filter(|tx| !tx.is_coin_base())
             .flat_map(|tx| tx.input.iter())
             .map(|e| e.previous_output)
             .collect();
@@ -135,11 +144,37 @@ impl Database {
             .map(|o| o.txid)
             .collect();
 
+        let mut count_cached = 0;
+        let mut count_not_cached = 0;
         // ### getting all transactions for prevouts
         let mut transactions: HashMap<Txid, Transaction> = HashMap::new();
         for txid in txid_needed {
-            let tx = rpc::tx::call_raw(txid).await?;
+            let cached_tx = {
+                let cached_txs = shared_state.txs.lock().await;
+                cached_txs
+                    .get(&txid)
+                    .map(|mut sertx| Transaction::consensus_decode(&mut sertx))
+                    .transpose()?
+            };
+
+            if cached_tx.is_some() {
+                count_cached += 1;
+            } else {
+                count_not_cached += 1;
+            }
+
+            let tx = match cached_tx {
+                Some(tx) => tx,
+                None => rpc::tx::call_raw(txid).await?,
+            };
             transactions.insert(txid, tx);
+        }
+
+        if (height % 10_000) == 0 {
+            log::info!(
+                "hit rate: {}",
+                count_cached as f32 / (count_cached + count_not_cached) as f32
+            )
         }
 
         for tx in block.txdata.iter() {
@@ -157,6 +192,16 @@ impl Database {
                 block_script_hashes.insert(script_hash(&prevout.script_pubkey));
             }
         }
+
+        let mut cached_txs = shared_state.txs.lock().await;
+        let mut buffer = vec![];
+        for tx in block.txdata.iter() {
+            buffer.clear();
+            let txid = tx.txid();
+            tx.consensus_encode(&mut buffer)?;
+            let _ = cached_txs.insert(txid, &buffer);
+        }
+        drop(cached_txs);
 
         let mut batch = WriteBatch::default();
         let height_bytes = height.to_le_bytes();
@@ -176,20 +221,28 @@ impl Database {
     }
 }
 
-pub(crate) async fn index_addresses_infallible(db: &Database, chain_info: ChainInfo) {
+pub(crate) async fn index_addresses_infallible(
+    db: &Database,
+    chain_info: ChainInfo,
+    shared_state: Arc<SharedState>,
+) {
     // TODO pass shared state to access tx
-    if let Err(e) = index_addresses(db, chain_info).await {
+    if let Err(e) = index_addresses(db, chain_info, shared_state).await {
         log::error!("{:?}", e);
     }
 }
 
-async fn index_addresses(db: &Database, chain_info: ChainInfo) -> Result<(), Error> {
+async fn index_addresses(
+    db: &Database,
+    chain_info: ChainInfo,
+    shared_state: Arc<SharedState>,
+) -> Result<(), Error> {
     log::info!("Starting index_addresses");
 
     for height in 0..chain_info.blocks {
         let hash = rpc::blockhashbyheight::call(height as usize).await?;
         let block = rpc::block::call_raw(hash.block_hash).await?;
-        db.index_block(&block, height).await?;
+        db.index_block(&block, height, shared_state.clone()).await?;
         if height % 10_000 == 0 {
             log::info!("indexed block {height}")
         }
