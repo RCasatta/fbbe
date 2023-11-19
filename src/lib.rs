@@ -38,9 +38,9 @@ pub struct Arguments {
     #[arg(long, default_value = "100000000", env)]
     pub tx_cache_byte_size: usize,
 
-    /// Number of bytes kept in memory for caching tx belongs in a block, default 20MB
-    #[arg(long, default_value = "20000000", env)]
-    pub tx_block_byte_size: usize,
+    /// Number of txid->block_hash kept in memory, default 1M
+    #[arg(long, default_value = "1000000", env)]
+    pub txid_blockhash_len: usize,
 
     /// Some requests to the bitcoin core are concurrent, this set the desired parallelism.
     /// Note there is a limit of open files that this setting too high could trigger.

@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fmt::Display,
     hash::Hasher,
     path::Path,
@@ -19,13 +19,9 @@ use crate::{
 #[derive(Debug)]
 struct ScriptHashHeight([u8; 12]);
 
-// TODO: move to 8 bytes key for script hash (initialized with xor to avoid attacks)
-// and value equal to varint of every height delta in which the hash is found
-// examples:
-// 1) s found at h1 save varint(h1)
-// 2) s found at h1 and h2 where h1<h2, save varint(h1) and varint(h2-h1)
-
 type ScriptHash = u64;
+type Height = u32;
+
 fn script_hash(script: &Script) -> ScriptHash {
     let mut hasher = FxHasher64::default();
     hasher.write(script.as_bytes());
@@ -39,9 +35,10 @@ impl AsRef<[u8]> for ScriptHashHeight {
 }
 
 const BLOCK_HASH_CF: &str = "BLOCK_HASH_CF";
-const SCRIPT_HASH_CF: &str = "SCRIPT_HASH_CF";
+const FUNDING_CF: &str = "FUNDING_CF";
+const SPENDING_CF: &str = "SPENDING_CF";
 
-const COLUMN_FAMILIES: &[&str] = &[BLOCK_HASH_CF, SCRIPT_HASH_CF];
+const COLUMN_FAMILIES: &[&str] = &[BLOCK_HASH_CF, FUNDING_CF, SPENDING_CF];
 
 #[derive(Debug)]
 pub struct Database {
@@ -79,10 +76,14 @@ impl Database {
             .is_some()
     }
 
-    fn script_hash_cf(&self) -> &ColumnFamily {
+    fn funding_cf(&self) -> &ColumnFamily {
+        self.db.cf_handle("FUNDING_CF").expect("missing FUNDING_CF")
+    }
+
+    fn spending_cf(&self) -> &ColumnFamily {
         self.db
-            .cf_handle("SCRIPT_HASH_CF")
-            .expect("missing SCRIPT_HASH_CF")
+            .cf_handle("SPENDING_CF")
+            .expect("missing SPENDING_CF")
     }
 
     pub fn script_hash_heights(&self, script_pubkey: &Script) -> Vec<u32> {
@@ -90,7 +91,7 @@ impl Database {
         let mut result = vec![];
 
         for el in self.db.iterator_cf(
-            self.script_hash_cf(),
+            self.funding_cf(),
             rocksdb::IteratorMode::From(&script_hash[..], rocksdb::Direction::Forward),
         ) {
             let el = el.unwrap().0;
@@ -104,47 +105,69 @@ impl Database {
         result
     }
 
-    pub fn write_hashes(
-        &self,
-        block_script_hashes: BTreeSet<ScriptHash>,
-        height: u32,
-        block_hash: BlockHash,
-    ) {
+    pub fn write_hashes(&self, index_res: IndexBlockResult) {
         // TODO move following code outside, return block_script_hashes and block hash so we don't depend on self
 
         let mut batch = WriteBatch::default();
-        let height_bytes = height.to_le_bytes();
+        let height_bytes = index_res.height.to_le_bytes();
 
         let mut buffer = vec![];
-        for script_hash in block_script_hashes {
+        for script_hash in index_res.funding_sh {
             buffer.clear();
             buffer.extend(script_hash.to_le_bytes());
             buffer.extend(&height_bytes[..]);
-            batch.put_cf(self.script_hash_cf(), &buffer, &[]);
+            batch.put_cf(self.funding_cf(), &buffer, &[]);
         }
-        batch.put_cf(self.block_hash_cf(), block_hash, &[]);
+        for (out_point, height) in index_res.spending_sh {
+            buffer.clear();
+            let mut val = u64::from_le_bytes((&out_point.txid[..8]).try_into().unwrap());
+            val += out_point.vout as u64;
+            buffer.extend(val.to_le_bytes());
+            buffer.extend(&height.to_le_bytes()[..]);
+            batch.put_cf(self.spending_cf(), &buffer, &[]);
+        }
+
+        batch.put_cf(self.block_hash_cf(), index_res.block_hash, &[]);
 
         self.db.write(batch).unwrap();
     }
 }
 
+pub struct IndexBlockResult {
+    block_hash: BlockHash,
+    height: Height,
+    tx_hit_rate: HitRate,
+    txid_blockhash_hit_rate: HitRate,
+    blockhash_height_hit_rate: HitRate,
+
+    funding_sh: BTreeSet<ScriptHash>,
+    spending_sh: BTreeMap<OutPoint, Height>,
+}
 async fn index_block(
     block: &Block,
+    height: u32,
     shared_state: Arc<SharedState>,
-) -> Result<(HitRate, BTreeSet<ScriptHash>), crate::Error> {
-    let mut hit_rate = HitRate::default();
+) -> Result<IndexBlockResult, crate::Error> {
+    let block_hash = block.block_hash();
+    let mut tx_hit_rate = HitRate::default();
+    let mut txid_blockhash_hit_rate = HitRate::default();
+    let mut blockhash_height_hit_rate = HitRate::default();
 
-    // ## script_pubkeys in outputs, easy
-    let mut block_script_hashes: BTreeSet<ScriptHash> = block
+    shared_state.update_cache(block, Some(height)).await?;
+
+    // # funding script_hashes
+    // ## script_pubkeys in outputs
+    let funding_sh: BTreeSet<ScriptHash> = block
         .txdata
         .iter()
         .flat_map(|tx| tx.output.iter())
         .map(|txout| script_hash(&txout.script_pubkey))
         .collect();
 
-    // ## script_pubkeys in previouts outputs
+    // # spending script_hashes
+    let mut spending_sh: BTreeMap<OutPoint, u32> = BTreeMap::new();
 
-    // ### we don't consider outputs created in the same block
+    // ## we don't consider outputs created in the same block
     let mut outputs_in_block: HashSet<OutPoint> = HashSet::new();
     for tx in block.txdata.iter() {
         let txid = tx.txid();
@@ -171,14 +194,14 @@ async fn index_block(
             let cached_txs = shared_state.txs.lock().await;
             cached_txs
                 .get(&txid)
-                .map(|mut sertx| Transaction::consensus_decode(&mut sertx))
+                .map(|sertx| Transaction::consensus_decode(&mut &sertx[..]))
                 .transpose()?
         };
 
         if cached_tx.is_some() {
-            hit_rate.hit += 1;
+            tx_hit_rate.hit += 1;
         } else {
-            hit_rate.miss += 1;
+            tx_hit_rate.miss += 1;
         }
 
         let tx = match cached_tx {
@@ -194,19 +217,47 @@ async fn index_block(
         }
 
         for input in tx.input.iter() {
-            if outputs_in_block.contains(&input.previous_output) {
-                // script already considered with the output iteration
-                continue;
-            }
-            let tx = transactions.get(&input.previous_output.txid).unwrap(); // all previous transactions have been fetched
-            let prevout = &tx.output[input.previous_output.vout as usize];
-            block_script_hashes.insert(script_hash(&prevout.script_pubkey));
+            let outpoint = input.previous_output;
+            let txid = input.previous_output.txid;
+            let block_hash = match shared_state.tx_in_block.lock().await.get(&txid) {
+                Some(block_hash) => {
+                    txid_blockhash_hit_rate.hit += 1;
+                    *block_hash
+                }
+                None => {
+                    txid_blockhash_hit_rate.miss += 1;
+                    rpc::tx::call_json(txid).await?.block_hash.unwrap()
+                }
+            };
+            let height = match shared_state
+                .hash_to_height_time
+                .lock()
+                .await
+                .get(&block_hash)
+            {
+                Some(ht) => {
+                    blockhash_height_hit_rate.hit += 1;
+                    ht.height
+                }
+                None => {
+                    blockhash_height_hit_rate.miss += 1;
+                    rpc::block::call_json(block_hash).await?.height
+                }
+            };
+
+            spending_sh.insert(outpoint, height);
         }
     }
 
-    shared_state.update_cache(block, None).await?;
-
-    Ok((hit_rate, block_script_hashes))
+    Ok(IndexBlockResult {
+        block_hash,
+        height,
+        tx_hit_rate,
+        txid_blockhash_hit_rate,
+        blockhash_height_hit_rate,
+        funding_sh,
+        spending_sh,
+    })
 }
 
 pub(crate) async fn index_addresses_infallible(
@@ -231,10 +282,10 @@ impl HitRate {
     }
 }
 
-impl std::ops::Add<HitRate> for HitRate {
+impl std::ops::Add<&HitRate> for HitRate {
     type Output = HitRate;
 
-    fn add(self, rhs: HitRate) -> Self::Output {
+    fn add(self, rhs: &HitRate) -> Self::Output {
         HitRate {
             hit: self.hit + rhs.hit,
             miss: self.miss + rhs.miss,
@@ -261,7 +312,9 @@ async fn index_addresses(
 ) -> Result<(), Error> {
     log::info!("Starting index_addresses");
 
-    let mut total_hit_rate = HitRate::default();
+    let mut tx_total_hit_rate = HitRate::default();
+    let mut txid_blockhash_total_hit_rate = HitRate::default();
+    let mut blockhash_height_total_hit_rate = HitRate::default();
 
     let mut already_indexed = 0;
     for height in 0..chain_info.blocks {
@@ -271,14 +324,19 @@ async fn index_addresses(
         if db.is_block_hash_indexed(&block_hash) {
             already_indexed += 1;
         } else {
-            let (hr, scripts_hash): (HitRate, BTreeSet<u64>) =
-                index_block(&block, shared_state.clone()).await?;
-            total_hit_rate = total_hit_rate + hr;
+            let index_res = index_block(&block, height, shared_state.clone()).await?;
+            tx_total_hit_rate = tx_total_hit_rate + &index_res.tx_hit_rate;
+            txid_blockhash_total_hit_rate =
+                txid_blockhash_total_hit_rate + &index_res.txid_blockhash_hit_rate;
+            blockhash_height_total_hit_rate =
+                blockhash_height_total_hit_rate + &index_res.blockhash_height_hit_rate;
             let db = db.clone();
-            tokio::spawn(async move { db.write_hashes(scripts_hash, height, block_hash) });
+            tokio::spawn(async move { db.write_hashes(index_res) });
         }
         if height % 10_000 == 0 {
-            log::info!("indexed block {height} {total_hit_rate} already_indexed:{already_indexed}")
+            log::info!(
+                "indexed block {height} tx({tx_total_hit_rate}) txid_bh({txid_blockhash_total_hit_rate}) bh_h({blockhash_height_total_hit_rate}) already_indexed:{already_indexed}"
+            )
         }
     }
     Ok(())

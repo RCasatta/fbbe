@@ -7,6 +7,7 @@ use bitcoin::hashes::Hash;
 use bitcoin::{Block, BlockHash, Transaction, Txid, Weight};
 use bitcoin_slices::{bsl, SliceCache, Visit, Visitor};
 use futures::prelude::*;
+use lru::LruCache;
 use tokio::sync::{Mutex, MutexGuard};
 
 use crate::{
@@ -42,8 +43,8 @@ pub struct SharedState {
     /// By default 100MB of cached transactions, `Txid -> Transaction`
     pub txs: Mutex<SliceCache<Txid>>,
 
-    /// 20MB of `Txid -> BlockHash` ~300k elements
-    pub tx_in_block: Mutex<SliceCache<Txid>>,
+    /// Up to 1M elements
+    pub tx_in_block: Mutex<LruCache<Txid, BlockHash>>,
 
     pub hash_to_height_time: Mutex<HashMap<BlockHash, HeightTime>>,
 
@@ -81,7 +82,7 @@ impl SharedState {
             // rpc_calls: AtomicUsize::new(0),
             chain_info: Mutex::new(chain_info),
             txs: Mutex::new(SliceCache::new(args.tx_cache_byte_size)),
-            tx_in_block: Mutex::new(SliceCache::new(args.tx_block_byte_size)),
+            tx_in_block: Mutex::new(LruCache::new(args.txid_blockhash_len.try_into().unwrap())), //TODO
             hash_to_height_time: Mutex::new(HashMap::new()),
             height_to_hash: Mutex::new(Vec::new()),
             args,
@@ -147,13 +148,11 @@ impl SharedState {
                     return Ok((SerTx(tx.to_vec()), None));
                 }
             } else {
-                let tx_in_block = self.tx_in_block.lock().await;
+                let mut tx_in_block = self.tx_in_block.lock().await;
                 match (txs.get(&txid), tx_in_block.get(&txid)) {
                     (Some(tx), Some(block_hash)) => {
-                        let block_hash = BlockHash::from_slice(block_hash)
-                            .expect("cache contains only block hashes");
                         log::trace!("tx hit");
-                        return Ok((SerTx(tx.to_vec()), Some(block_hash)));
+                        return Ok((SerTx(tx.to_vec()), Some(*block_hash)));
                     }
                     (Some(_), None) => log::debug!("tx miss, missing block"),
                     (None, Some(_)) => log::debug!("tx miss, missing tx"),
@@ -175,7 +174,7 @@ impl SharedState {
 
         if let Some(block_hash) = block_hash {
             let mut tx_in_block = self.tx_in_block.lock().await;
-            let _ = tx_in_block.insert(txid, block_hash.as_byte_array());
+            let _ = tx_in_block.put(txid, block_hash);
         }
         Ok((tx, block_hash))
     }
@@ -229,7 +228,7 @@ impl SharedState {
             buffer.clear();
             tx.consensus_encode(&mut buffer).expect("vecs don't error");
             let _ = txs.insert(txid, &buffer);
-            let _ = tx_in_block.insert(txid, block_hash.as_byte_array());
+            let _ = tx_in_block.put(txid, block_hash);
         }
 
         if let Some(height) = height {
