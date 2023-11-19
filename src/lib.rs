@@ -34,12 +34,12 @@ mod threads;
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 pub struct Arguments {
-    /// Number of bytes kept in memory for caching transactions, default 100MB
-    #[arg(long, default_value = "100000000", env)]
+    /// Number of bytes kept in memory for caching transactions, default 200MB
+    #[arg(long, default_value = "200000000", env)]
     pub tx_cache_byte_size: usize,
 
-    /// Number of txid->block_hash kept in memory, default 1M
-    #[arg(long, default_value = "1000000", env)]
+    /// Number of txid->block_hash kept in memory, default 1M, about 128MB
+    #[arg(long, default_value = "2000000", env)]
     pub txid_blockhash_len: usize,
 
     /// Some requests to the bitcoin core are concurrent, this set the desired parallelism.

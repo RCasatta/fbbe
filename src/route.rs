@@ -398,7 +398,7 @@ fn cache_time_from_confirmations(confirmation: Option<u32>) -> u32 {
     }
 }
 
-async fn fetch_prevouts(
+pub async fn fetch_prevouts(
     tx: &bitcoin::Transaction,
     state: &SharedState,
     fill_missing: bool,

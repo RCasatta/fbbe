@@ -1,12 +1,12 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet},
     fmt::Display,
     hash::Hasher,
     path::Path,
     sync::Arc,
 };
 
-use bitcoin::{consensus::Decodable, Block, BlockHash, OutPoint, Script, Transaction, Txid};
+use bitcoin::{Block, BlockHash, OutPoint, Script};
 use fxhash::FxHasher64;
 use rocksdb::{ColumnFamily, ColumnFamilyDescriptor, Options, WriteBatch, DB};
 
@@ -136,9 +136,7 @@ impl Database {
 pub struct IndexBlockResult {
     block_hash: BlockHash,
     height: Height,
-    tx_hit_rate: HitRate,
     txid_blockhash_hit_rate: HitRate,
-    blockhash_height_hit_rate: HitRate,
 
     funding_sh: BTreeSet<ScriptHash>,
     spending_sh: BTreeMap<OutPoint, Height>,
@@ -149,14 +147,11 @@ async fn index_block(
     shared_state: Arc<SharedState>,
 ) -> Result<IndexBlockResult, crate::Error> {
     let block_hash = block.block_hash();
-    let mut tx_hit_rate = HitRate::default();
     let mut txid_blockhash_hit_rate = HitRate::default();
-    let mut blockhash_height_hit_rate = HitRate::default();
 
     shared_state.update_cache(block, Some(height)).await?;
 
-    // # funding script_hashes
-    // ## script_pubkeys in outputs
+    // # funding script_hashes, script_pubkeys in outputs
     let funding_sh: BTreeSet<ScriptHash> = block
         .txdata
         .iter()
@@ -166,51 +161,6 @@ async fn index_block(
 
     // # spending script_hashes
     let mut spending_sh: BTreeMap<OutPoint, u32> = BTreeMap::new();
-
-    // ## we don't consider outputs created in the same block
-    let mut outputs_in_block: HashSet<OutPoint> = HashSet::new();
-    for tx in block.txdata.iter() {
-        let txid = tx.txid();
-        for i in 0..tx.output.len() {
-            outputs_in_block.insert(OutPoint::new(txid, i as u32));
-        }
-    }
-    let prevouts_in_block: HashSet<OutPoint> = block
-        .txdata
-        .iter()
-        .filter(|tx| !tx.is_coin_base())
-        .flat_map(|tx| tx.input.iter())
-        .map(|e| e.previous_output)
-        .collect();
-    let txid_needed: HashSet<Txid> = prevouts_in_block
-        .difference(&outputs_in_block)
-        .map(|o| o.txid)
-        .collect();
-
-    // ### getting all transactions for prevouts
-    let mut transactions: HashMap<Txid, Transaction> = HashMap::new();
-    for txid in txid_needed {
-        let cached_tx = {
-            let cached_txs = shared_state.txs.lock().await;
-            cached_txs
-                .get(&txid)
-                .map(|sertx| Transaction::consensus_decode(&mut &sertx[..]))
-                .transpose()?
-        };
-
-        if cached_tx.is_some() {
-            tx_hit_rate.hit += 1;
-        } else {
-            tx_hit_rate.miss += 1;
-        }
-
-        let tx = match cached_tx {
-            Some(tx) => tx,
-            None => rpc::tx::call_raw(txid).await?,
-        };
-        transactions.insert(txid, tx);
-    }
-
     for tx in block.txdata.iter() {
         if tx.is_coin_base() {
             continue;
@@ -235,12 +185,9 @@ async fn index_block(
                 .await
                 .get(&block_hash)
             {
-                Some(ht) => {
-                    blockhash_height_hit_rate.hit += 1;
-                    ht.height
-                }
+                Some(ht) => ht.height,
                 None => {
-                    blockhash_height_hit_rate.miss += 1;
+                    log::error!("should never happen I haven't seen a prevout txid block height");
                     rpc::block::call_json(block_hash).await?.height
                 }
             };
@@ -252,9 +199,7 @@ async fn index_block(
     Ok(IndexBlockResult {
         block_hash,
         height,
-        tx_hit_rate,
         txid_blockhash_hit_rate,
-        blockhash_height_hit_rate,
         funding_sh,
         spending_sh,
     })
@@ -312,9 +257,7 @@ async fn index_addresses(
 ) -> Result<(), Error> {
     log::info!("Starting index_addresses");
 
-    let mut tx_total_hit_rate = HitRate::default();
     let mut txid_blockhash_total_hit_rate = HitRate::default();
-    let mut blockhash_height_total_hit_rate = HitRate::default();
 
     let mut already_indexed = 0;
     for height in 0..chain_info.blocks {
@@ -325,17 +268,14 @@ async fn index_addresses(
             already_indexed += 1;
         } else {
             let index_res = index_block(&block, height, shared_state.clone()).await?;
-            tx_total_hit_rate = tx_total_hit_rate + &index_res.tx_hit_rate;
             txid_blockhash_total_hit_rate =
                 txid_blockhash_total_hit_rate + &index_res.txid_blockhash_hit_rate;
-            blockhash_height_total_hit_rate =
-                blockhash_height_total_hit_rate + &index_res.blockhash_height_hit_rate;
             let db = db.clone();
             tokio::spawn(async move { db.write_hashes(index_res) });
         }
         if height % 10_000 == 0 {
             log::info!(
-                "indexed block {height} tx({tx_total_hit_rate}) txid_bh({txid_blockhash_total_hit_rate}) bh_h({blockhash_height_total_hit_rate}) already_indexed:{already_indexed}"
+                "indexed block {height} txid_bh({txid_blockhash_total_hit_rate}) already_indexed:{already_indexed}"
             )
         }
     }
