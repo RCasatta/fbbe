@@ -40,7 +40,7 @@ async fn update_chain_info(
 
                     loop {
                         log::info!("asking {last_block_hash}");
-                        let last_block = rpc::block::call_raw(last_block_hash).await?;
+                        let last_block = rpc::block::call(last_block_hash).await?;
                         let prev_blockhash = last_block.header.prev_blockhash;
 
                         shared_state

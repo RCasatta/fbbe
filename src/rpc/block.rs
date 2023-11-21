@@ -7,6 +7,8 @@ use hyper::body::Buf;
 use maud::{html, Markup};
 use serde::Deserialize;
 
+pub struct SerBlock(pub Vec<u8>);
+
 pub async fn call_json(block_hash: BlockHash) -> Result<BlockNoTxDetails, Error> {
     let client = CLIENT.clone();
     let bitcoind_addr = crate::globals::bitcoind_addr();
@@ -21,7 +23,13 @@ pub async fn call_json(block_hash: BlockHash) -> Result<BlockNoTxDetails, Error>
     Ok(block)
 }
 
-pub async fn call_raw(block_hash: BlockHash) -> Result<Block, Error> {
+pub async fn call(block_hash: BlockHash) -> Result<Block, Error> {
+    let ser_block = call_raw(block_hash).await?;
+    let block: Block = deserialize(&ser_block.0)?;
+    Ok(block)
+}
+
+pub async fn call_raw(block_hash: BlockHash) -> Result<SerBlock, Error> {
     let client = CLIENT.clone();
     let bitcoind_addr = crate::globals::bitcoind_addr();
 
@@ -29,8 +37,8 @@ pub async fn call_raw(block_hash: BlockHash) -> Result<Block, Error> {
     let resp = client.get(uri).await?;
     check_status(resp.status(), |s| Error::RpcBlockRaw(s, block_hash)).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
-    let block: Block = deserialize(&body_bytes)?;
-    Ok(block)
+
+    Ok(SerBlock(body_bytes.to_vec()))
 }
 
 #[derive(Deserialize)]

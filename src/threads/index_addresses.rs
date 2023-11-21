@@ -2,17 +2,19 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::Display,
     hash::Hasher,
+    ops::ControlFlow,
     path::Path,
     sync::Arc,
 };
 
-use bitcoin::{Block, BlockHash, OutPoint, Script};
+use bitcoin::{hashes::Hash, Address, Block, BlockHash, OutPoint, Script, ScriptBuf, Txid};
+use bitcoin_slices::{bsl, Visit, Visitor};
 use fxhash::FxHasher64;
 use rocksdb::{ColumnFamily, ColumnFamilyDescriptor, Options, WriteBatch, DB};
 
 use crate::{
     error::Error,
-    rpc::{self, chaininfo::ChainInfo},
+    rpc::{self, block::SerBlock, chaininfo::ChainInfo},
     state::SharedState,
 };
 
@@ -105,9 +107,12 @@ impl Database {
         result
     }
 
-    pub fn write_hashes(&self, index_res: IndexBlockResult) {
-        // TODO move following code outside, return block_script_hashes and block hash so we don't depend on self
+    pub fn outputs_heights(&self, txids: &[Txid]) -> Vec<u32> {
+        // iter on spending_cf, return all results found up to gap
+        todo!()
+    }
 
+    pub fn write_hashes(&self, index_res: IndexBlockResult) {
         let mut batch = WriteBatch::default();
         let height_bytes = index_res.height.to_le_bytes();
 
@@ -118,12 +123,12 @@ impl Database {
             buffer.extend(&height_bytes[..]);
             batch.put_cf(self.funding_cf(), &buffer, &[]);
         }
-        for (out_point, height) in index_res.spending_sh {
+        for out_point in index_res.spending_sh {
             buffer.clear();
             let mut val = u64::from_le_bytes((&out_point.txid[..8]).try_into().unwrap());
             val += out_point.vout as u64;
             buffer.extend(val.to_le_bytes());
-            buffer.extend(&height.to_le_bytes()[..]);
+            buffer.extend(&height_bytes[..]);
             batch.put_cf(self.spending_cf(), &buffer, &[]);
         }
 
@@ -139,8 +144,99 @@ pub struct IndexBlockResult {
     txid_blockhash_hit_rate: HitRate,
 
     funding_sh: BTreeSet<ScriptHash>,
-    spending_sh: BTreeMap<OutPoint, Height>,
+    spending_sh: BTreeSet<OutPoint>,
 }
+
+pub async fn txids_with_address(
+    address: &Address,
+    db: Arc<Database>,
+    shared_state: Arc<SharedState>,
+) -> Result<Vec<Txid>, Error> {
+    let script_pubkey = address.script_pubkey();
+    let heights = db.script_hash_heights(&script_pubkey);
+    let blocks = shared_state.blocks_from_heights(&heights).await?;
+    let mut txids = vec![];
+    for (_, b) in blocks {
+        find_txs_with_script_pubkey(&script_pubkey, b, &mut txids);
+    }
+
+    let heights = db.outputs_heights(&txids);
+    let blocks = shared_state.blocks_from_heights(&heights).await?;
+
+    for (_, b) in blocks {
+        find_txs_with_prevout(b, &mut txids);
+    }
+
+    todo!()
+}
+
+fn find_txs_with_prevout(b: SerBlock, txids: &mut Vec<Txid>) {
+    struct TxContainingOutpoint<'a> {
+        txids: &'a mut Vec<Txid>,
+        found: bool,
+    }
+
+    impl<'a> Visitor for TxContainingOutpoint<'a> {
+        fn visit_tx_in(&mut self, vin: usize, tx_in: &bsl::TxIn) -> core::ops::ControlFlow<()> {
+            let txid = Txid::from_slice(tx_in.prevout().txid()).unwrap();
+            if self.txids.contains(&txid) {
+                self.found = true;
+            }
+            core::ops::ControlFlow::Continue(())
+        }
+
+        fn visit_transaction(
+            &mut self,
+            tx: &bitcoin_slices::bsl::Transaction,
+        ) -> core::ops::ControlFlow<()> {
+            if self.found {
+                self.txids.push(tx.txid().into());
+                self.found = false;
+            }
+            core::ops::ControlFlow::Continue(())
+        }
+    }
+    let mut visitor = TxContainingOutpoint {
+        txids,
+        found: false,
+    };
+    bsl::Block::visit(&b.0, &mut visitor).unwrap(); // TODO
+}
+
+/// Add txid to txids of transactions in block `b` containing `script_pubkey` in the outputs
+fn find_txs_with_script_pubkey(script_pubkey: &ScriptBuf, b: SerBlock, txids: &mut Vec<Txid>) {
+    struct TxContainingScript<'a> {
+        txids: &'a mut Vec<Txid>,
+        script_pubkey: &'a [u8],
+        found: bool,
+    }
+    impl<'a> Visitor for TxContainingScript<'a> {
+        fn visit_tx_out(&mut self, _vout: usize, tx_out: &bsl::TxOut) -> ControlFlow<()> {
+            if self.script_pubkey == tx_out.script_pubkey() {
+                self.found = true;
+            }
+            ControlFlow::Continue(())
+        }
+
+        fn visit_transaction(
+            &mut self,
+            tx: &bitcoin_slices::bsl::Transaction,
+        ) -> core::ops::ControlFlow<()> {
+            if self.found {
+                self.txids.push(tx.txid().into());
+                self.found = false;
+            }
+            core::ops::ControlFlow::Continue(())
+        }
+    }
+    let mut visitor = TxContainingScript {
+        txids,
+        script_pubkey: script_pubkey.as_bytes(),
+        found: false,
+    };
+    bsl::Block::visit(&b.0, &mut visitor).unwrap(); // TODO
+}
+
 async fn index_block(
     block: &Block,
     height: u32,
@@ -160,41 +256,12 @@ async fn index_block(
         .collect();
 
     // # spending script_hashes
-    let mut spending_sh: BTreeMap<OutPoint, u32> = BTreeMap::new();
-    for tx in block.txdata.iter() {
-        if tx.is_coin_base() {
-            continue;
-        }
-
-        for input in tx.input.iter() {
-            let outpoint = input.previous_output;
-            let txid = input.previous_output.txid;
-            let block_hash = match shared_state.tx_in_block.lock().await.get(&txid) {
-                Some(block_hash) => {
-                    txid_blockhash_hit_rate.hit += 1;
-                    *block_hash
-                }
-                None => {
-                    txid_blockhash_hit_rate.miss += 1;
-                    rpc::tx::call_json(txid).await?.block_hash.unwrap()
-                }
-            };
-            let height = match shared_state
-                .hash_to_height_time
-                .lock()
-                .await
-                .get(&block_hash)
-            {
-                Some(ht) => ht.height,
-                None => {
-                    log::error!("should never happen I haven't seen a prevout txid block height");
-                    rpc::block::call_json(block_hash).await?.height
-                }
-            };
-
-            spending_sh.insert(outpoint, height);
-        }
-    }
+    let spending_sh: BTreeSet<OutPoint> = block
+        .txdata
+        .iter()
+        .flat_map(|tx| tx.input.iter())
+        .map(|i| i.previous_output)
+        .collect();
 
     Ok(IndexBlockResult {
         block_hash,
@@ -262,7 +329,7 @@ async fn index_addresses(
     let mut already_indexed = 0;
     for height in 0..chain_info.blocks {
         let hash = rpc::blockhashbyheight::call(height as usize).await?;
-        let block = rpc::block::call_raw(hash.block_hash).await?;
+        let block = rpc::block::call(hash.block_hash).await?;
         let block_hash = block.block_hash();
         if db.is_block_hash_indexed(&block_hash) {
             already_indexed += 1;

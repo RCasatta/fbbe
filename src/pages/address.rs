@@ -1,7 +1,7 @@
 use std::{borrow::Cow, collections::HashMap, io::Cursor};
 
 use base64::Engine;
-use bitcoin::Address;
+use bitcoin::{Address, Txid};
 use maud::{html, Markup};
 use qr_code::QrCode;
 
@@ -16,7 +16,7 @@ pub fn page(
     address: &Address,
     parsed: &ParsedRequest,
     query: &Option<String>,
-    heights: Vec<u32>,
+    txids: Vec<Txid>,
 ) -> Result<Markup, Error> {
     use bitcoin::Network::*;
     let network = network();
@@ -75,7 +75,7 @@ pub fn page(
                 p { a href=(&address_qr_uri) { img class="qr" src=(create_bmp_base64_qr(&address_qr_uri)?); } }
             }
 
-            p { "heights:" (format!("{heights:?}")) }
+            p { "txids:" (format!("{txids:?}")) }
 
             table class="striped" {
                 tbody {

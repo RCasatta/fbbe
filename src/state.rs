@@ -10,6 +10,7 @@ use futures::prelude::*;
 use lru::LruCache;
 use tokio::sync::{Mutex, MutexGuard};
 
+use crate::rpc::block::SerBlock;
 use crate::{
     error::Error,
     network,
@@ -97,6 +98,20 @@ impl SharedState {
             }),
             minutes_since_block: Mutex::new(None),
         }
+    }
+
+    pub async fn blocks_from_heights(
+        &self,
+        heights: &[u32],
+    ) -> Result<Vec<(u32, SerBlock)>, Error> {
+        let mut res = vec![];
+        for h in heights {
+            if let Some(block_hash) = self.height_to_hash.lock().await.get(*h as usize) {
+                let block = rpc::block::call_raw(*block_hash).await?; // TODO use raw block SerBlock
+                res.push((*h, block))
+            }
+        }
+        Ok(res)
     }
 
     pub async fn height_time(&self, block_hash: BlockHash) -> Result<HeightTime, Error> {
@@ -290,12 +305,12 @@ pub fn tx_output(
     vout: u32,
     needs_script: bool,
 ) -> Result<bitcoin::TxOut, bitcoin_slices::Error> {
-    struct Res {
+    struct TxOutput {
         vout: u32,
         tx_out: bitcoin::TxOut,
         needs_script: bool,
     }
-    impl Visitor for Res {
+    impl Visitor for TxOutput {
         fn visit_tx_out(&mut self, vout: usize, tx_out: &bsl::TxOut) -> ControlFlow<()> {
             if self.vout == vout as u32 {
                 if self.needs_script {
@@ -311,7 +326,7 @@ pub fn tx_output(
             ControlFlow::Continue(())
         }
     }
-    let mut visitor = Res {
+    let mut visitor = TxOutput {
         vout,
         tx_out: bitcoin::TxOut::default(),
         needs_script,

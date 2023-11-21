@@ -38,7 +38,7 @@ pub async fn bootstrap_state(shared_state: Arc<SharedState>) -> Result<(), Error
         }
     }
     let current = shared_state.chain_info.lock().await.best_block_hash;
-    let block = rpc::block::call_raw(current).await?;
+    let block = rpc::block::call(current).await?;
     shared_state.update_cache(&block, None).await?;
 
     log::info!("bootstrap ending, headers ending at {}", height);
