@@ -105,6 +105,7 @@ impl SharedState {
         heights: &[u32],
     ) -> Result<Vec<(u32, SerBlock)>, Error> {
         let mut res = vec![];
+        // TODO cache some blocks
         for h in heights {
             if let Some(block_hash) = self.height_to_hash.lock().await.get(*h as usize) {
                 let block = rpc::block::call_raw(*block_hash).await?; // TODO use raw block SerBlock

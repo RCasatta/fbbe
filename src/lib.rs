@@ -156,6 +156,9 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
     let shared_state_mempool = shared_state.clone();
     let chain_info_chain = chain_info.clone();
 
+    let shared_state_addresses = shared_state.clone();
+    let db_clone = db.clone();
+
     #[allow(clippy::let_underscore_future)]
     let _ = tokio::spawn(async move {
         h.await.unwrap();
@@ -163,16 +166,14 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
         let _ = tokio::spawn(async move {
             update_chain_info_infallible(shared_state_chain, chain_info_chain).await
         });
-        update_mempool(shared_state_mempool).await
-    });
+        update_mempool(shared_state_mempool).await;
 
-    let shared_state_addresses = shared_state.clone();
-    let db_clone = db.clone();
-    if let Some(db) = db_clone {
-        let _ = tokio::spawn(async move {
-            index_addresses_infallible(db.clone(), chain_info, shared_state_addresses).await
-        });
-    }
+        if let Some(db) = db_clone {
+            let _ = tokio::spawn(async move {
+                index_addresses_infallible(db.clone(), shared_state_addresses).await
+            });
+        }
+    });
 
     let make_service = make_service_fn(move |_| {
         let shared_state = shared_state.clone();
