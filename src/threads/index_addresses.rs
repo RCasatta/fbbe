@@ -1,10 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet},
-    fmt::Display,
-    hash::Hasher,
-    ops::ControlFlow,
-    path::Path,
-    sync::Arc,
+    collections::BTreeSet, fmt::Display, hash::Hasher, ops::ControlFlow, path::Path, sync::Arc,
 };
 
 use bitcoin::{hashes::Hash, Address, Block, BlockHash, OutPoint, Script, ScriptBuf, Txid};
@@ -141,7 +136,6 @@ impl Database {
 pub struct IndexBlockResult {
     block_hash: BlockHash,
     height: Height,
-    txid_blockhash_hit_rate: HitRate,
 
     funding_sh: BTreeSet<ScriptHash>,
     spending_sh: BTreeSet<OutPoint>,
@@ -237,15 +231,8 @@ fn find_txs_with_script_pubkey(script_pubkey: &ScriptBuf, b: SerBlock, txids: &m
     bsl::Block::visit(&b.0, &mut visitor).unwrap(); // TODO
 }
 
-async fn index_block(
-    block: &Block,
-    height: u32,
-    shared_state: Arc<SharedState>,
-) -> Result<IndexBlockResult, crate::Error> {
+fn index_block(block: &Block, height: u32) -> Result<IndexBlockResult, crate::Error> {
     let block_hash = block.block_hash();
-    let mut txid_blockhash_hit_rate = HitRate::default();
-
-    shared_state.update_cache(block, Some(height)).await?;
 
     // # funding script_hashes, script_pubkeys in outputs
     let funding_sh: BTreeSet<ScriptHash> = block
@@ -266,7 +253,6 @@ async fn index_block(
     Ok(IndexBlockResult {
         block_hash,
         height,
-        txid_blockhash_hit_rate,
         funding_sh,
         spending_sh,
     })
@@ -324,26 +310,23 @@ async fn index_addresses(
 ) -> Result<(), Error> {
     log::info!("Starting index_addresses");
 
-    let mut txid_blockhash_total_hit_rate = HitRate::default();
-
     let mut already_indexed = 0;
     for height in 0..chain_info.blocks {
         let hash = rpc::blockhashbyheight::call(height as usize).await?;
         let block = rpc::block::call(hash.block_hash).await?;
         let block_hash = block.block_hash();
         if db.is_block_hash_indexed(&block_hash) {
+            // TODO load all already indexed instead and avoid the block rpc::block::call
             already_indexed += 1;
         } else {
-            let index_res = index_block(&block, height, shared_state.clone()).await?;
-            txid_blockhash_total_hit_rate =
-                txid_blockhash_total_hit_rate + &index_res.txid_blockhash_hit_rate;
+            shared_state.update_cache(&block, Some(height)).await?;
+
+            let index_res = index_block(&block, height)?;
             let db = db.clone();
             tokio::spawn(async move { db.write_hashes(index_res) });
         }
         if height % 10_000 == 0 {
-            log::info!(
-                "indexed block {height} txid_bh({txid_blockhash_total_hit_rate}) already_indexed:{already_indexed}"
-            )
+            log::info!("indexed block {height} already_indexed:{already_indexed}")
         }
     }
     Ok(())
