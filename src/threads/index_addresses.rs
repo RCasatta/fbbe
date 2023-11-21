@@ -1,5 +1,6 @@
 use std::{
     collections::{BTreeSet, HashSet},
+    f64::consts::E,
     fmt::Display,
     hash::Hasher,
     ops::ControlFlow,
@@ -381,10 +382,15 @@ async fn index_addresses(db: Arc<Database>, shared_state: Arc<SharedState>) -> R
             log::info!("indexed block {height} ")
         }
 
-        let block = rpc::block::call(block_hash).await?;
-
-        // shared_state.update_cache(&block, Some(height)).await?;
-
+        let block = loop {
+            match rpc::block::call(block_hash).await {
+                Ok(block) => break block,
+                Err(e) => {
+                    log::warn!("Cannot download block: {block_hash} {e}");
+                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await
+                }
+            }
+        };
         let index_res = index_block(&block, height)?;
         let db = db.clone();
         tokio::spawn(async move { db.write_hashes(index_res) });
