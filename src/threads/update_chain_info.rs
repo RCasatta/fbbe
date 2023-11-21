@@ -4,15 +4,19 @@ use crate::error::Error;
 use crate::rpc;
 use crate::rpc::chaininfo::ChainInfo;
 use crate::state::SharedState;
+use crate::threads::index_addresses::index_block;
 use bitcoin::hashes::Hash;
 use bitcoin::BlockHash;
 use tokio::time::sleep;
 
+use super::index_addresses::Database;
+
 pub(crate) async fn update_chain_info_infallible(
     shared_state: Arc<SharedState>,
     initial_chain_info: ChainInfo,
+    db: Option<Arc<Database>>,
 ) {
-    if let Err(e) = update_chain_info(shared_state, initial_chain_info).await {
+    if let Err(e) = update_chain_info(shared_state, initial_chain_info, db).await {
         log::error!("{:?}", e);
     }
 }
@@ -20,6 +24,7 @@ pub(crate) async fn update_chain_info_infallible(
 async fn update_chain_info(
     shared_state: Arc<SharedState>,
     initial_chain_info: ChainInfo,
+    db: Option<Arc<Database>>,
 ) -> Result<(), Error> {
     log::info!("Starting update_chain_info");
 
@@ -40,12 +45,17 @@ async fn update_chain_info(
 
                     loop {
                         log::info!("asking {last_block_hash}");
-                        let last_block = rpc::block::call(last_block_hash).await?;
+                        let last_block = rpc::block::call(last_block_hash).await?; // TODO in index_addresses this call failed
                         let prev_blockhash = last_block.header.prev_blockhash;
 
                         shared_state
                             .update_cache(&last_block, Some(last_height))
                             .await?;
+
+                        if let Some(db) = db.as_ref() {
+                            let index_res = index_block(&last_block, last_height)?;
+                            db.write_hashes(index_res);
+                        }
 
                         match shared_state
                             .hash_to_height_time

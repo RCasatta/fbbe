@@ -1,6 +1,5 @@
 use std::{
     collections::{BTreeSet, HashSet},
-    f64::consts::E,
     fmt::Display,
     hash::Hasher,
     ops::ControlFlow,
@@ -92,6 +91,13 @@ impl Database {
             result.insert(BlockHash::from_slice(&el[..]).unwrap());
         }
         result
+    }
+
+    fn is_block_hash_indexed(&self, block_hash: &BlockHash) -> bool {
+        self.db
+            .get_pinned_cf(self.block_hash_cf(), block_hash)
+            .unwrap()
+            .is_some()
     }
 
     pub fn script_hash_heights(&self, script_pubkey: &Script) -> Vec<Height> {
@@ -288,7 +294,7 @@ fn find_outpoints_with_script_pubkey(script_pubkey: &ScriptBuf, b: SerBlock) -> 
     visitor.outpoints
 }
 
-fn index_block(block: &Block, height: u32) -> Result<IndexBlockResult, crate::Error> {
+pub fn index_block(block: &Block, height: u32) -> Result<IndexBlockResult, crate::Error> {
     let block_hash = block.block_hash();
 
     // # funding script_hashes, script_pubkeys in outputs
@@ -369,13 +375,14 @@ async fn index_addresses(db: Arc<Database>, shared_state: Arc<SharedState>) -> R
             .await
             .get(height as usize)
         {
-            Some(hash) => *hash,
-            None => {
+            Some(hash) if *hash != BlockHash::all_zeros() => *hash,
+            _ => {
                 log::info!("stopping initial block indexing");
                 break;
             }
         };
-        if indexed_block_hash.contains(&block_hash) {
+        if indexed_block_hash.contains(&block_hash) || db.is_block_hash_indexed(&block_hash) {
+            // there are 2 checks because the first is fast the second is fresher
             continue;
         }
         if height % 5_000 == 0 {

@@ -162,9 +162,10 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
     #[allow(clippy::let_underscore_future)]
     let _ = tokio::spawn(async move {
         h.await.unwrap();
+        let db_clone2 = db_clone.clone();
         #[allow(clippy::let_underscore_future)]
         let _ = tokio::spawn(async move {
-            update_chain_info_infallible(shared_state_chain, chain_info_chain).await
+            update_chain_info_infallible(shared_state_chain, chain_info_chain, db_clone2).await
         });
 
         if let Some(db) = db_clone {
