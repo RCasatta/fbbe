@@ -361,10 +361,18 @@ async fn index_addresses(db: Arc<Database>, shared_state: Arc<SharedState>) -> R
     let mut already_indexed = 0;
 
     let indexed_block_hash = db.indexed_block_hash();
-    let height_to_hash = shared_state.height_to_hash.lock().await.clone();
 
     for height in 0.. {
-        let block_hash = match height_to_hash.get(height as usize) {
+        if height % 10_000 == 0 {
+            log::info!("indexed block {height} already_indexed:{already_indexed}")
+        }
+
+        let block_hash = match shared_state
+            .height_to_hash
+            .lock()
+            .await
+            .get(height as usize)
+        {
             Some(hash) => *hash,
             None => break,
         };
@@ -374,15 +382,11 @@ async fn index_addresses(db: Arc<Database>, shared_state: Arc<SharedState>) -> R
         }
         let block = rpc::block::call(block_hash).await?;
 
-        shared_state.update_cache(&block, Some(height)).await?;
+        // shared_state.update_cache(&block, Some(height)).await?;
 
         let index_res = index_block(&block, height)?;
         let db = db.clone();
         tokio::spawn(async move { db.write_hashes(index_res) });
-
-        if height % 10_000 == 0 {
-            log::info!("indexed block {height} already_indexed:{already_indexed}")
-        }
     }
     Ok(())
 }
