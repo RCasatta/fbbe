@@ -358,15 +358,10 @@ impl Display for HitRate {
 async fn index_addresses(db: Arc<Database>, shared_state: Arc<SharedState>) -> Result<(), Error> {
     log::info!("Starting index_addresses");
 
-    let mut already_indexed = 0;
-
     let indexed_block_hash = db.indexed_block_hash();
+    log::info!("already_indexed:{}", indexed_block_hash.len());
 
     for height in 0.. {
-        if height % 10_000 == 0 {
-            log::info!("indexed block {height} already_indexed:{already_indexed}")
-        }
-
         let block_hash = match shared_state
             .height_to_hash
             .lock()
@@ -374,12 +369,18 @@ async fn index_addresses(db: Arc<Database>, shared_state: Arc<SharedState>) -> R
             .get(height as usize)
         {
             Some(hash) => *hash,
-            None => break,
+            None => {
+                log::info!("stopping initial block indexing");
+                break;
+            }
         };
         if indexed_block_hash.contains(&block_hash) {
-            already_indexed += 1;
             continue;
         }
+        if height % 5_000 == 0 {
+            log::info!("indexed block {height} ")
+        }
+
         let block = rpc::block::call(block_hash).await?;
 
         // shared_state.update_cache(&block, Some(height)).await?;
