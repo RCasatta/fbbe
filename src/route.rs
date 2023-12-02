@@ -309,12 +309,13 @@ pub async fn route(
                 };
                 let page =
                     pages::address::page(address, &parsed_req, query, address_seen)?.into_string();
+                let builder = Response::builder().header(CACHE_CONTROL, "public, max-age=60");
 
                 match parsed_req.response_type {
-                    ResponseType::Text(col) => Response::builder()
+                    ResponseType::Text(col) => builder
                         .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
                         .body(pages::address::text_page(address, &page, col)?.into())?,
-                    ResponseType::Html => Response::builder()
+                    ResponseType::Html => builder
                         .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
                         .body(page.into())?,
                     ResponseType::Bytes => {
