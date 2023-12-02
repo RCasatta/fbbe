@@ -61,7 +61,7 @@ pub fn page(
             }
 
             @if !parsed.response_type.is_text() {
-                p { a href=(&address_qr_uri) { img class="qr" src=(create_bmp_base64_qr(&address_qr_uri)?); } }
+                p { a href=(&address_qr_uri) { img class="qr" alt="The QR-code of the bitcoin address" src=(create_bmp_base64_qr(&address_qr_uri)?); } }
             }
 
             table class="striped" {
