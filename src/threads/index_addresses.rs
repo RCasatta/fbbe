@@ -102,11 +102,13 @@ impl Database {
 
     pub fn script_hash_heights(&self, script_pubkey: &Script) -> Vec<Height> {
         let script_hash = script_hash(script_pubkey).to_be_bytes();
+        let mut starting = script_hash.to_vec();
+        starting.extend(&[0xff; 4]);
         let mut result = vec![];
 
         for el in self.db.iterator_cf(
             self.funding_cf(),
-            rocksdb::IteratorMode::From(&script_hash[..], rocksdb::Direction::Forward),
+            rocksdb::IteratorMode::From(&starting[..], rocksdb::Direction::Reverse),
         ) {
             let el = el.unwrap().0;
             if el.starts_with(&script_hash) {
@@ -114,6 +116,10 @@ impl Database {
                 dbg!(height);
                 result.push(height);
             } else {
+                break;
+            }
+            if result.len() > 9 {
+                // TODO paging
                 break;
             }
         }

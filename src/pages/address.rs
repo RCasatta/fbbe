@@ -16,7 +16,7 @@ pub fn page(
     address: &Address,
     parsed: &ParsedRequest,
     query: &Option<String>,
-    txids: Vec<AddressSeen>,
+    address_seen: Vec<AddressSeen>,
 ) -> Result<Markup, Error> {
     let address_type = address
         .address_type()
@@ -42,14 +42,14 @@ pub fn page(
     };
 
     let script_pubkey = address.script_pubkey();
-    let txids_len = txids.len();
+    let txids_len = address_seen.len();
 
     // TODO the spent part
     //  eg 1 transaction output (1 spent)
     //  eg 1 transaction output
     //  eg 3 transaction outputs (1 spent)
 
-    // TODO add @ time after Funding/Spending
+    // TODO add truncated at the end
 
     // TODO paging to most recent 10 funding
 
@@ -79,16 +79,24 @@ pub fn page(
 
             hgroup {
                 h2 { (txids_len) " transaction output" @if txids_len == 1 { "" } @else { "s" }  }
-                p { "only confirmed" }
+                p { "only confirmed, most recent funding first" }
             }
 
             table class="striped" {
                 tbody {
-                    @for txid in txids {
+                    @for txid in address_seen {
                         tr {
                             td {
                                 (txid)
                             }
+                        }
+                    }
+                }
+                @if txids_len == 10 {
+                    tfoot {
+                        tr {
+                            td { "more results truncated"  }
+
                         }
                     }
                 }
