@@ -26,7 +26,7 @@ browse: `http://localhost:3000/`
 After changing `custom.css` use a minifier:
 
 ```
-yui-compressor custom.css > custom.min.css
+yui-compressor custom.css > custom.min.css.rs
 ```
 
 ## Docker

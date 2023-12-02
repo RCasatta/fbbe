@@ -1,4 +1,5 @@
 mod address;
+mod address_seen;
 mod amount_row;
 mod block_hash;
 mod human_bytes;
@@ -7,6 +8,7 @@ mod outpoint;
 mod plural;
 mod script;
 mod size_row;
+mod spending;
 mod txid;
 mod witness;
 

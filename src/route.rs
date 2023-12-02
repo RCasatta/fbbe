@@ -6,7 +6,7 @@ use crate::{
     req::{self, Resource},
     rpc,
     state::tx_output,
-    threads::index_addresses::{txids_with_address, Database},
+    threads::index_addresses::{address_seen, Database},
     NetworkExt, SharedState,
 };
 use bitcoin::{consensus::deserialize, hashes::Hash};
@@ -302,12 +302,13 @@ pub async fn route(
                     fbbe: network(),
                 });
             } else {
-                let txids = if let Some(db) = db {
-                    txids_with_address(address, db, state).await?
+                let address_seen = if let Some(db) = db {
+                    address_seen(address, db, state.clone()).await?
                 } else {
                     vec![]
                 };
-                let page = pages::address::page(address, &parsed_req, query, txids)?.into_string();
+                let page =
+                    pages::address::page(address, &parsed_req, query, address_seen)?.into_string();
 
                 match parsed_req.response_type {
                     ResponseType::Text(col) => Response::builder()

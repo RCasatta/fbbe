@@ -64,7 +64,7 @@ impl BlockheaderJson {
     }
 }
 
-#[derive(Deserialize, Debug, Clone, Copy)]
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HeightTime {
     pub height: u32,
     pub time: u32,

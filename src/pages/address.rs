@@ -1,13 +1,13 @@
-use std::{borrow::Cow, collections::HashMap, io::Cursor};
+use std::{collections::HashMap, io::Cursor};
 
 use base64::Engine;
-use bitcoin::{Address, Txid};
+use bitcoin::Address;
 use maud::{html, Markup};
 use qr_code::QrCode;
 
 use crate::{
-    error::Error, globals::network, render::Html, req::ParsedRequest,
-    route::convert_text_html_string,
+    error::Error, render::Html, req::ParsedRequest, route::convert_text_html_string,
+    threads::index_addresses::AddressSeen,
 };
 
 use super::html_page;
@@ -16,29 +16,8 @@ pub fn page(
     address: &Address,
     parsed: &ParsedRequest,
     query: &Option<String>,
-    txids: Vec<Txid>,
+    txids: Vec<AddressSeen>,
 ) -> Result<Markup, Error> {
-    use bitcoin::Network::*;
-    let network = network();
-    let network_path = match network {
-        Bitcoin => "",
-        Testnet => "testnet/",
-        Signet => "signet/",
-        Regtest => "regtest/",
-        _ => panic!("non existing network"),
-    };
-    let mempool = match network {
-        Bitcoin | Testnet | Signet => Some(format!(
-            "https://mempool.space/{network_path}address/{address}"
-        )),
-        _ => None,
-    };
-    let blockstream = match network {
-        Bitcoin | Testnet => Some(format!(
-            "https://blockstream.info/{network_path}address/{address}"
-        )),
-        _ => None,
-    };
     let address_type = address
         .address_type()
         .map(|t| t.to_string())
@@ -63,6 +42,16 @@ pub fn page(
     };
 
     let script_pubkey = address.script_pubkey();
+    let txids_len = txids.len();
+
+    // TODO the spent part
+    //  eg 1 transaction output (1 spent)
+    //  eg 1 transaction output
+    //  eg 3 transaction outputs (1 spent)
+
+    // TODO add @ time after Funding/Spending
+
+    // TODO paging to most recent 10 funding
 
     let content = html! {
         section {
@@ -74,8 +63,6 @@ pub fn page(
             @if !parsed.response_type.is_text() {
                 p { a href=(&address_qr_uri) { img class="qr" src=(create_bmp_base64_qr(&address_qr_uri)?); } }
             }
-
-            p { "txids:" (format!("{txids:?}")) }
 
             table class="striped" {
                 tbody {
@@ -91,39 +78,21 @@ pub fn page(
             }
 
             hgroup {
-                h1 { "URI" }
-                p  { "Update QR code data" }
+                h2 { (txids_len) " transaction output" @if txids_len == 1 { "" } @else { "s" }  }
+                p { "only confirmed" }
             }
 
-            form method="get" {
-                label for="amount" { "Amount" }
-                input id="amount" name="amount" value=(params.get("amount").unwrap_or(&Cow::Borrowed("")));
-                label for="label" { "Label" }
-                input id="label" name="label" value=(params.get("label").unwrap_or(&Cow::Borrowed("")));
-                label for="message" { "Message" }
-                input id="message" name="message" value=(params.get("message").unwrap_or(&Cow::Borrowed("")));
-                label for="lightning" { "Lightning" }
-                input id="lightning" name="lightning" value=(params.get("lightning").unwrap_or(&Cow::Borrowed("")));
-
-                input type="submit" value="Submit";
-            }
-
-            @if !parsed.response_type.is_text() && (mempool.is_some() || blockstream.is_some()) {
-                p {
-                    "This explorer doesn't index addresses. Check the following explorers:"
-
-                    ul {
-                        @if let Some(mempool) = mempool {
-                            li { a href=(mempool) { "mempool.space" } }
+            table class="striped" {
+                tbody {
+                    @for txid in txids {
+                        tr {
+                            td {
+                                (txid)
+                            }
                         }
-                        @if let Some(blockstream) = blockstream {
-                            li { a href=(blockstream) { "blockstream.info" } }
-                        }
-
                     }
                 }
             }
-
         }
     };
 

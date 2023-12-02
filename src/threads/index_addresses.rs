@@ -14,7 +14,7 @@ use rocksdb::{ColumnFamily, ColumnFamilyDescriptor, Options, WriteBatch, DB};
 
 use crate::{
     error::Error,
-    rpc::{self, block::SerBlock},
+    rpc::{self, block::SerBlock, headers::HeightTime},
     state::SharedState,
 };
 
@@ -22,7 +22,7 @@ use crate::{
 struct ScriptHashHeight([u8; 12]);
 
 type ScriptHash = u64;
-type Height = u32;
+pub type Height = u32;
 
 fn script_hash(script: &Script) -> ScriptHash {
     let mut hasher = FxHasher64::default();
@@ -101,7 +101,7 @@ impl Database {
     }
 
     pub fn script_hash_heights(&self, script_pubkey: &Script) -> Vec<Height> {
-        let script_hash = script_hash(script_pubkey).to_le_bytes();
+        let script_hash = script_hash(script_pubkey).to_be_bytes();
         let mut result = vec![];
 
         for el in self.db.iterator_cf(
@@ -110,7 +110,9 @@ impl Database {
         ) {
             let el = el.unwrap().0;
             if el.starts_with(&script_hash) {
-                result.push(u32::from_le_bytes(el[8..].try_into().unwrap()));
+                let height = u32::from_be_bytes(el[8..].try_into().unwrap());
+                dbg!(height);
+                result.push(height);
             } else {
                 break;
             }
@@ -133,7 +135,7 @@ impl Database {
             .unwrap();
 
         if &key[..8] == &searched_key_start[..] {
-            Some(u32::from_le_bytes((&key[8..]).try_into().unwrap()))
+            Some(u32::from_be_bytes((&key[8..]).try_into().unwrap()))
         } else {
             None
         }
@@ -146,12 +148,12 @@ impl Database {
 
     pub fn write_hashes(&self, index_res: IndexBlockResult) {
         let mut batch = WriteBatch::default();
-        let height_bytes = index_res.height.to_le_bytes();
+        let height_bytes = index_res.height.to_be_bytes();
 
         let mut buffer = vec![];
         for script_hash in index_res.funding_sh {
             buffer.clear();
-            buffer.extend(script_hash.to_le_bytes());
+            buffer.extend(script_hash.to_be_bytes());
             buffer.extend(&height_bytes[..]);
             batch.put_cf(self.funding_cf(), &buffer, &[]);
         }
@@ -169,12 +171,12 @@ impl Database {
 }
 
 fn outpoint_hash(out_point: &OutPoint) -> u64 {
-    u64::from_le_bytes((&out_point.txid[..8]).try_into().unwrap())
+    u64::from_be_bytes((&out_point.txid[..8]).try_into().unwrap())
 }
 fn outpoint_to_key(out_point: &OutPoint, buffer: &mut Vec<u8>) {
     let mut val = outpoint_hash(out_point);
     val += out_point.vout as u64;
-    buffer.extend(val.to_le_bytes());
+    buffer.extend(val.to_be_bytes());
 }
 fn outpoint_to_key_vec(out_point: &OutPoint) -> Vec<u8> {
     let mut vec = Vec::with_capacity(8);
@@ -189,21 +191,65 @@ pub struct IndexBlockResult {
     spending_sh: BTreeSet<OutPoint>,
 }
 
-pub async fn txids_with_address(
+#[derive(PartialEq, Eq, Debug)]
+pub struct AddressSeen {
+    pub funding: Funding,
+    pub spending: Option<Spending>,
+}
+
+#[derive(PartialEq, Eq, Debug)]
+pub struct Funding {
+    pub out_point: OutPoint,
+    pub block_hash: BlockHash,
+    pub height_time: HeightTime,
+}
+
+impl AddressSeen {
+    pub fn new(out_point: OutPoint, block_hash: BlockHash, height_time: HeightTime) -> Self {
+        Self {
+            funding: Funding {
+                out_point,
+                block_hash,
+                height_time,
+            },
+            spending: None,
+        }
+    }
+}
+
+#[derive(PartialEq, Eq, Debug)]
+pub struct Spending {
+    pub txid: Txid,
+    pub vin: usize,
+    pub block_hash: BlockHash,
+    pub height_time: HeightTime,
+}
+
+pub async fn address_seen(
     address: &Address,
     db: Arc<Database>,
     shared_state: Arc<SharedState>,
-) -> Result<Vec<Txid>, Error> {
+) -> Result<Vec<AddressSeen>, Error> {
     let script_pubkey = address.script_pubkey();
     let heights = db.script_hash_heights(&script_pubkey);
     let blocks = shared_state.blocks_from_heights(&heights).await?;
     let mut outpoints_with_script_pubkey = vec![];
-    for (_, b) in blocks {
-        outpoints_with_script_pubkey.extend(find_outpoints_with_script_pubkey(&script_pubkey, b));
+    for (h, b) in blocks {
+        let t = *shared_state
+            .hash_to_height_time
+            .lock()
+            .await
+            .get(&h)
+            .unwrap();
+        outpoints_with_script_pubkey.extend(
+            find_outpoints_with_script_pubkey(&script_pubkey, b)
+                .into_iter()
+                .map(|e| (h, e, t)),
+        );
     }
 
     let mut heights_with_spending = vec![];
-    for outpoint in outpoints_with_script_pubkey.iter() {
+    for (_, outpoint, _) in outpoints_with_script_pubkey.iter() {
         if let Some(h) = db.get_spending(outpoint) {
             heights_with_spending.push(h);
         }
@@ -211,27 +257,43 @@ pub async fn txids_with_address(
     let blocks = shared_state
         .blocks_from_heights(&heights_with_spending)
         .await?;
-    let mut txids: Vec<_> = outpoints_with_script_pubkey
-        .iter()
-        .map(|o| o.txid)
+    let mut address_seen: Vec<_> = outpoints_with_script_pubkey
+        .into_iter()
+        .map(|(h, o, t)| AddressSeen::new(o, h, t))
         .collect();
-    for (_, b) in blocks {
-        txids.extend(find_txids_with_prevout(b, &outpoints_with_script_pubkey));
+    for (h, b) in blocks {
+        let t = *shared_state
+            .hash_to_height_time
+            .lock()
+            .await
+            .get(&h)
+            .unwrap();
+        find_txids_with_prevout(h, b, t, &mut address_seen);
     }
 
-    Ok(txids)
+    Ok(address_seen)
 }
-fn find_txids_with_prevout(b: SerBlock, outpoints: &[OutPoint]) -> Vec<Txid> {
+fn find_txids_with_prevout(
+    h: BlockHash,
+    b: SerBlock,
+    t: HeightTime,
+    address_seen: &mut Vec<AddressSeen>,
+) {
     struct TxidContainingOutpoint<'a> {
-        outpoints: &'a [OutPoint],
-        found: bool,
-        result: Vec<Txid>,
+        address_seen: &'a mut Vec<AddressSeen>,
+        found: Option<(usize, usize)>,
+        block_hash: BlockHash,
+        height_time: HeightTime,
     }
 
     impl<'a> Visitor for TxidContainingOutpoint<'a> {
-        fn visit_tx_in(&mut self, _vin: usize, tx_in: &bsl::TxIn) -> core::ops::ControlFlow<()> {
-            if self.outpoints.contains(&tx_in.prevout().into()) {
-                self.found = true;
+        fn visit_tx_in(&mut self, vin: usize, tx_in: &bsl::TxIn) -> core::ops::ControlFlow<()> {
+            let current = tx_in.prevout().into();
+            for (i, seen) in self.address_seen.iter().enumerate() {
+                if seen.funding.out_point == current {
+                    self.found = Some((i, vin));
+                    break;
+                }
             }
             core::ops::ControlFlow::Continue(())
         }
@@ -240,20 +302,24 @@ fn find_txids_with_prevout(b: SerBlock, outpoints: &[OutPoint]) -> Vec<Txid> {
             &mut self,
             tx: &bitcoin_slices::bsl::Transaction,
         ) -> core::ops::ControlFlow<()> {
-            if self.found {
-                self.result.push(tx.txid().into());
-                self.found = false;
+            if let Some((i, vin)) = self.found.take() {
+                self.address_seen.get_mut(i).unwrap().spending = Some(Spending {
+                    txid: tx.txid().into(),
+                    vin: vin,
+                    block_hash: self.block_hash,
+                    height_time: self.height_time,
+                });
             }
             core::ops::ControlFlow::Continue(())
         }
     }
     let mut visitor = TxidContainingOutpoint {
-        outpoints,
-        found: false,
-        result: vec![],
+        address_seen,
+        found: None,
+        block_hash: h,
+        height_time: t,
     };
     bsl::Block::visit(&b.0, &mut visitor).unwrap();
-    visitor.result
 }
 
 /// Add txid to txids of transactions in block `b` containing `script_pubkey` in the outputs
@@ -411,5 +477,19 @@ mod test {
     fn test_endianness() {
         let value = 1u64;
         assert_eq!(value.to_ne_bytes(), value.to_le_bytes());
+    }
+
+    #[test]
+    fn test_endianness_ordering() {
+        let expected: Vec<_> = (0u32..1000).collect();
+        let mut v: Vec<_> = expected.iter().rev().map(|e| e.to_be_bytes()).collect();
+        v.sort();
+        let sorted_v: Vec<_> = v.into_iter().map(|e| u32::from_be_bytes(e)).collect();
+        assert_eq!(expected, sorted_v);
+
+        let mut v: Vec<_> = (0u32..1000).rev().map(|e| e.to_le_bytes()).collect();
+        v.sort();
+        let sorted_v: Vec<_> = v.into_iter().map(|e| u32::from_le_bytes(e)).collect();
+        assert_ne!(expected, sorted_v, "little endian bytes sort");
     }
 }

@@ -42,6 +42,9 @@ code .script {
     color: var(--pico-code-attr);
 }
 
+code .vin {
+    color: var(--pico-code-attr);
+}
 
 code .wit0 {
     color: var(--pico-code-attr);
