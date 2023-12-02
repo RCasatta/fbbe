@@ -113,7 +113,6 @@ impl Database {
             let el = el.unwrap().0;
             if el.starts_with(&script_hash) {
                 let height = u32::from_be_bytes(el[8..].try_into().unwrap());
-                dbg!(height);
                 result.push(height);
             } else {
                 break;
@@ -255,7 +254,8 @@ pub async fn address_seen(
     }
 
     let mut heights_with_spending = vec![];
-    for (_, outpoint, _) in outpoints_with_script_pubkey.iter() {
+    for (_, outpoint, _) in outpoints_with_script_pubkey.iter().take(10) {
+        //TODO handle pagination?
         if let Some(h) = db.get_spending(outpoint) {
             heights_with_spending.push(h);
         }

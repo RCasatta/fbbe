@@ -92,10 +92,10 @@ pub fn page(
                         }
                     }
                 }
-                @if txids_len == 10 {
+                @if txids_len > 9 {
                     tfoot {
                         tr {
-                            td { "more results truncated"  }
+                            td { "possibly truncated"  }
 
                         }
                     }

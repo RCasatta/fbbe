@@ -24,7 +24,6 @@ pub async fn info() -> Result<MempoolInfo, Error> {
 #[derive(Deserialize)]
 pub struct Empty {}
 
-// TODO add verbose=false with bitcoin 0.25
 // curl -s http://localhost:8332/rest/mempool/contents.json?verbose=false | jq
 pub async fn content(support_verbose: bool) -> Result<HashSet<Txid>, Error> {
     let client = CLIENT.clone();
