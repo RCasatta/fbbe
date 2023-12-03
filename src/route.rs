@@ -6,12 +6,16 @@ use crate::{
     req::{self, Resource},
     rpc,
     state::tx_output,
-    threads::index_addresses::{address_seen, Database},
+    threads::index_addresses::{address_seen, Database, Height},
     NetworkExt, SharedState,
 };
-use bitcoin::{consensus::deserialize, hashes::Hash};
 use bitcoin::{consensus::serialize, Network, OutPoint, TxOut, Txid};
+use bitcoin::{
+    consensus::{deserialize, Encodable},
+    hashes::Hash,
+};
 use bitcoin_private::hex::exts::DisplayHex;
+use bitcoin_slices::{bsl, Visit, Visitor};
 use hyper::{
     body::Bytes,
     header::{CACHE_CONTROL, CONTENT_TYPE, IF_MODIFIED_SINCE, LAST_MODIFIED, LOCATION},
@@ -166,10 +170,12 @@ pub async fn route(
             let prevouts = fetch_prevouts(&tx, &state, false).await?;
             let current_tip = state.chain_info.lock().await.clone();
             let mempool_fees = state.mempool_fees.lock().await.clone();
+            let output_spent_height = output_spent_height(db, txid, tx.output.len());
             let page = pages::tx::page(
                 &tx,
                 ts,
                 &prevouts,
+                output_spent_height,
                 pagination,
                 mempool_fees,
                 &parsed_req,
@@ -198,22 +204,49 @@ pub async fn route(
             }
         }
 
-        Resource::TxOut(txid, vout) => match rpc::txout::call(txid, vout).await {
-            Ok(tx) => {
-                let outpoint = OutPoint::new(txid, vout);
-                let page = pages::txout::page(&tx, outpoint, &parsed_req).into_string();
-                let cache_seconds = if tx.utxos.is_empty() {
-                    60 * 60 * 24 * 30 // one month
-                } else {
-                    5
-                };
-                Response::builder()
-                    .header(CONTENT_TYPE, "text/html; charset=utf-8")
-                    .header(CACHE_CONTROL, format!("public, max-age={cache_seconds}"))
-                    .body(page.into())?
+        Resource::TxOut(outpoint, height) => {
+            let b = state.blocks_from_heights(&[height]).await?;
+            struct FindTxByOutpointSpent(Vec<u8>, Option<Txid>);
+            impl Visitor for FindTxByOutpointSpent {
+                fn visit_transaction(
+                    &mut self,
+                    tx: &bsl::Transaction,
+                ) -> core::ops::ControlFlow<()> {
+                    if let Some(txid) = self.1.as_mut() {
+                        *txid = tx.txid().into();
+                        core::ops::ControlFlow::Break(())
+                    } else {
+                        core::ops::ControlFlow::Continue(())
+                    }
+                }
+
+                fn visit_tx_in(
+                    &mut self,
+                    _vin: usize,
+                    tx_in: &bsl::TxIn,
+                ) -> core::ops::ControlFlow<()> {
+                    if tx_in.prevout().as_ref() == &self.0[..] {
+                        self.1 = Some(Txid::all_zeros());
+                    }
+                    core::ops::ControlFlow::Continue(())
+                }
             }
-            Err(e) => return Err(e),
-        },
+            let mut vec = Vec::with_capacity(36);
+            outpoint.consensus_encode(&mut vec).unwrap();
+            let mut visitor = FindTxByOutpointSpent(vec, None);
+            match bsl::Block::visit(&b[0].1 .0, &mut visitor) {
+                Ok(_) | Err(bitcoin_slices::Error::VisitBreak) => (),
+                Err(_) => return Err(Error::NotFound), // TODO
+            }
+            // TODO add input number link
+
+            let txid = visitor.1.unwrap(); // TODO remove unwrap
+            let network = network().as_url_path();
+            Response::builder()
+                .header(LOCATION, format!("{network}t/{txid}"))
+                .status(StatusCode::TEMPORARY_REDIRECT)
+                .body(Body::empty())?
+        }
 
         Resource::SearchHeight(height) => {
             let hash = state.hash(height).await?;
@@ -349,8 +382,19 @@ pub async fn route(
         Resource::FullTx(ref tx) => {
             let mempool_fees = state.mempool_fees.lock().await.clone();
             let prevouts = fetch_prevouts(tx, &state, true).await?;
-            let page = pages::tx::page(tx, None, &prevouts, 0, mempool_fees, &parsed_req, true)?
-                .into_string();
+            let output_spent_height = output_spent_height(db, tx.txid(), tx.output.len());
+
+            let page = pages::tx::page(
+                tx,
+                None,
+                &prevouts,
+                output_spent_height,
+                0,
+                mempool_fees,
+                &parsed_req,
+                true,
+            )?
+            .into_string();
             let builder = Response::builder().header(CACHE_CONTROL, "public, max-age=3600");
 
             match parsed_req.response_type {
@@ -370,6 +414,21 @@ pub async fn route(
     log::debug!("{:?} executed in {:?}", req.uri(), now.elapsed());
 
     Ok(resp)
+}
+
+fn output_spent_height(db: Option<Arc<Database>>, txid: Txid, len: usize) -> Vec<Option<Height>> {
+    let mut result = vec![None; len];
+    if let Some(db) = db {
+        for i in 0..len {
+            // TODO use iteration
+            let outpoint = OutPoint::new(txid, i as u32);
+            if let Some(res) = db.get_spending(&outpoint) {
+                result[i] = Some(res);
+            }
+        }
+    }
+
+    result
 }
 
 fn address_compatible(network: bitcoin::Network) -> bitcoin::Network {

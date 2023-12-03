@@ -23,6 +23,9 @@ pub enum Error {
     ParseInt(#[from] std::num::ParseIntError),
 
     #[error(transparent)]
+    ParseOutPointError(#[from] bitcoin::transaction::ParseOutPointError),
+
+    #[error(transparent)]
     Bitcoin(#[from] encode::Error),
 
     #[error(transparent)]

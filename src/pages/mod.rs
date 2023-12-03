@@ -16,7 +16,6 @@ pub mod block;
 pub mod contact;
 pub mod home;
 pub mod tx;
-pub mod txout;
 
 pub const NBSP: PreEscaped<&str> = PreEscaped("&nbsp;");
 

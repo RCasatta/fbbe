@@ -28,6 +28,7 @@ pub fn page(
     tx: &Transaction,
     height_time: Option<(BlockHash, HeightTime)>,
     prevouts: &[TxOut],
+    output_spent_height: Vec<Option<u32>>,
     page: usize,
     mempool_fees: BlockTemplate,
     parsed: &ParsedRequest,
@@ -125,13 +126,20 @@ pub fn page(
         .skip(output_start)
         .take(IO_PER_PAGE)
         .enumerate()
-        .map(|(i, output)| {
+        .zip(
+            output_spent_height
+                .into_iter()
+                .skip(output_start)
+                .take(IO_PER_PAGE),
+        )
+        .map(|((i, output), spent_height)| {
             let address = Address::from_script(&output.script_pubkey, network()).ok();
 
-            let output_link = if output.script_pubkey.is_provably_unspendable() {
-                None
+            let output_link = if let Some(spent_height) = spent_height {
+                let n = network().as_url_path();
+                Some(format!("{n}o/{txid}:{i}/{spent_height}"))
             } else {
-                Some(format!("{}o/{}/{}", network().as_url_path(), txid, i))
+                None
             };
             let amount = amount_str(output.value);
             let script_pubkey = output.script_pubkey.clone();
@@ -378,7 +386,7 @@ pub fn page(
                                 @if let Some(output_link) = output_link {
                                     a href=(output_link) { (amount) }
                                 } @else {
-                                    em data-tooltip="Provably unspendable" style="font-style: normal" { (amount) }
+                                    (amount)
                                 }
                             }
                         }

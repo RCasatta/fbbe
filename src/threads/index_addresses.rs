@@ -183,7 +183,7 @@ fn outpoint_to_key(out_point: &OutPoint, buffer: &mut Vec<u8>) {
     val += out_point.vout as u64;
     buffer.extend(val.to_be_bytes());
 }
-fn outpoint_to_key_vec(out_point: &OutPoint) -> Vec<u8> {
+pub fn outpoint_to_key_vec(out_point: &OutPoint) -> Vec<u8> {
     let mut vec = Vec::with_capacity(8);
     outpoint_to_key(out_point, &mut vec);
     vec

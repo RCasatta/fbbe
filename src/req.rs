@@ -2,10 +2,12 @@ use std::fmt::Display;
 use std::str::FromStr;
 
 use crate::globals::network;
+use crate::threads::index_addresses::Height;
 use crate::NetworkExt;
 use crate::{error::Error, route::ResponseType};
 use bitcoin::hashes::hex::FromHex;
 use bitcoin::hashes::{sha256d, Hash};
+use bitcoin::OutPoint;
 use bitcoin::{
     consensus::deserialize, psbt::PartiallySignedTransaction, Address, BlockHash, Transaction, Txid,
 };
@@ -30,7 +32,7 @@ pub enum Resource {
     SearchFullTx(Transaction),
     Tx(Txid, usize),
     Block(BlockHash, usize),
-    TxOut(Txid, u32),
+    TxOut(OutPoint, Height),
     Head,
     Robots,
     BlockToB(BlockHash),
@@ -124,10 +126,10 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
             };
             Resource::Tx(txid, page)
         }
-        (&Method::GET, None, Some(&"o"), Some(txid), Some(vout)) => {
-            let txid = Txid::from_str(txid)?;
-            let vout: u32 = vout.parse()?;
-            Resource::TxOut(txid, vout)
+        (&Method::GET, None, Some(&"o"), Some(outpoint), Some(height)) => {
+            let outpoint = OutPoint::from_str(outpoint)?;
+            let height: u32 = height.parse()?;
+            Resource::TxOut(outpoint, height)
         }
         (&Method::GET, None, Some(&"h"), Some(height), None) => {
             let height: u32 = height.parse()?;

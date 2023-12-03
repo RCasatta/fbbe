@@ -5,7 +5,7 @@ use hyper::body::Buf;
 use serde::Deserialize;
 
 // curl -s localhost:8332/rest/getutxos/checkmempool/f63db148598c3f3a7ae4590a7f70f16968e01872455281a8e487f6992721febc-0.json | jq
-pub async fn call(txid: Txid, vout: u32) -> Result<TxOutJson, Error> {
+pub async fn _call(txid: Txid, vout: u32) -> Result<TxOutJson, Error> {
     let client = CLIENT.clone();
     let bitcoind_addr = crate::globals::bitcoind_addr();
 
