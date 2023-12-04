@@ -384,9 +384,14 @@ pub fn page(
                             }
                             td class="number" {
                                 @if let Some(output_link) = output_link {
-                                    a href=(output_link) { (amount) }
+                                    a data-tooltip="Spent" href=(output_link) { (amount) }
                                 } @else {
-                                    (amount)
+                                    @if script_pubkey.is_provably_unspendable() {
+                                        em data-tooltip="Provably unspendable" style="font-style: normal" { (amount) }
+                                    } @else {
+                                        em data-tooltip="Unspent" style="font-style: normal" { (amount) }
+                                    }
+
                                 }
                             }
                         }
