@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::rpc;
-use crate::state::{outpoints_and_sum, tx_output, OutPointsAndSum, SharedState};
+use crate::state::{outpoints_and_sum, tx_output, OutPointsAndSum, SharedState, SpendPoint};
 use bitcoin::{Txid, Weight};
 use maud::{html, Render};
 use tokio::time::sleep;
@@ -183,6 +183,14 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
     loop {
         if let Ok(mempool) = rpc::mempool::content(support_verbose).await {
             rates.retain(|k| mempool.contains(&k.txid)); // keep only current mempool elements
+
+            // keep only elements in the mempool
+            shared_state
+                .mempool_spending
+                .lock()
+                .await
+                .retain(|_, v| mempool.contains(v.txid()));
+
             log::trace!("mempool content returns {} txids", mempool.len());
 
             let start = Instant::now();
@@ -198,6 +206,18 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
                         sum,
                         weight,
                     } = outpoints_and_sum(tx.as_ref()).expect("invalid tx bytes");
+
+                    {
+                        let mut mempool_spending = shared_state.mempool_spending.lock().await;
+                        for (i, prevout) in prevouts.iter().enumerate() {
+                            mempool_spending.insert(*prevout, SpendPoint::new(*txid, i as u32));
+                        }
+                    }
+
+                    if prevouts.len() > 1 {
+                        shared_state.preload_prevouts_inner(prevouts.iter()).await;
+                    }
+
                     let mut sum_inputs = 0u64;
                     for prevout in prevouts.iter() {
                         if let Ok((prev_tx, _)) = shared_state.tx(prevout.txid, false).await {

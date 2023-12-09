@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::ops::ControlFlow;
+use std::time::Instant;
 
 use bitcoin::consensus::Encodable;
 use bitcoin::hashes::Hash;
+use bitcoin::OutPoint;
 use bitcoin::{Block, BlockHash, Transaction, Txid, Weight};
 use bitcoin_slices::{bsl, SliceCache, Visit, Visitor};
 use futures::prelude::*;
@@ -56,6 +58,31 @@ pub struct SharedState {
     pub mempool_info: Mutex<MempoolInfo>,
     pub mempool_fees: Mutex<BlockTemplate>,
     pub minutes_since_block: Mutex<Option<String>>,
+
+    // Added when found tx in mempool, removed when not in mempool
+    // for each inputs in the mempool the SpendPoint and the relatvie spent OutPoint
+    // if the mempool has 100k with an average of 1.5 inputs, we have 150k*(36+36) = 10MB
+    pub mempool_spending: Mutex<HashMap<OutPoint, SpendPoint>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SpendPoint {
+    txid: Txid,
+    vin: u32,
+}
+
+impl SpendPoint {
+    pub fn new(txid: Txid, vin: u32) -> Self {
+        Self { txid, vin }
+    }
+
+    pub(crate) fn txid(&self) -> &Txid {
+        &self.txid
+    }
+
+    pub(crate) fn vin(&self) -> u32 {
+        self.vin
+    }
 }
 
 #[derive(Clone)]
@@ -97,6 +124,7 @@ impl SharedState {
                 mempool: HashSet::new(),
             }),
             minutes_since_block: Mutex::new(None),
+            mempool_spending: Mutex::new(HashMap::new()),
         }
     }
 
@@ -196,20 +224,22 @@ impl SharedState {
     }
 
     pub async fn preload_prevouts(&self, tx: &Transaction) {
+        self.preload_prevouts_inner(tx.input.iter().map(|i| &i.previous_output))
+            .await;
+    }
+
+    pub async fn preload_prevouts_inner(&self, tx_ins: impl Iterator<Item = &OutPoint>) {
         let needed: Vec<_> = {
             let txs = self.txs.lock().await;
 
-            tx.input
-                .iter()
-                .map(|i| i.previous_output.txid)
+            tx_ins
+                .map(|o| o.txid)
                 .filter(|t| !txs.contains(t) && t != &Txid::all_zeros())
                 .collect()
         };
 
         let needed_len = needed.len();
-        if needed_len > 30 {
-            log::info!("needed {} prevouts for {}", needed_len, tx.txid());
-        }
+        let start = Instant::now();
 
         let got_txs: Vec<_> = stream::iter(needed)
             .map(rpc::tx::call_raw)
@@ -226,8 +256,12 @@ impl SharedState {
             let _ = txs.insert(tx.txid(), &buffer);
         }
 
-        if needed_len > 30 {
-            log::info!("needed {} prevouts for {} loaded", needed_len, tx.txid());
+        if needed_len > 100 {
+            log::info!(
+                "needed {} prevouts loaded in {}ms",
+                needed_len,
+                start.elapsed().as_millis()
+            );
         }
     }
 

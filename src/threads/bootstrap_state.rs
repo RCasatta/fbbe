@@ -3,6 +3,8 @@ use crate::rpc::headers::HeightTime;
 use crate::state::{reserve, SharedState};
 use crate::{network, rpc};
 use bitcoin::blockdata::constants::genesis_block;
+use bitcoin::hashes::Hash;
+use bitcoin::BlockHash;
 use std::sync::Arc;
 
 const HEADERS_PER_REQUEST: usize = 101;
@@ -37,9 +39,27 @@ pub async fn bootstrap_state(shared_state: Arc<SharedState>) -> Result<(), Error
             }
         }
     }
-    let current = shared_state.chain_info.lock().await.best_block_hash;
-    let block = rpc::block::call(current).await?;
-    shared_state.update_cache(&block, None).await?;
+
+    let mut current = shared_state.chain_info.lock().await.best_block_hash;
+    let mut count = 0;
+    loop {
+        let block = rpc::block::call(current).await?;
+        current = block.header.prev_blockhash;
+        shared_state.update_cache(&block, None).await?;
+        count += 1;
+        let cache = shared_state.txs.lock().await;
+        if cache.full() {
+            log::info!(
+                "tx cache full of {} elements with {count} blocks",
+                cache.len()
+            );
+            break;
+        }
+        if current == BlockHash::all_zeros() {
+            log::info!("reached genesis in bootstraping state, breaking");
+            break;
+        }
+    }
 
     log::info!("bootstrap ending, headers ending at {}", height);
 

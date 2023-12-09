@@ -1,12 +1,13 @@
 use crate::{
     base_text_decorator::BaseTextDecorator,
     error::Error,
-    network, pages,
+    network,
+    pages::{self, tx::OutputStatus},
     render::MempoolSection,
     req::{self, Resource},
     rpc,
     state::tx_output,
-    threads::index_addresses::{address_seen, Database, Height},
+    threads::index_addresses::{address_seen, Database},
     NetworkExt, SharedState,
 };
 use bitcoin::{consensus::serialize, Network, OutPoint, TxOut, Txid};
@@ -170,12 +171,12 @@ pub async fn route(
             let prevouts = fetch_prevouts(&tx, &state, false).await?;
             let current_tip = state.chain_info.lock().await.clone();
             let mempool_fees = state.mempool_fees.lock().await.clone();
-            let output_spent_height = output_spent_height(db, txid, tx.output.len());
+            let output_status = output_status(state, db, txid, tx.output.len()).await;
             let page = pages::tx::page(
                 &tx,
                 ts,
                 &prevouts,
-                output_spent_height,
+                output_status,
                 pagination,
                 mempool_fees,
                 &parsed_req,
@@ -382,13 +383,14 @@ pub async fn route(
         Resource::FullTx(ref tx) => {
             let mempool_fees = state.mempool_fees.lock().await.clone();
             let prevouts = fetch_prevouts(tx, &state, true).await?;
-            let output_spent_height = output_spent_height(db, tx.txid(), tx.output.len());
+            let txid = tx.txid();
+            let output_status = output_status(state, db, txid, tx.output.len()).await;
 
             let page = pages::tx::page(
                 tx,
                 None,
                 &prevouts,
-                output_spent_height,
+                output_status,
                 0,
                 mempool_fees,
                 &parsed_req,
@@ -416,18 +418,34 @@ pub async fn route(
     Ok(resp)
 }
 
-fn output_spent_height(db: Option<Arc<Database>>, txid: Txid, len: usize) -> Vec<Option<Height>> {
-    let mut result = vec![None; len];
-    if let Some(db) = db {
-        for i in 0..len {
-            // TODO use iteration
-            let outpoint = OutPoint::new(txid, i as u32);
-            if let Some(res) = db.get_spending(&outpoint) {
-                result[i] = Some(res);
+async fn output_status(
+    state: Arc<SharedState>,
+    db: Option<Arc<Database>>,
+    txid: Txid,
+    len: usize,
+) -> Vec<OutputStatus> {
+    let mut result = Vec::with_capacity(len);
+    for i in 0..len {
+        let k = OutPoint::new(txid, i as u32);
+        let r = match state.mempool_spending.lock().await.get(&k).cloned() {
+            Some(v) => OutputStatus::UnconfirmedSpent(v),
+            None => {
+                match db.as_ref() {
+                    Some(db) => {
+                        // TODO use iteration
+                        let outpoint = OutPoint::new(txid, i as u32);
+                        if let Some(res) = db.get_spending(&outpoint) {
+                            OutputStatus::ConfirmedSpent(res)
+                        } else {
+                            OutputStatus::Unspent
+                        }
+                    }
+                    None => OutputStatus::Unknown,
+                }
             }
-        }
+        };
+        result.push(r);
     }
-
     result
 }
 

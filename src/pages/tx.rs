@@ -15,8 +15,11 @@ use crate::{
     render::{self, AmountRow, Html, Plural},
     req::ParsedRequest,
     rpc::headers::HeightTime,
-    state::BlockTemplate,
-    threads::update_mempool_info::{TxidWeightFee, WeightFee},
+    state::{BlockTemplate, SpendPoint},
+    threads::{
+        index_addresses::Height,
+        update_mempool_info::{TxidWeightFee, WeightFee},
+    },
     NetworkExt,
 };
 
@@ -24,11 +27,18 @@ use super::html_page;
 
 pub const IO_PER_PAGE: usize = 10;
 
+pub enum OutputStatus {
+    ConfirmedSpent(Height),
+    UnconfirmedSpent(SpendPoint),
+    Unspent,
+    Unknown,
+}
+
 pub fn page(
     tx: &Transaction,
     height_time: Option<(BlockHash, HeightTime)>,
     prevouts: &[TxOut],
-    output_spent_height: Vec<Option<u32>>,
+    output_status: Vec<OutputStatus>,
     page: usize,
     mempool_fees: BlockTemplate,
     parsed: &ParsedRequest,
@@ -127,20 +137,29 @@ pub fn page(
         .take(IO_PER_PAGE)
         .enumerate()
         .zip(
-            output_spent_height
+            output_status
                 .into_iter()
                 .skip(output_start)
                 .take(IO_PER_PAGE),
         )
-        .map(|((i, output), spent_height)| {
+        .map(|((i, output), spent_status)| {
             let address = Address::from_script(&output.script_pubkey, network()).ok();
 
-            let output_link = if let Some(spent_height) = spent_height {
-                let n = network().as_url_path();
-                Some(format!("{n}o/{txid}:{i}/{spent_height}"))
-            } else {
-                None
+            let output_link = match spent_status {
+                OutputStatus::ConfirmedSpent(h) => {
+                    let n = network().as_url_path();
+                    Some(format!("{n}o/{txid}:{i}/{h}"))
+                }
+                OutputStatus::UnconfirmedSpent(s) => {
+                    let n = network().as_url_path();
+                    let txid = s.txid();
+                    let vin = s.vin();
+                    Some(format!("{n}t/{txid}#i{vin}"))
+                }
+                OutputStatus::Unspent => None,
+                OutputStatus::Unknown => None,
             };
+
             let amount = amount_str(output.value);
             let script_pubkey = output.script_pubkey.clone();
             let script_type = script_type(&output.script_pubkey);
