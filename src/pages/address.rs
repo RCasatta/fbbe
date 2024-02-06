@@ -77,26 +77,28 @@ pub fn page(
                 }
             }
 
-            hgroup {
-                h2 { (txids_len) " transaction output" @if txids_len == 1 { "" } @else { "s" }  }
-                p { "only confirmed, most recent funding first" }
-            }
+            @if !address_seen.is_empty() {
+                hgroup {
+                    h2 { (txids_len) " transaction output" @if txids_len == 1 { "" } @else { "s" }  }
+                    p { "only confirmed, most recent funding first" }
+                }
 
-            table class="striped" {
-                tbody {
-                    @for txid in address_seen {
-                        tr {
-                            td {
-                                (txid)
+                table class="striped" {
+                    tbody {
+                        @for txid in address_seen {
+                            tr {
+                                td {
+                                    (txid)
+                                }
                             }
                         }
                     }
-                }
-                @if txids_len > 9 {
-                    tfoot {
-                        tr {
-                            td { "possibly truncated"  }
+                    @if txids_len > 9 {
+                        tfoot {
+                            tr {
+                                td { "possibly truncated"  }
 
+                            }
                         }
                     }
                 }
