@@ -13,8 +13,6 @@
       url = "github:ipetkov/crane";
       inputs = {
         nixpkgs.follows = "nixpkgs";
-        rust-overlay.follows = "rust-overlay";
-        flake-utils.follows = "flake-utils";
       };
     };
   };
@@ -31,10 +29,11 @@
           
           src = craneLib.cleanCargoSource ./.;
           
-          nativeBuildInputs = with pkgs; [ rustToolchain ];
+          nativeBuildInputs = with pkgs; [ rustToolchain clang ];
           buildInputs = with pkgs; [ ];
           commonArgs = {
             inherit src buildInputs nativeBuildInputs;
+            LIBCLANG_PATH = "${pkgs.libclang.lib}/lib"; # for rocksdb
           };
           cargoArtifacts = craneLib.buildDepsOnly commonArgs;
           BITCOIND_EXE = pkgs.bitcoind + "/bin/bitcoind";

@@ -544,7 +544,7 @@ checksum = "6999dc1837253364c2ebb0704ba97994bd874e8f195d665c50b7548f6ea92764"
 
 [[package]]
 name = "fbbe"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "base64 0.21.2",
  "bitcoin",
