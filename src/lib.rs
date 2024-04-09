@@ -135,7 +135,7 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
     let db = args
         .addr_index_path
         .as_ref()
-        .map(|p| Database::new(p))
+        .map(Database::new)
         .transpose()?
         .map(Arc::new);
 

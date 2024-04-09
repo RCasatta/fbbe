@@ -127,7 +127,7 @@ impl Database {
     }
 
     pub fn get_spending(&self, outpoint: &OutPoint) -> Option<Height> {
-        let searched_key_start = outpoint_to_key_vec(&outpoint);
+        let searched_key_start = outpoint_to_key_vec(outpoint);
 
         let (key, _val) = self
             .db
@@ -139,7 +139,7 @@ impl Database {
             .unwrap()
             .unwrap();
 
-        if &key[..8] == &searched_key_start[..] {
+        if key[..8] == searched_key_start[..] {
             Some(u32::from_be_bytes((&key[8..]).try_into().unwrap()))
         } else {
             None
@@ -160,16 +160,16 @@ impl Database {
             buffer.clear();
             buffer.extend(script_hash.to_be_bytes());
             buffer.extend(&height_bytes[..]);
-            batch.put_cf(self.funding_cf(), &buffer, &[]);
+            batch.put_cf(self.funding_cf(), &buffer, []);
         }
         for out_point in index_res.spending_sh {
             buffer.clear();
             outpoint_to_key(&out_point, &mut buffer);
             buffer.extend(&height_bytes[..]);
-            batch.put_cf(self.spending_cf(), &buffer, &[]);
+            batch.put_cf(self.spending_cf(), &buffer, []);
         }
 
-        batch.put_cf(self.block_hash_cf(), index_res.block_hash, &[]);
+        batch.put_cf(self.block_hash_cf(), index_res.block_hash, []);
 
         self.db.write(batch).unwrap();
     }
@@ -311,7 +311,7 @@ fn find_txids_with_prevout(
             if let Some((i, vin)) = self.found.take() {
                 self.address_seen.get_mut(i).unwrap().spending = Some(Spending {
                     txid: tx.txid().into(),
-                    vin: vin,
+                    vin,
                     block_hash: self.block_hash,
                     height_time: self.height_time,
                 });
@@ -490,12 +490,12 @@ mod test {
         let expected: Vec<_> = (0u32..1000).collect();
         let mut v: Vec<_> = expected.iter().rev().map(|e| e.to_be_bytes()).collect();
         v.sort();
-        let sorted_v: Vec<_> = v.into_iter().map(|e| u32::from_be_bytes(e)).collect();
+        let sorted_v: Vec<_> = v.into_iter().map(u32::from_be_bytes).collect();
         assert_eq!(expected, sorted_v);
 
         let mut v: Vec<_> = (0u32..1000).rev().map(|e| e.to_le_bytes()).collect();
         v.sort();
-        let sorted_v: Vec<_> = v.into_iter().map(|e| u32::from_le_bytes(e)).collect();
+        let sorted_v: Vec<_> = v.into_iter().map(u32::from_le_bytes).collect();
         assert_ne!(expected, sorted_v, "little endian bytes sort");
     }
 }

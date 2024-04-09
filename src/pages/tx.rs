@@ -34,6 +34,7 @@ pub enum OutputStatus {
     Unknown,
 }
 
+#[allow(clippy::too_many_arguments)] // TODO: remove
 pub fn page(
     tx: &Transaction,
     height_time: Option<(BlockHash, HeightTime)>,
@@ -404,13 +405,10 @@ pub fn page(
                             td class="number" {
                                 @if let Some(output_link) = output_link {
                                     a data-tooltip="Spent" href=(output_link) { (amount) }
+                                } @else if script_pubkey.is_provably_unspendable() {
+                                    em data-tooltip="Provably unspendable" style="font-style: normal" { (amount) }
                                 } @else {
-                                    @if script_pubkey.is_provably_unspendable() {
-                                        em data-tooltip="Provably unspendable" style="font-style: normal" { (amount) }
-                                    } @else {
-                                        em data-tooltip="Unspent" style="font-style: normal" { (amount) }
-                                    }
-
+                                    em data-tooltip="Unspent" style="font-style: normal" { (amount) }
                                 }
                             }
                         }
