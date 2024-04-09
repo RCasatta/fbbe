@@ -26,14 +26,18 @@
           };
           rustToolchain = pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
           craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchain;
-          
+
           src = craneLib.cleanCargoSource ./.;
-          
+
           nativeBuildInputs = with pkgs; [ rustToolchain clang ];
           buildInputs = with pkgs; [ ];
           commonArgs = {
             inherit src buildInputs nativeBuildInputs;
             LIBCLANG_PATH = "${pkgs.libclang.lib}/lib"; # for rocksdb
+
+            # link rocksdb dynamically
+            ROCKSDB_INCLUDE_DIR = "${pkgs.rocksdb}/include";
+            ROCKSDB_LIB_DIR = "${pkgs.rocksdb}/lib";
           };
           cargoArtifacts = craneLib.buildDepsOnly commonArgs;
           BITCOIND_EXE = pkgs.bitcoind + "/bin/bitcoind";
@@ -62,7 +66,13 @@
             };
           devShells.default = mkShell {
             inputsFrom = [ bin ];
+
             LIBCLANG_PATH = "${pkgs.libclang.lib}/lib"; # for rocksdb
+
+            # link rocksdb dynamically
+            ROCKSDB_INCLUDE_DIR = "${pkgs.rocksdb}/include";
+            ROCKSDB_LIB_DIR = "${pkgs.rocksdb}/lib";
+
             buildInputs = with pkgs; [ dive ];
           };
         }
