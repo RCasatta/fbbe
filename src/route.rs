@@ -289,7 +289,7 @@ pub async fn route(
             .header(LAST_MODIFIED, CSS_LAST_MODIFIED)
             .header(CACHE_CONTROL, "public, max-age=31536000")
             .header(CONTENT_TYPE, "text/css; charset=utf-8")
-            .body(Body::from(include_str!("css/pico.min.css.rs")))?,
+            .body(Body::from(include_str!("css/pico.min.css")))?,
 
         Resource::Contact => Response::builder()
             .header(LAST_MODIFIED, CONTACT_PAGE_LAST_MODIFIED)
@@ -301,13 +301,13 @@ pub async fn route(
             .header(LAST_MODIFIED, CONTACT_PAGE_LAST_MODIFIED)
             .header(CACHE_CONTROL, "public, max-age=31536000")
             .header(CONTENT_TYPE, "image/vnd.microsoft.icon")
-            .body(Bytes::from_static(include_bytes!("favicon.ico.rs")).into())?,
+            .body(Bytes::from_static(include_bytes!("favicon.ico")).into())?,
 
         Resource::Robots => Response::builder()
             .header(LAST_MODIFIED, ROBOTS_LAST_MODIFIED)
             .header(CACHE_CONTROL, "public, max-age=3600")
             .header(CONTENT_TYPE, "text/plain")
-            .body(Bytes::from_static(include_bytes!("robots.txt.rs")).into())?,
+            .body(Bytes::from_static(include_bytes!("robots.txt")).into())?,
         Resource::BlockToB(block_hash) => {
             let network = network().as_url_path();
             Response::builder()

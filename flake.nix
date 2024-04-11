@@ -24,10 +24,23 @@
           pkgs = import nixpkgs {
             inherit system overlays;
           };
+          inherit (pkgs) lib;
           rustToolchain = pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
           craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchain;
 
-          src = craneLib.cleanCargoSource ./.;
+          # When filtering sources, we want to allow assets other than .rs files
+          src = lib.cleanSourceWith {
+            src = ./.; # The original, unfiltered source
+            filter = path: type:
+              (lib.hasSuffix "\.css" path) ||
+              (lib.hasSuffix "\.ico" path) ||
+              (lib.hasSuffix "\.txt" path) ||
+              # Example of a folder for images, icons, etc
+              # (lib.hasInfix "/assets/" path) ||
+              # Default filter from crane (allow .rs files)
+              (craneLib.filterCargoSources path type)
+            ;
+          };
 
           nativeBuildInputs = with pkgs; [ rustToolchain clang ];
           buildInputs = with pkgs; [ ];
