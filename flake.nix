@@ -1,3 +1,4 @@
+# docker run .#dockerImage && ./result | docker load
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
