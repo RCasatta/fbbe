@@ -207,13 +207,13 @@ pub async fn route(
 
         Resource::TxOut(outpoint, height) => {
             let b = state.blocks_from_heights(&[height]).await?;
-            struct FindTxByOutpointSpent(Vec<u8>, Option<Txid>);
+            struct FindTxByOutpointSpent(Vec<u8>, Option<(Txid, usize)>);
             impl Visitor for FindTxByOutpointSpent {
                 fn visit_transaction(
                     &mut self,
                     tx: &bsl::Transaction,
                 ) -> core::ops::ControlFlow<()> {
-                    if let Some(txid) = self.1.as_mut() {
+                    if let Some((txid, _vin)) = self.1.as_mut() {
                         *txid = tx.txid().into();
                         core::ops::ControlFlow::Break(())
                     } else {
@@ -223,11 +223,11 @@ pub async fn route(
 
                 fn visit_tx_in(
                     &mut self,
-                    _vin: usize,
+                    vin: usize,
                     tx_in: &bsl::TxIn,
                 ) -> core::ops::ControlFlow<()> {
                     if tx_in.prevout().as_ref() == &self.0[..] {
-                        self.1 = Some(Txid::all_zeros());
+                        self.1 = Some((Txid::all_zeros(), vin));
                     }
                     core::ops::ControlFlow::Continue(())
                 }
@@ -239,12 +239,11 @@ pub async fn route(
                 Ok(_) | Err(bitcoin_slices::Error::VisitBreak) => (),
                 Err(_) => return Err(Error::NotFound), // TODO
             }
-            // TODO add input number link
 
-            let txid = visitor.1.unwrap(); // TODO remove unwrap
+            let (txid, vin) = visitor.1.unwrap(); // TODO remove unwrap
             let network = network().as_url_path();
             Response::builder()
-                .header(LOCATION, format!("{network}t/{txid}"))
+                .header(LOCATION, format!("{network}t/{txid}#i{vin}"))
                 .status(StatusCode::TEMPORARY_REDIRECT)
                 .body(Body::empty())?
         }
