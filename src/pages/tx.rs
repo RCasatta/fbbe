@@ -208,7 +208,7 @@ pub fn page(
         html! {
             @if let Some(text) = known_tx {
                 th { "Note" }
-                th { (text) }
+                th class="right" { (text) }
             }
 
             tr {
