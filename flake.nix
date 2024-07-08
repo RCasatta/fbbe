@@ -39,6 +39,7 @@
               (lib.hasSuffix "\.css" path) ||
               (lib.hasSuffix "\.ico" path) ||
               (lib.hasSuffix "\.txt" path) ||
+              (lib.hasSuffix "\.json" path) ||
               # Example of a folder for images, icons, etc
               # (lib.hasInfix "/assets/" path) ||
               # Default filter from crane (allow .rs files)

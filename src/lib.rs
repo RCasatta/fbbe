@@ -16,7 +16,6 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::fmt::Display;
-use std::fs;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -148,8 +147,8 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
     let mempool_info = rpc::mempool::info().await?;
     log::info!("{:?}", mempool_info);
 
-    let content = fs::read_to_string("./well-known-transactions.json").unwrap();
-    let known_txs: Vec<KnownTx> = serde_json::from_str(&content).unwrap();
+    let content = include_str!("well-known-transactions.json");
+    let known_txs: Vec<KnownTx> = serde_json::from_str(content).unwrap();
     let known_txs: HashMap<_, _> = known_txs.into_iter().map(|e| (e.txid, e.c)).collect();
 
     let shared_state = Arc::new(SharedState::new(
