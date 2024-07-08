@@ -173,7 +173,7 @@ pub async fn route(
             let mempool_fees = state.mempool_fees.lock().await.clone();
             let known_tx = state.known_txs.get(&txid).cloned();
 
-            let output_status = output_status(state, db, txid, tx.output.len()).await;
+            let output_status = output_status(&state, db, txid, tx.output.len()).await;
             let page = pages::tx::page(
                 &tx,
                 ts,
@@ -386,7 +386,7 @@ pub async fn route(
             let mempool_fees = state.mempool_fees.lock().await.clone();
             let prevouts = fetch_prevouts(tx, &state, true).await?;
             let txid = tx.txid();
-            let output_status = output_status(state, db, txid, tx.output.len()).await;
+            let output_status = output_status(&state, db, txid, tx.output.len()).await;
 
             let page = pages::tx::page(
                 tx,
@@ -422,7 +422,7 @@ pub async fn route(
 }
 
 async fn output_status(
-    state: Arc<SharedState>,
+    state: &Arc<SharedState>,
     db: Option<Arc<Database>>,
     txid: Txid,
     len: usize,
