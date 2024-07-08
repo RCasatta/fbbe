@@ -207,6 +207,7 @@ pub fn page(
     let block_link = if let Some((block_hash, height_time)) = height_time {
         html! {
             @if let Some(text) = known_tx {
+                th { "Note" }
                 th { (text) }
             }
 
