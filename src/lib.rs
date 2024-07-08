@@ -6,14 +6,17 @@ use crate::threads::bootstrap_state::bootstrap_state_infallible;
 use crate::threads::index_addresses::{index_addresses_infallible, Database};
 use crate::threads::update_chain_info::update_chain_info_infallible;
 use crate::threads::update_mempool_info::update_mempool;
-use bitcoin::Network;
+use bitcoin::{Network, Txid};
 use clap::Parser;
 use globals::networks;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::Server;
 use network_parse::NetworkParse;
+use serde::Deserialize;
+use std::collections::HashMap;
 use std::convert::Infallible;
 use std::fmt::Display;
+use std::fs;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -145,7 +148,16 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
     let mempool_info = rpc::mempool::info().await?;
     log::info!("{:?}", mempool_info);
 
-    let shared_state = Arc::new(SharedState::new(chain_info.clone(), args, mempool_info));
+    let content = fs::read_to_string("./well-known-transactions.json").unwrap();
+    let known_txs: Vec<KnownTx> = serde_json::from_str(&content).unwrap();
+    let known_txs: HashMap<_, _> = known_txs.into_iter().map(|e| (e.txid, e.c)).collect();
+
+    let shared_state = Arc::new(SharedState::new(
+        chain_info.clone(),
+        args,
+        mempool_info,
+        known_txs,
+    ));
 
     // initialize cache with information from headers
     let shared_state_bootstrap = shared_state.clone();
@@ -246,4 +258,10 @@ impl NetworkExt for Network {
 
 pub fn create_local_socket(port: u16) -> SocketAddr {
     SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
+}
+
+#[derive(Debug, Deserialize)]
+struct KnownTx {
+    c: String,
+    txid: Txid,
 }

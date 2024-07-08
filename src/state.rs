@@ -63,6 +63,8 @@ pub struct SharedState {
     // for each inputs in the mempool the SpendPoint and the relatvie spent OutPoint
     // if the mempool has 100k with an average of 1.5 inputs, we have 150k*(36+36) = 10MB
     pub mempool_spending: Mutex<HashMap<OutPoint, SpendPoint>>,
+
+    pub known_txs: HashMap<Txid, String>,
 }
 
 #[derive(Debug, Clone)]
@@ -104,7 +106,12 @@ pub struct BlockTemplate {
 }
 
 impl SharedState {
-    pub fn new(chain_info: ChainInfo, args: Arguments, mempool_info: MempoolInfo) -> Self {
+    pub fn new(
+        chain_info: ChainInfo,
+        args: Arguments,
+        mempool_info: MempoolInfo,
+        known_txs: HashMap<Txid, String>,
+    ) -> Self {
         Self {
             // requests: AtomicUsize::new(0),
             // rpc_calls: AtomicUsize::new(0),
@@ -125,6 +132,7 @@ impl SharedState {
             }),
             minutes_since_block: Mutex::new(None),
             mempool_spending: Mutex::new(HashMap::new()),
+            known_txs,
         }
     }
 

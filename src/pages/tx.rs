@@ -44,6 +44,7 @@ pub fn page(
     mempool_fees: BlockTemplate,
     parsed: &ParsedRequest,
     user_provided: bool,
+    known_tx: Option<String>,
 ) -> Result<Markup, Error> {
     let txid = tx.txid();
     let network_url_path = network().as_url_path();
@@ -205,6 +206,10 @@ pub fn page(
 
     let block_link = if let Some((block_hash, height_time)) = height_time {
         html! {
+            @if let Some(text) = known_tx {
+                th { (text) }
+            }
+
             tr {
                 th { "Status" }
                 td class="right green" { "Confirmed" }

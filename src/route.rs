@@ -171,6 +171,8 @@ pub async fn route(
             let prevouts = fetch_prevouts(&tx, &state, false).await?;
             let current_tip = state.chain_info.lock().await.clone();
             let mempool_fees = state.mempool_fees.lock().await.clone();
+            let known_tx = state.known_txs.get(&txid).cloned();
+
             let output_status = output_status(state, db, txid, tx.output.len()).await;
             let page = pages::tx::page(
                 &tx,
@@ -181,6 +183,7 @@ pub async fn route(
                 mempool_fees,
                 &parsed_req,
                 false,
+                known_tx,
             )?
             .into_string();
             let cache_seconds =
@@ -394,6 +397,7 @@ pub async fn route(
                 mempool_fees,
                 &parsed_req,
                 true,
+                None,
             )?
             .into_string();
             let builder = Response::builder().header(CACHE_CONTROL, "public, max-age=3600");

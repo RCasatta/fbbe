@@ -1,0 +1,87 @@
+[
+    {
+        "c": "Genesis block coinbase transaction",
+        "txid": "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"
+    },
+    {
+        "c": "First non-coinbase transaction (from Satoshi to Hal)",
+        "txid": "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16"
+    },
+    {
+        "c": "First transaction sending to P2PKH",
+        "txid": "6f7cf9580f1c2dfb3c4d5d043cdbb128c640e3f20161245aa7372e9666168516"
+    },
+    {
+        "c": "Laszlo Hanyecz's 10,000 BTC pizza transaction",
+        "txid": "a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d"
+    },
+    {
+        "c": "First duplicate transaction (BIP-30 violation #1)",
+        "txid": "d5d27987d2a3dfc724e359870c6644b40e497bdc0589a033220fe15429d88599"
+    },
+    {
+        "c": "Second duplicate transaction (BIP-30 violation #2)",
+        "txid": "e3bf3d07d4b0375638d5f1db5255fe07ba2c4cb067cd81b84ee974b6585fb468"
+    },
+    {
+        "c": "Largest amount ever sent in one transaction (550,000 BTC)",
+        "txid": "29a3efd3ef04f9153d47a990bd7b048a4b2d213daaa5fb8ed670fb85f13bdbcf"
+    },
+    {
+        "c": "Transaction that contains the entire white paper",
+        "txid": "54e48e5f5c656b26c3bca14a8c95aa583d07ebe84dde3b7dd4a78f4e4186e713"
+    },
+    {
+        "c": "Rickroll transaction",
+        "txid": "d29c9c0e8e4d2a9790922af73f0b8d51f0bd4bb19940d9cf910ead8fbe85bc9b"
+    },
+    {
+        "c": "F2Pool's 'Megatransaction' that took 25 seconds to verify (see blog post by Rusty Russell)",
+        "txid": "bb41a757f405890fb0f5856228e23b715702d714d59bf2b1feb70d8b2b4e3e08"
+    },
+    {
+        "c": "Similar transaction by F2Pool made in collaboration with Greg Maxwell that uses the SIGHASH_SINGLE bug to be easy to verify and the short r-value trick for smaller signatures",
+        "txid": "9fdbcf0ef9d8d00f66e47917f67cc5d78aec1ac786e2abb8d2facb4e4790aad6"
+    },
+    {
+        "c": "Highest fee ever paid (291 BTC)",
+        "txid": "cc455ae816e6cdafdb58d54e35d4f46d860047458eacf1c7405dc634631c570d"
+    },
+    {
+        "c": "SHA-1 collision bounty claimed",
+        "txid": "8d31992805518fd62daa3bdd2a5c4fd2cd3054c9b3dca1d78055e9528cff6adc"
+    },
+    {
+        "c": "First SegWit spending transaction",
+        "txid": "8f907925d2ebe48765103e6845c06f1f2bb77c6adc1cc002865865eb5cfd5c1c"
+    },
+    {
+        "c": "0xB10C's anyone-can-spend P2TR transaction (see https",
+        "txid": " //b10c.me/7)",
+        "txid": "b10c007c60e14f9d087e0291d4d0c7869697c6681d979c6639dbd960792b4d41"
+    },
+    {
+        "c": "First Taproot spending transaction",
+        "txid": "33e794d097969002ee05d336686fc03c9e15a597c1b9827669460fac98799036"
+    },
+    {
+        "c": "First Taproot script path transaction",
+        "txid": "37777defed8717c581b4c0509329550e344bdc14ac38f71fc050096887e535c8"
+    },
+    {
+        "c": "Chun's 1 BTC donation to Luke Dashjr with a 8999 BTC change output",
+        "txid": "fd456524104a6674693c29946543f8a0befccce5a352bda55ec8559fc630f5f3"
+    },
+    {
+        "c": "Burak's 998-of-999 multisig that broke LND",
+        "txid": "7393096d97bfee8660f4100ffd61874d62f9a65de9fb6acf740c4c386990ef73"
+    },
+    {
+        "c": "Burak's second transaction that broke LND",
+        "txid": "73be398c4bdc43709db7398106609eea2a7841aaf3a4fa2000dc18184faa2a7e"
+    },
+    {
+        "c": "Highest fiat-denomiated fee ever paid (86 BTC or $3.13M)",
+        "txid": "b5a2af5845a8d3796308ff9840e567b14cf6bb158ff26c999e6f9a1f5448f9aa"
+    }
+]
