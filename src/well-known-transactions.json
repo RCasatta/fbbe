@@ -82,5 +82,9 @@
     {
         "c": "Highest fiat-denomiated fee ever paid (86 BTC or $3.13M)",
         "txid": "b5a2af5845a8d3796308ff9840e567b14cf6bb158ff26c999e6f9a1f5448f9aa"
+    },
+    {
+        "c": "Most complex transaction Easter egg (https://stacker.news/items/600187)",
+        "txid": "b10c0000004da5a9d1d9b4ae32e09f0b3e62d21a5cce5428d4ad714fb444eb5d"
     }
 ]
