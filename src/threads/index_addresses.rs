@@ -151,7 +151,7 @@ impl Database {
         todo!()
     }
 
-    pub fn write_hashes(&self, index_res: IndexBlockResult) {
+    pub fn write_hashes(&self, index_res: IndexBlockResult) -> Result<(), Error> {
         let mut batch = WriteBatch::default();
         let height_bytes = index_res.height.to_be_bytes();
 
@@ -171,7 +171,8 @@ impl Database {
 
         batch.put_cf(self.block_hash_cf(), index_res.block_hash, []);
 
-        self.db.write(batch).unwrap();
+        self.db.write(batch)?;
+        Ok(())
     }
 }
 

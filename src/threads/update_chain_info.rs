@@ -54,7 +54,7 @@ async fn update_chain_info(
 
                         if let Some(db) = db.as_ref() {
                             let index_res = index_block(&last_block, last_height)?;
-                            db.write_hashes(index_res);
+                            db.write_hashes(index_res)?;
                         }
 
                         match shared_state
