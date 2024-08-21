@@ -243,7 +243,7 @@ pub async fn route(
                 Err(_) => return Err(Error::NotFound), // TODO
             }
 
-            let (txid, vin) = visitor.1.unwrap(); // TODO remove unwrap
+            let (txid, vin) = visitor.1.ok_or(Error::NotFound)?;
             let network = network().as_url_path();
             Response::builder()
                 .header(LOCATION, format!("{network}t/{txid}#i{vin}"))
