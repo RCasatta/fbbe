@@ -238,7 +238,8 @@ pub async fn route(
             let mut vec = Vec::with_capacity(36);
             outpoint.consensus_encode(&mut vec).unwrap();
             let mut visitor = FindTxByOutpointSpent(vec, None);
-            match bsl::Block::visit(&b[0].1 .0, &mut visitor) {
+            let el = b.get(0).ok_or(Error::NotFound)?;
+            match bsl::Block::visit(&el.1 .0, &mut visitor) {
                 Ok(_) | Err(bitcoin_slices::Error::VisitBreak) => (),
                 Err(_) => return Err(Error::NotFound), // TODO
             }
