@@ -45,7 +45,15 @@ async fn update_chain_info(
 
                     loop {
                         log::info!("asking {last_block_hash}");
-                        let last_block = rpc::block::call(last_block_hash).await?; // TODO in index_addresses this call failed
+                        let last_block = match rpc::block::call(last_block_hash).await {
+                            Ok(b) => b,
+                            Err(e) => {
+                                log::warn!(
+                                    "Failed to ask {last_block_hash} with {e:?} breaking loop"
+                                );
+                                break;
+                            }
+                        };
                         let prev_blockhash = last_block.header.prev_blockhash;
 
                         shared_state
