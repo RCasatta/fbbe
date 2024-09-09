@@ -23,6 +23,7 @@ use hyper::{
     Body, Request, Response, StatusCode,
 };
 use mime::{APPLICATION_OCTET_STREAM, TEXT_HTML_UTF_8, TEXT_PLAIN_UTF_8};
+use prometheus::Encoder;
 use std::{convert::Infallible, sync::Arc, time::Instant};
 
 const CSS_LAST_MODIFIED: &str = "2022-10-03 07:53:03 UTC";
@@ -415,6 +416,17 @@ pub async fn route(
                     .body(Bytes::from(serialize(&tx)).into())?,
             }
         }
+        Resource::Metrics => {
+            let encoder = prometheus::TextEncoder::new();
+
+            let metric_families = prometheus::gather();
+            let mut buffer = vec![];
+            encoder.encode(&metric_families, &mut buffer)?;
+            Response::builder()
+                .status(200)
+                .header(CONTENT_TYPE, encoder.format_type())
+                .body(Body::from(buffer))?
+        }
     };
 
     log::debug!("{:?} executed in {:?}", req.uri(), now.elapsed());
@@ -518,6 +530,11 @@ pub async fn route_infallible(
     state: Arc<SharedState>,
     db: Option<Arc<Database>>,
 ) -> Result<Response<Body>, Infallible> {
+    crate::HTTP_COUNTER.inc();
+    let timer = crate::HTTP_REQ_HISTOGRAM
+        .with_label_values(&["all"])
+        .start_timer();
+
     let resp = route(req, state, db).await.unwrap_or_else(|e| {
         let body = format!("{}", e);
         Response::builder()
@@ -525,5 +542,8 @@ pub async fn route_infallible(
             .body(body.into())
             .expect("msg")
     });
+
+    timer.observe_duration();
+
     Ok(resp)
 }

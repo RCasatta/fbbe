@@ -49,6 +49,9 @@ pub enum Error {
     #[error(transparent)]
     Rocksdb(#[from] rocksdb::Error),
 
+    #[error(transparent)]
+    Prometheus(#[from] prometheus::Error),
+
     #[error("Bitcoin core RPC chaininfo failed status_code:{0}")]
     RpcChainInfo(StatusCode),
 
