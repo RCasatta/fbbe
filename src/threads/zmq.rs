@@ -29,9 +29,9 @@ async fn update_tx_zmq(socket: &SocketAddr, state: Arc<SharedState>) -> Result<(
             if let Ok(tx) = bsl::Transaction::parse(tx) {
                 let txid = tx.parsed().txid_sha2();
                 let txid = Txid::from_byte_array(txid.into());
-                log::info!("inserting {}", txid);
 
-                let _ = state.txs.lock().await.insert(txid, tx.parsed());
+                let insert_result = state.txs.lock().await.insert(txid, tx.parsed());
+                log::trace!("inserting {} {}", txid, insert_result.is_ok());
             }
         }
     }
