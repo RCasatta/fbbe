@@ -52,6 +52,12 @@ pub enum Error {
     #[error(transparent)]
     Prometheus(#[from] prometheus::Error),
 
+    #[error(transparent)]
+    Zmq(#[from] async_zmq::Error),
+
+    #[error(transparent)]
+    ZmqSubscribe(#[from] async_zmq::SubscribeError),
+
     #[error("Bitcoin core RPC chaininfo failed status_code:{0}")]
     RpcChainInfo(StatusCode),
 

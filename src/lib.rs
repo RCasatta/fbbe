@@ -21,7 +21,7 @@ use std::fmt::Display;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
-use threads::zmq::update_tx_zmq;
+use threads::zmq::update_tx_zmq_infallible;
 use tokio::time::sleep;
 
 mod base_text_decorator;
@@ -173,6 +173,8 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
     // keep chain info updated
     let shared_state_chain = shared_state.clone();
     let shared_state_mempool = shared_state.clone();
+    let shared_state_zmq = shared_state.clone();
+
     let chain_info_chain = chain_info.clone();
 
     let shared_state_addresses = shared_state.clone();
@@ -194,7 +196,10 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
         }
 
         if let Some(socket) = zmq_rawtx {
-            let _ = tokio::spawn(async move { update_tx_zmq(&socket).await });
+            let _ =
+                tokio::spawn(
+                    async move { update_tx_zmq_infallible(&socket, shared_state_zmq).await },
+                );
         }
 
         update_mempool(shared_state_mempool).await;
