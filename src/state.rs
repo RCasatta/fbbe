@@ -241,11 +241,13 @@ impl SharedState {
         txid: Txid,
         tx_ins: impl Iterator<Item = &OutPoint>,
     ) {
+        let mut count = 0;
         let needed: Vec<_> = {
             let txs = self.txs.lock().await;
 
             tx_ins
                 .map(|o| o.txid)
+                .inspect(|_| count += 1)
                 .filter(|t| !txs.contains(t) && t != &Txid::all_zeros())
                 .collect()
         };
@@ -270,8 +272,9 @@ impl SharedState {
 
         if needed_len > 100 {
             log::info!(
-                "needed {} prevouts for {} loaded in {}ms",
+                "needed {} prevouts (out of {}) for {} loaded in {}ms",
                 needed_len,
+                count,
                 txid,
                 start.elapsed().as_millis()
             );
