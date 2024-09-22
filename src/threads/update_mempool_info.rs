@@ -215,7 +215,9 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
                     }
 
                     if prevouts.len() > 1 {
-                        shared_state.preload_prevouts_inner(prevouts.iter()).await;
+                        shared_state
+                            .preload_prevouts_inner(*txid, prevouts.iter())
+                            .await;
                     }
 
                     let mut sum_inputs = 0u64;

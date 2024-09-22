@@ -231,12 +231,16 @@ impl SharedState {
         Ok((tx, block_hash))
     }
 
-    pub async fn preload_prevouts(&self, tx: &Transaction) {
-        self.preload_prevouts_inner(tx.input.iter().map(|i| &i.previous_output))
+    pub async fn preload_prevouts(&self, txid: Txid, tx: &Transaction) {
+        self.preload_prevouts_inner(txid, tx.input.iter().map(|i| &i.previous_output))
             .await;
     }
 
-    pub async fn preload_prevouts_inner(&self, tx_ins: impl Iterator<Item = &OutPoint>) {
+    pub async fn preload_prevouts_inner(
+        &self,
+        txid: Txid,
+        tx_ins: impl Iterator<Item = &OutPoint>,
+    ) {
         let needed: Vec<_> = {
             let txs = self.txs.lock().await;
 
@@ -266,8 +270,9 @@ impl SharedState {
 
         if needed_len > 100 {
             log::info!(
-                "needed {} prevouts loaded in {}ms",
+                "needed {} prevouts for {} loaded in {}ms",
                 needed_len,
+                txid,
                 start.elapsed().as_millis()
             );
         }

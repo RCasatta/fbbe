@@ -169,7 +169,7 @@ pub async fn route(
                 Some(block_hash) => Some((*block_hash, state.height_time(*block_hash).await?)),
                 None => None,
             };
-            let prevouts = fetch_prevouts(&tx, &state, false).await?;
+            let prevouts = fetch_prevouts(txid, &tx, &state, false).await?;
             let current_tip = state.chain_info.lock().await.clone();
             let mempool_fees = state.mempool_fees.lock().await.clone();
             let known_tx = state.known_txs.get(&txid).cloned();
@@ -386,8 +386,8 @@ pub async fn route(
         }
         Resource::FullTx(ref tx) => {
             let mempool_fees = state.mempool_fees.lock().await.clone();
-            let prevouts = fetch_prevouts(tx, &state, true).await?;
             let txid = tx.txid();
+            let prevouts = fetch_prevouts(txid, tx, &state, true).await?;
             let output_status = output_status(&state, db, txid, tx.output.len()).await;
 
             let page = pages::tx::page(
@@ -493,12 +493,13 @@ fn cache_time_from_confirmations(confirmation: Option<u32>) -> u32 {
 }
 
 pub async fn fetch_prevouts(
+    txid: Txid,
     tx: &bitcoin::Transaction,
     state: &SharedState,
     fill_missing: bool,
 ) -> Result<Vec<bitcoin::TxOut>, Error> {
     if tx.input.len() > 1 {
-        state.preload_prevouts(tx).await;
+        state.preload_prevouts(txid, tx).await;
     }
     let mut prevouts = Vec::with_capacity(tx.input.len());
     for input in tx.input.iter() {
