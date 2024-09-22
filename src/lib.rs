@@ -21,6 +21,7 @@ use std::fmt::Display;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
+use threads::zmq::update_tx_zmq;
 use tokio::time::sleep;
 
 mod base_text_decorator;
@@ -91,6 +92,10 @@ pub struct Arguments {
 
     #[arg(short, long, env)]
     pub addr_index_path: Option<PathBuf>,
+
+    /// Bitcoind ZMQ pub raw tx socket address
+    #[arg(short, long, env)]
+    pub zmq_rawtx: Option<SocketAddr>,
 }
 
 pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
@@ -104,6 +109,7 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
         _ => panic!("non existing network"),
     });
     let args = args;
+    let zmq_rawtx = args.zmq_rawtx.clone();
 
     log::debug!("local address {:?}", addr);
 
@@ -185,6 +191,10 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
             let _ = tokio::spawn(async move {
                 index_addresses_infallible(db.clone(), shared_state_addresses).await
             });
+        }
+
+        if let Some(socket) = zmq_rawtx {
+            let _ = tokio::spawn(async move { update_tx_zmq(&socket).await });
         }
 
         update_mempool(shared_state_mempool).await;
