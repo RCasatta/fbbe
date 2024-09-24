@@ -109,7 +109,7 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
         _ => panic!("non existing network"),
     });
     let args = args;
-    let zmq_rawtx = args.zmq_rawtx.clone();
+    let zmq_rawtx = args.zmq_rawtx;
 
     log::debug!("local address {:?}", addr);
 
