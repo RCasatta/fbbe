@@ -1,6 +1,9 @@
 // curl -s http://localhost:8332/rest/headers/1/000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f.json | jq
 
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    io::BufReader,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 use super::{check_status, ts_to_date_time_utc, CLIENT};
 use crate::error::Error;
@@ -22,7 +25,7 @@ pub async fn call_many(
     })
     .await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
-    let mut reader = body_bytes.reader();
+    let mut reader = BufReader::new(body_bytes.reader());
 
     let mut headers: Vec<bitcoin::block::Header> = Vec::with_capacity(count as usize);
     for _ in 0..count {

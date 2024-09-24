@@ -311,7 +311,7 @@ fn find_txids_with_prevout(
         ) -> core::ops::ControlFlow<()> {
             if let Some((i, vin)) = self.found.take() {
                 self.address_seen.get_mut(i).unwrap().spending = Some(Spending {
-                    txid: tx.txid().into(),
+                    txid: Txid::from_raw_hash(tx.txid()),
                     vin,
                     block_hash: self.block_hash,
                     height_time: self.height_time,

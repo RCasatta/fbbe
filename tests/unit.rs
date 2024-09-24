@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{io::BufReader, str::FromStr};
 
 use bitcoin::{consensus::Decodable, Transaction, Txid};
 use futures::{future, prelude::*, stream::FuturesUnordered, StreamExt};
@@ -32,7 +32,8 @@ async fn test_buffer_unordered() {
     let resp = client.get(uri).await.unwrap();
 
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await.unwrap();
-    let tx = Transaction::consensus_decode(&mut body_bytes.reader()).unwrap();
+    let mut reader = BufReader::new(body_bytes.reader());
+    let tx = Transaction::consensus_decode(&mut reader).unwrap();
 
     assert_eq!(tx.input.len(), 20_000);
 

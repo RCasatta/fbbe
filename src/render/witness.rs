@@ -1,5 +1,5 @@
 use super::Html;
-use bitcoin_private::hex::exts::DisplayHex;
+use bitcoin::hex::DisplayHex;
 use maud::{html, Render};
 
 pub(crate) struct Witness<'a>(&'a bitcoin::Witness);

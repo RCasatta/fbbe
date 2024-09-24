@@ -1,3 +1,4 @@
+use std::io::BufReader;
 use std::str::FromStr;
 
 use super::{check_status, CLIENT};
@@ -64,7 +65,8 @@ pub async fn call_raw(txid: Txid) -> Result<Transaction, Error> {
     let resp = client.get(uri).await?;
     check_status(resp.status(), |s| Error::RpcTx(s, txid)).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
-    let tx = Transaction::consensus_decode(&mut body_bytes.reader())?;
+    let mut buf = BufReader::new(body_bytes.reader());
+    let tx = Transaction::consensus_decode(&mut buf)?;
     Ok(tx)
 }
 

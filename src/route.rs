@@ -10,12 +10,12 @@ use crate::{
     threads::index_addresses::{address_seen, Database},
     NetworkExt, SharedState,
 };
-use bitcoin::{consensus::serialize, Network, OutPoint, TxOut, Txid};
+use bitcoin::hex::DisplayHex;
+use bitcoin::{consensus::serialize, OutPoint, TxOut, Txid};
 use bitcoin::{
     consensus::{deserialize, Encodable},
     hashes::Hash,
 };
-use bitcoin_private::hex::exts::DisplayHex;
 use bitcoin_slices::{bsl, Visit, Visitor};
 use hyper::{
     body::Bytes,
@@ -334,39 +334,34 @@ pub async fn route(
                 .body(Body::empty())?
         }
         Resource::Address(ref address, ref query) => {
-            if address.network != address_compatible(network()) {
-                return Err(Error::AddressWrongNetwork {
-                    address: address.network,
-                    fbbe: network(),
-                });
-            } else {
-                let address_seen = if let Some(db) = db {
-                    address_seen(address, db, state.clone()).await?
-                } else {
-                    vec![]
-                };
-                let page =
-                    pages::address::page(address, &parsed_req, query, address_seen)?.into_string();
-                let builder = Response::builder().header(CACHE_CONTROL, "public, max-age=60");
+            let address = address.clone().require_network(network())?;
 
-                match parsed_req.response_type {
-                    ResponseType::Text(col) => builder
-                        .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
-                        .body(pages::address::text_page(address, &page, col)?.into())?,
-                    ResponseType::Html => builder
-                        .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
-                        .body(page.into())?,
-                    ResponseType::Bytes => {
-                        return Err(Error::ContentTypeUnsupported(
-                            parsed_req.response_type,
-                            req.uri().to_string(),
-                        ))
-                    }
+            let address_seen = if let Some(db) = db {
+                address_seen(&address, db, state.clone()).await?
+            } else {
+                vec![]
+            };
+            let page =
+                pages::address::page(&address, &parsed_req, query, address_seen)?.into_string();
+            let builder = Response::builder().header(CACHE_CONTROL, "public, max-age=60");
+
+            match parsed_req.response_type {
+                ResponseType::Text(col) => builder
+                    .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
+                    .body(pages::address::text_page(&address, &page, col)?.into())?,
+                ResponseType::Html => builder
+                    .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
+                    .body(page.into())?,
+                ResponseType::Bytes => {
+                    return Err(Error::ContentTypeUnsupported(
+                        parsed_req.response_type,
+                        req.uri().to_string(),
+                    ))
                 }
             }
         }
         Resource::SearchFullTx(ref tx) => {
-            let txid = tx.txid();
+            let txid = tx.compute_txid();
             let network = network().as_url_path();
 
             if state.tx(txid, false).await.is_ok() {
@@ -386,7 +381,7 @@ pub async fn route(
         }
         Resource::FullTx(ref tx) => {
             let mempool_fees = state.mempool_fees.lock().await.clone();
-            let txid = tx.txid();
+            let txid = tx.compute_txid();
             let prevouts = fetch_prevouts(txid, tx, &state, true).await?;
             let output_status = output_status(&state, db, txid, tx.output.len()).await;
 
@@ -465,14 +460,6 @@ async fn output_status(
     result
 }
 
-fn address_compatible(network: bitcoin::Network) -> bitcoin::Network {
-    if let Network::Signet = network {
-        Network::Testnet
-    } else {
-        network
-    }
-}
-
 fn convert_text_html(page: &str, columns: u16) -> Body {
     convert_text_html_string(page, columns).into()
 }
@@ -512,7 +499,7 @@ pub async fn fetch_prevouts(
                 }
                 Err(e) => {
                     if fill_missing {
-                        prevouts.push(TxOut::default())
+                        prevouts.push(TxOut::NULL)
                     } else {
                         return Err(e);
                     }
@@ -520,7 +507,7 @@ pub async fn fetch_prevouts(
             }
         } else {
             // fake txout for coinbase
-            prevouts.push(TxOut::default())
+            prevouts.push(TxOut::NULL)
         }
     }
     Ok(prevouts)

@@ -24,7 +24,7 @@ thiserror = "1.0.37"
 once_cell = "1.16.0"
 maud = "0.25.0"
 env_logger = "0.11"
-bitcoin = { version = "0.30", features = ["serde", "base64"] }
+bitcoin = { version = "0.32", features = ["serde", "base64"] }
 log = "0.4.17"
 chrono = "0.4.23"
 html2text = "0.6"
@@ -33,7 +33,11 @@ qr_code = { version = "2.0.0", features = ["bmp"] }
 base64 = "0.21.0"
 percent-encoding = "2.2.0"
 bitcoin-private = "0.1.0"
-bitcoin_slices = { version = "0.6.2", features = ["bitcoin", "slice_cache", "sha2"] }
+bitcoin_slices = { version = "0.8", features = [
+    "bitcoin",
+    "slice_cache",
+    "sha2",
+] }
 clap = { version = "4.2.7", features = ["derive", "env"] }
 url = "2.3.1"
 fxhash = "0.2.1"

@@ -267,7 +267,7 @@ impl SharedState {
         for tx in got_txs.into_iter().flatten() {
             buffer.clear();
             tx.consensus_encode(&mut buffer).expect("vecs don't error");
-            let _ = txs.insert(tx.txid(), &buffer);
+            let _ = txs.insert(tx.compute_txid(), &buffer);
         }
 
         if needed_len > 100 {
@@ -284,7 +284,11 @@ impl SharedState {
     pub async fn update_cache(&self, block: &Block, height: Option<u32>) -> Result<(), Error> {
         let block_hash = block.block_hash();
         let time = block.header.time;
-        let hash_tx: Vec<_> = block.txdata.iter().map(|tx| (tx.txid(), tx)).collect();
+        let hash_tx: Vec<_> = block
+            .txdata
+            .iter()
+            .map(|tx| (tx.compute_txid(), tx))
+            .collect();
 
         let mut txs = self.txs.lock().await;
         let mut tx_in_block = self.tx_in_block.lock().await;
@@ -369,7 +373,7 @@ pub fn tx_output(
                 } else {
                     self.tx_out = bitcoin::TxOut {
                         script_pubkey: bitcoin::ScriptBuf::new(),
-                        value: tx_out.value(),
+                        value: bitcoin::Amount::from_sat(tx_out.value()),
                     };
                 }
                 return ControlFlow::Break(());
@@ -379,7 +383,7 @@ pub fn tx_output(
     }
     let mut visitor = TxOutput {
         vout,
-        tx_out: bitcoin::TxOut::default(),
+        tx_out: bitcoin::TxOut::NULL,
         needs_script,
     };
     match bsl::Transaction::visit(tx_bytes, &mut visitor) {

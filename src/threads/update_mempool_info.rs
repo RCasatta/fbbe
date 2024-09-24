@@ -225,7 +225,7 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
                         if let Ok((prev_tx, _)) = shared_state.tx(prevout.txid, false).await {
                             let res = tx_output(prev_tx.as_ref(), prevout.vout, false)
                                 .expect("invalid tx bytes");
-                            sum_inputs += res.value;
+                            sum_inputs += res.value.to_sat();
                         } else {
                             continue 'outer;
                         }

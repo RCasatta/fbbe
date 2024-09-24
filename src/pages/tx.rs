@@ -1,11 +1,11 @@
 use std::str::from_utf8;
 
+use bitcoin::hex::DisplayHex;
 use bitcoin::{
     blockdata::script::Instruction,
     consensus::{encode::serialize_hex, serialize},
     Address, Amount, BlockHash, Denomination, OutPoint, Script, ScriptBuf, Transaction, TxOut,
 };
-use bitcoin_private::hex::exts::DisplayHex;
 use maud::{html, Markup};
 
 use crate::{
@@ -46,7 +46,7 @@ pub fn page(
     user_provided: bool,
     known_tx: Option<String>,
 ) -> Result<Markup, Error> {
-    let txid = tx.txid();
+    let txid = tx.compute_txid();
     let network_url_path = network().as_url_path();
     let start = page * IO_PER_PAGE;
     if start >= tx.input.len() && start >= tx.output.len() {
@@ -85,8 +85,8 @@ pub fn page(
         .then(|| format!("{}t/{}/{}#outputs", network_url_path, txid, page + 1));
     let separator_output = (prev_output.is_some() && next_output.is_some()).then_some(" | ");
 
-    let sum_outputs: u64 = tx.output.iter().map(|o| o.value).sum();
-    let sum_inputs: u64 = prevouts.iter().map(|o| o.value).sum();
+    let sum_outputs: u64 = tx.output.iter().map(|o| o.value.to_sat()).sum();
+    let sum_inputs: u64 = prevouts.iter().map(|o| o.value.to_sat()).sum();
     let fee = sum_inputs.saturating_sub(sum_outputs); // saturating never happens on confirmed/mempool-accepted tx, but we show also user made txs
 
     let inputs = tx
@@ -102,8 +102,8 @@ pub fn page(
                 None
             } else {
                 let link = format!("{}t/{}#o{}", network().as_url_path(), po.txid, po.vout);
-                let amount = amount_str(previous_output.value);
-                let previous_script_pubkey = (previous_output.value != u64::MAX)
+                let amount = amount_str(previous_output.value.to_sat());
+                let previous_script_pubkey = (previous_output.value.to_sat() != u64::MAX)
                     .then(|| previous_output.script_pubkey.clone());
                 let previous_script_pubkey_type = script_type(&previous_output.script_pubkey);
                 let script_sig = (!input.script_sig.is_empty()).then(|| input.script_sig.clone());
@@ -111,7 +111,7 @@ pub fn page(
 
                 let p2wsh_witness_script = previous_script_pubkey
                     .as_ref()
-                    .map(|s| s.is_v0_p2wsh())
+                    .map(|s| s.is_p2wsh())
                     .unwrap_or(false)
                     .then(|| witness.last().map(|e| ScriptBuf::from(e.to_vec())))
                     .flatten();
@@ -162,7 +162,7 @@ pub fn page(
                 OutputStatus::Unknown => None,
             };
 
-            let amount = amount_str(output.value);
+            let amount = amount_str(output.value.to_sat());
             let script_pubkey = output.script_pubkey.clone();
             let script_type = script_type(&output.script_pubkey);
 
@@ -244,12 +244,12 @@ pub fn page(
         }
     };
 
-    let hex = if tx.size() > 1_000 {
+    let hex = if tx.total_size() > 1_000 {
         let bytes = serialize(&tx);
         html! {
             (&bytes[..500].to_lower_hex_string())
-            b { "...truncated, original size " (tx.size()) " bytes..." }
-            (&bytes[tx.size()-500..].to_lower_hex_string())
+            b { "...truncated, original size " (tx.total_size()) " bytes..." }
+            (&bytes[tx.total_size()-500..].to_lower_hex_string())
 
         }
     } else {
@@ -272,7 +272,7 @@ pub fn page(
             table class="striped" {
                 tbody {
                     (block_link)
-                    @if !tx.is_coin_base() && !prevouts.iter().any(|p| p.value == u64::MAX) {
+                    @if !tx.is_coinbase() && !prevouts.iter().any(|p| p.value.to_sat() == u64::MAX) {
                         (fee_rows( wf, last_in_block))
                     }
                 }
@@ -411,7 +411,7 @@ pub fn page(
                             td class="number" {
                                 @if let Some(output_link) = output_link {
                                     a data-tooltip="Spent" href=(output_link) { (amount) }
-                                } @else if script_pubkey.is_provably_unspendable() {
+                                } @else if script_pubkey.is_op_return() {
                                     em data-tooltip="Provably unspendable" style="font-style: normal" { (amount) }
                                 } @else {
                                     em data-tooltip="Unspent" style="font-style: normal" { (amount) }
@@ -434,7 +434,7 @@ pub fn page(
             h2 id="details" { "Details "}
             table class="striped" {
                 tbody {
-                    (size_rows(tx.size(), tx.weight().to_wu() as usize))
+                    (size_rows(tx.total_size(), tx.weight().to_wu() as usize))
                     tr {
                         th { "Version" }
                         td class="right" { (tx.version) }
@@ -491,11 +491,11 @@ pub fn script_type(script: &Script) -> Option<String> {
         "p2pkh"
     } else if script.is_p2sh() {
         "p2sh"
-    } else if script.is_v0_p2wpkh() {
+    } else if script.is_p2wpkh() {
         "v0 p2wpkh"
-    } else if script.is_v0_p2wsh() {
+    } else if script.is_p2wsh() {
         "v0 p2wsh"
-    } else if script.is_v1_p2tr() {
+    } else if script.is_p2tr() {
         "v1 p2tr"
     } else if script.is_op_return() {
         "op return"

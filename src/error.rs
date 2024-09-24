@@ -1,5 +1,5 @@
 use crate::route::ResponseType;
-use bitcoin::{consensus::encode, BlockHash, Network, Txid};
+use bitcoin::{consensus::encode, Address, BlockHash, Network, Txid};
 use hyper::StatusCode;
 
 #[derive(Debug, thiserror::Error)]
@@ -17,7 +17,10 @@ pub enum Error {
     Uri(#[from] hyper::http::uri::InvalidUri),
 
     #[error(transparent)]
-    Hex(#[from] bitcoin::hashes::hex::Error),
+    Hex(#[from] bitcoin::hashes::hex::HexToBytesError),
+
+    #[error(transparent)]
+    HexArray(#[from] bitcoin::hashes::hex::HexToArrayError),
 
     #[error(transparent)]
     ParseInt(#[from] std::num::ParseIntError),
@@ -29,13 +32,13 @@ pub enum Error {
     Bitcoin(#[from] encode::Error),
 
     #[error(transparent)]
-    ParseNetworkError(#[from] bitcoin::network::constants::ParseNetworkError),
+    ParseNetworkError(#[from] bitcoin::network::ParseNetworkError),
 
     #[error(transparent)]
     Join(#[from] tokio::task::JoinError),
 
     #[error(transparent)]
-    BitcoinAddress(#[from] bitcoin::address::Error),
+    BitcoinAddress(#[from] bitcoin::address::ParseError),
 
     #[error(transparent)]
     Bmp(#[from] qr_code::bmp_monochrome::BmpError),
@@ -57,6 +60,9 @@ pub enum Error {
 
     #[error(transparent)]
     ZmqSubscribe(#[from] async_zmq::SubscribeError),
+
+    #[error(transparent)]
+    ExtractTx(#[from] bitcoin::psbt::ExtractTxError),
 
     #[error("Bitcoin core RPC chaininfo failed status_code:{0}")]
     RpcChainInfo(StatusCode),
@@ -116,7 +122,7 @@ pub enum Error {
     WrongNetwork { fbbe: Network, bitcoind: Network },
 
     #[error("address and fbbe doesn't have the same network. fbbe:{fbbe} address:{address}")]
-    AddressWrongNetwork { fbbe: Network, address: Network },
+    AddressWrongNetwork { fbbe: Network, address: Address },
 
     #[error("Network '{0}' not parsed, valid values are: bitcoin, mainnet, main | testnet, test | signet | regtest")]
     NetworkParseError(String),

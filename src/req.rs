@@ -5,12 +5,11 @@ use crate::globals::network;
 use crate::threads::index_addresses::Height;
 use crate::NetworkExt;
 use crate::{error::Error, route::ResponseType};
+use bitcoin::address::NetworkUnchecked;
 use bitcoin::hashes::hex::FromHex;
 use bitcoin::hashes::{sha256d, Hash};
-use bitcoin::OutPoint;
-use bitcoin::{
-    consensus::deserialize, psbt::PartiallySignedTransaction, Address, BlockHash, Transaction, Txid,
-};
+use bitcoin::{consensus::deserialize, Address, BlockHash, Transaction, Txid};
+use bitcoin::{OutPoint, Psbt};
 use hyper::{Body, Method, Request};
 
 #[derive(Debug, Clone)]
@@ -37,7 +36,7 @@ pub enum Resource {
     Robots,
     BlockToB(BlockHash),
     TxToT(Txid),
-    Address(Address, Option<String>),
+    Address(Address<NetworkUnchecked>, Option<String>),
     AddressToA(Address),
     FullTx(Transaction),
     Metrics,
@@ -99,10 +98,9 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
                                         let val = percent_encoding::percent_decode(val.as_bytes())
                                             .decode_utf8()
                                             .map_err(|_| Error::BadRequest)?;
-                                        let psbt =
-                                            PartiallySignedTransaction::from_str(val.as_ref())
-                                                .map_err(|_| Error::BadRequest)?;
-                                        let tx = psbt.extract_tx();
+                                        let psbt = Psbt::from_str(val.as_ref())
+                                            .map_err(|_| Error::BadRequest)?;
+                                        let tx = psbt.extract_tx()?;
                                         Resource::SearchFullTx(tx)
                                     }
                                 }
@@ -147,7 +145,7 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
         }
         (&Method::GET, query, Some(&"a"), Some(address), None) => {
             let address = Address::from_str(address)?;
-            Resource::Address(address.assume_checked(), query.map(ToString::to_string))
+            Resource::Address(address, query.map(ToString::to_string))
         }
         (&Method::GET, None, Some(&"block"), Some(block_hash), None) => {
             let block_hash = BlockHash::from_str(block_hash)?;
@@ -200,6 +198,7 @@ impl<'a> Display for TextLink<'a> {
                 }
             }
             Resource::Address(address, query) => {
+                let address = address.clone().assume_checked(); // TODO clone is a performance penalty here
                 write!(f, "{base}a/{address}/text")?;
                 if let Some(query) = query {
                     write!(f, "?{query}")?;
