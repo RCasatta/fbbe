@@ -21,18 +21,24 @@ async fn update_tx_zmq(socket: &SocketAddr, state: Arc<SharedState>) -> Result<(
 
     let mut sub = subscribe(&url).unwrap().with_context(&context).connect()?;
     sub.set_subscribe("rawtx")?;
+    let mut count = 0u64;
 
     while let Some(msg) = sub.next().await {
         let msg = msg.unwrap();
         // | "rawtx" | <serialized transaction> | <uint32 sequence number in Little Endian>
         if let Some(tx) = msg.get(1) {
             if let Ok(tx) = bsl::Transaction::parse(tx) {
+                count += 1;
+
                 let txid = tx.parsed().txid_sha2();
                 let txid = Txid::from_byte_array(txid.into());
 
                 let insert_result = state.txs.lock().await.insert(txid, tx.parsed());
                 log::trace!("inserting {} {}", txid, insert_result.is_ok());
             }
+        }
+        if count % 10_000 == 0 {
+            log::info!("zmq received {count} txs");
         }
     }
     Ok(())
