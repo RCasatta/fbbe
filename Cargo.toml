@@ -33,11 +33,12 @@ qr_code = { version = "2.0.0", features = ["bmp"] }
 base64 = "0.21.0"
 percent-encoding = "2.2.0"
 bitcoin-private = "0.1.0"
-bitcoin_slices = { version = "0.8", features = [
+bitcoin_slices = { git = "https://github.com/RCasatta/bitcoin_slices", features = [
     "bitcoin",
     "slice_cache",
     "sha2",
-] }
+    "prometheus",
+], rev = "df1b4ad360309c5e8822889a6873f3e3bc53e4a4" }
 clap = { version = "4.2.7", features = ["derive", "env"] }
 url = "2.3.1"
 fxhash = "0.2.1"

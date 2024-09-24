@@ -298,12 +298,12 @@ dependencies = [
 [[package]]
 name = "bitcoin_slices"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8041a1be831c809ada090db2e3bd1469c65b72321bb2f31d7f56261eefc8321"
+source = "git+https://github.com/RCasatta/bitcoin_slices?rev=df1b4ad360309c5e8822889a6873f3e3bc53e4a4#df1b4ad360309c5e8822889a6873f3e3bc53e4a4"
 dependencies = [
  "bitcoin 0.32.2",
  "bitcoin_hashes 0.14.0",
  "hashbrown",
+ "prometheus",
  "sha2",
 ]
 

@@ -159,11 +159,14 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
     let known_txs: Vec<KnownTx> = serde_json::from_str(content).unwrap();
     let known_txs: HashMap<_, _> = known_txs.into_iter().map(|e| (e.txid, e.c)).collect();
 
+    let registry = prometheus::default_registry();
+
     let shared_state = Arc::new(SharedState::new(
         chain_info.clone(),
         args,
         mempool_info,
         known_txs,
+        registry,
     ));
 
     // initialize cache with information from headers

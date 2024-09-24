@@ -10,6 +10,7 @@ use bitcoin::{Block, BlockHash, Transaction, Txid, Weight};
 use bitcoin_slices::{bsl, SliceCache, Visit, Visitor};
 use futures::prelude::*;
 use lru::LruCache;
+use prometheus::Registry;
 use tokio::sync::{Mutex, MutexGuard};
 
 use crate::rpc::block::SerBlock;
@@ -111,12 +112,15 @@ impl SharedState {
         args: Arguments,
         mempool_info: MempoolInfo,
         known_txs: HashMap<Txid, String>,
+        registry: &Registry,
     ) -> Self {
+        let txs = SliceCache::new(args.tx_cache_byte_size);
+        txs.register_metric(registry).unwrap(); // TODO
         Self {
             // requests: AtomicUsize::new(0),
             // rpc_calls: AtomicUsize::new(0),
             chain_info: Mutex::new(chain_info),
-            txs: Mutex::new(SliceCache::new(args.tx_cache_byte_size)),
+            txs: Mutex::new(txs),
             tx_in_block: Mutex::new(LruCache::new(args.txid_blockhash_len.try_into().unwrap())), //TODO
             hash_to_height_time: Mutex::new(HashMap::new()),
             height_to_hash: Mutex::new(Vec::new()),
