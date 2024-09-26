@@ -38,7 +38,8 @@ async fn update_tx_zmq(socket: &SocketAddr, state: Arc<SharedState>) -> Result<(
             }
         }
         if count % 10_000 == 0 {
-            log::info!("zmq received {count} txs");
+            let cache_len = state.txs.lock().await.len();
+            log::info!("zmq received {count} txs, cache len: {cache_len}");
         }
     }
     Ok(())
