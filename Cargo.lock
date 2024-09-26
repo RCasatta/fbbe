@@ -297,8 +297,9 @@ dependencies = [
 
 [[package]]
 name = "bitcoin_slices"
-version = "0.8.0"
-source = "git+https://github.com/RCasatta/bitcoin_slices?rev=f0131a743b498e6fb7be7e322e2cfaff8973fd6a#f0131a743b498e6fb7be7e322e2cfaff8973fd6a"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0c2d2aa6c95757d94701123e5da8392fef1a4b8462564045d9309a8e11b0d22"
 dependencies = [
  "bitcoin 0.32.2",
  "bitcoin_hashes 0.14.0",
