@@ -38,7 +38,7 @@ bitcoin_slices = { git = "https://github.com/RCasatta/bitcoin_slices", features 
     "slice_cache",
     "sha2",
     "prometheus",
-], rev = "df1b4ad360309c5e8822889a6873f3e3bc53e4a4" }
+], rev = "f0131a743b498e6fb7be7e322e2cfaff8973fd6a" }
 clap = { version = "4.2.7", features = ["derive", "env"] }
 url = "2.3.1"
 fxhash = "0.2.1"

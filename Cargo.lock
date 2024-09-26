@@ -298,7 +298,7 @@ dependencies = [
 [[package]]
 name = "bitcoin_slices"
 version = "0.8.0"
-source = "git+https://github.com/RCasatta/bitcoin_slices?rev=df1b4ad360309c5e8822889a6873f3e3bc53e4a4#df1b4ad360309c5e8822889a6873f3e3bc53e4a4"
+source = "git+https://github.com/RCasatta/bitcoin_slices?rev=f0131a743b498e6fb7be7e322e2cfaff8973fd6a#f0131a743b498e6fb7be7e322e2cfaff8973fd6a"
 dependencies = [
  "bitcoin 0.32.2",
  "bitcoin_hashes 0.14.0",
