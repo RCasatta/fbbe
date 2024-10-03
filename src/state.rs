@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::ops::ControlFlow;
 use std::time::Instant;
 
@@ -10,6 +9,8 @@ use bitcoin::{Block, BlockHash, Transaction, Txid, Weight};
 use bitcoin_slices::Parse;
 use bitcoin_slices::{bsl, SliceCache, Visit, Visitor};
 use futures::prelude::*;
+use fxhash::FxHashMap;
+use fxhash::FxHashSet;
 use lru::LruCache;
 use prometheus::Registry;
 use tokio::sync::{Mutex, MutexGuard};
@@ -51,7 +52,7 @@ pub struct SharedState {
     /// Up to 1M elements
     pub tx_in_block: Mutex<LruCache<Txid, BlockHash>>,
 
-    pub hash_to_height_time: Mutex<HashMap<BlockHash, HeightTime>>,
+    pub hash_to_height_time: Mutex<FxHashMap<BlockHash, HeightTime>>,
 
     /// mainnet 800k -> at least 800_000 * 32 B = 25.6 MB
     pub height_to_hash: Mutex<Vec<BlockHash>>, // all zero if missing
@@ -64,7 +65,7 @@ pub struct SharedState {
     // Added when found tx in mempool, removed when not in mempool
     // for each inputs in the mempool the SpendPoint and the relatvie spent OutPoint
     // if the mempool has 100k with an average of 1.5 inputs, we have 150k*(36+36) = 10MB
-    pub mempool_spending: Mutex<HashMap<OutPoint, SpendPoint>>,
+    pub mempool_spending: Mutex<FxHashMap<OutPoint, SpendPoint>>,
 
     pub known_txs: HashMap<Txid, String>,
 }
@@ -104,7 +105,7 @@ pub struct BlockTemplate {
     pub transactions: Option<usize>,
 
     /// Transactions in the mempool
-    pub mempool: HashSet<Txid>,
+    pub mempool: FxHashSet<Txid>,
 }
 
 impl SharedState {
@@ -123,7 +124,7 @@ impl SharedState {
             chain_info: Mutex::new(chain_info),
             txs: Mutex::new(txs),
             tx_in_block: Mutex::new(LruCache::new(args.txid_blockhash_len.try_into().unwrap())), //TODO
-            hash_to_height_time: Mutex::new(HashMap::new()),
+            hash_to_height_time: Mutex::new(FxHashMap::default()),
             height_to_hash: Mutex::new(Vec::new()),
             args,
             mempool_info: Mutex::new(mempool_info),
@@ -133,10 +134,10 @@ impl SharedState {
                 last_in_block: None,
                 middle_in_block: None,
                 transactions: None,
-                mempool: HashSet::new(),
+                mempool: FxHashSet::default(),
             }),
             minutes_since_block: Mutex::new(None),
-            mempool_spending: Mutex::new(HashMap::new()),
+            mempool_spending: Mutex::new(FxHashMap::default()),
             known_txs,
         }
     }

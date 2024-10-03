@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 use crate::rpc;
 use crate::state::{outpoints_and_sum, tx_output, OutPointsAndSum, SharedState, SpendPoint};
 use bitcoin::{Txid, Weight};
+use fxhash::FxHashSet;
 use maud::{html, Render};
 use tokio::time::sleep;
 
@@ -176,7 +177,7 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
     log::info!("Starting update_mempool_details");
 
     let mut rates: BTreeSet<TxidWeightFeeCompact> = BTreeSet::new();
-    let mut rates_id: HashSet<Txid> = HashSet::new();
+    let mut rates_id: FxHashSet<Txid> = FxHashSet::default();
     let support_verbose = rpc::mempool::content(true).await.is_ok();
     log::info!("Node support compact mempool: {support_verbose}");
 
