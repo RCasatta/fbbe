@@ -176,6 +176,7 @@ pub async fn route(
 
             let output_status = output_status(&state, db, txid, tx.output.len()).await;
             let page = pages::tx::page(
+                txid,
                 &tx,
                 ts,
                 &prevouts,
@@ -386,6 +387,7 @@ pub async fn route(
             let output_status = output_status(&state, db, txid, tx.output.len()).await;
 
             let page = pages::tx::page(
+                txid,
                 tx,
                 None,
                 &prevouts,

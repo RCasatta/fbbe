@@ -1,6 +1,7 @@
 use std::str::from_utf8;
 
 use bitcoin::hex::DisplayHex;
+use bitcoin::Txid;
 use bitcoin::{
     blockdata::script::Instruction,
     consensus::{encode::serialize_hex, serialize},
@@ -36,6 +37,7 @@ pub enum OutputStatus {
 
 #[allow(clippy::too_many_arguments)] // TODO: remove
 pub fn page(
+    txid: Txid,
     tx: &Transaction,
     height_time: Option<(BlockHash, HeightTime)>,
     prevouts: &[TxOut],
@@ -46,7 +48,6 @@ pub fn page(
     user_provided: bool,
     known_tx: Option<String>,
 ) -> Result<Markup, Error> {
-    let txid = tx.compute_txid();
     let network_url_path = network().as_url_path();
     let start = page * IO_PER_PAGE;
     if start >= tx.input.len() && start >= tx.output.len() {
