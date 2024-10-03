@@ -1,4 +1,3 @@
-use std::io::BufReader;
 use std::str::FromStr;
 
 use super::{check_status, CLIENT};
@@ -6,10 +5,7 @@ use crate::error::Error;
 use crate::state::SerTx;
 use bitcoin::consensus::serialize;
 use bitcoin::hashes::hex::FromHex;
-use bitcoin::{
-    blockdata::constants::genesis_block, consensus::Decodable, BlockHash, Network, Transaction,
-    Txid,
-};
+use bitcoin::{blockdata::constants::genesis_block, BlockHash, Network, Txid};
 use hyper::body::Buf;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
@@ -54,7 +50,7 @@ pub async fn call_parse_json(
     })
 }
 
-pub async fn call_raw(txid: Txid) -> Result<Transaction, Error> {
+pub async fn call_raw(txid: Txid) -> Result<Vec<u8>, Error> {
     if txid == *GENESIS_TX {
         return Err(Error::GenesisTx);
     }
@@ -65,9 +61,7 @@ pub async fn call_raw(txid: Txid) -> Result<Transaction, Error> {
     let resp = client.get(uri).await?;
     check_status(resp.status(), |s| Error::RpcTx(s, txid)).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
-    let mut buf = BufReader::new(body_bytes.reader());
-    let tx = Transaction::consensus_decode(&mut buf)?;
-    Ok(tx)
+    Ok(body_bytes.to_vec())
 }
 
 #[derive(Deserialize, Debug, Clone)]

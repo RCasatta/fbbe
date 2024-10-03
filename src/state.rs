@@ -7,6 +7,7 @@ use bitcoin::consensus::Encodable;
 use bitcoin::hashes::Hash;
 use bitcoin::OutPoint;
 use bitcoin::{Block, BlockHash, Transaction, Txid, Weight};
+use bitcoin_slices::Parse;
 use bitcoin_slices::{bsl, SliceCache, Visit, Visitor};
 use futures::prelude::*;
 use lru::LruCache;
@@ -267,11 +268,12 @@ impl SharedState {
 
         let mut txs = self.txs.lock().await;
 
-        let mut buffer = vec![];
         for tx in got_txs.into_iter().flatten() {
-            buffer.clear();
-            tx.consensus_encode(&mut buffer).expect("vecs don't error");
-            let _ = txs.insert(tx.compute_txid(), &buffer);
+            if let Ok(res) = bsl::Transaction::parse(&tx) {
+                let tx = res.parsed();
+                let txid = Txid::from_byte_array(tx.txid_sha2().into());
+                let _ = txs.insert(txid, tx);
+            }
         }
 
         if needed_len > 100 {
