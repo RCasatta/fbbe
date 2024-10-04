@@ -212,7 +212,7 @@ impl SharedState {
                         log::trace!("tx hit");
                         return Ok((SerTx(tx.to_vec()), Some(*block_hash)));
                     }
-                    (Some(_), None) => log::debug!("tx miss, missing block"),
+                    (Some(_), None) => log::debug!("tx hit, missing block"),
                     (None, Some(_)) => log::debug!("tx miss, missing tx"),
                     (None, None) => log::debug!("tx miss, missing tx and block"),
                 }
