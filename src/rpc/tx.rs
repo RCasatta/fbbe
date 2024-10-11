@@ -5,7 +5,6 @@ use crate::error::Error;
 use crate::state::SerTx;
 use crate::NODE_REST_COUNTER;
 use bitcoin::consensus::serialize;
-use bitcoin::hashes::hex::FromHex;
 use bitcoin::{blockdata::constants::genesis_block, BlockHash, Network, Txid};
 use hyper::body::Buf;
 use once_cell::sync::Lazy;
@@ -37,10 +36,7 @@ pub async fn call_parse_json(
     network: Network,
 ) -> Result<(Option<BlockHash>, SerTx), Error> {
     Ok(match call_json(txid).await {
-        Ok(tx_json) => (
-            tx_json.block_hash,
-            SerTx(Vec::<u8>::from_hex(&tx_json.hex)?),
-        ),
+        Ok(tx_json) => (tx_json.block_hash, SerTx(hex::decode(&tx_json.hex)?)),
         Err(Error::GenesisTx) => {
             let mut block = genesis_block(network);
             (

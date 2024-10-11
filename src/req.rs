@@ -6,7 +6,6 @@ use crate::threads::index_addresses::Height;
 use crate::NetworkExt;
 use crate::{error::Error, route::ResponseType};
 use bitcoin::address::NetworkUnchecked;
-use bitcoin::hashes::hex::FromHex;
 use bitcoin::hashes::{sha256d, Hash};
 use bitcoin::{consensus::deserialize, Address, BlockHash, Transaction, Txid};
 use bitcoin::{OutPoint, Psbt};
@@ -90,7 +89,7 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
                         Err(_) => match Address::from_str(val) {
                             Ok(address) => Resource::SearchAddress(address.assume_checked()),
                             Err(_) => {
-                                match Vec::<u8>::from_hex(val)
+                                match hex::decode(val)
                                     .map(|bytes| deserialize::<Transaction>(&bytes))
                                 {
                                     Ok(Ok(tx)) => Resource::SearchFullTx(tx),
@@ -156,7 +155,7 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
             Resource::TxToT(txid)
         }
         (&Method::GET, None, Some(&"txhex"), Some(hex), None) => {
-            let bytes = Vec::<u8>::from_hex(hex)?;
+            let bytes = hex::decode(hex)?;
             let tx: Transaction = deserialize(&bytes)?;
             Resource::FullTx(tx)
         }

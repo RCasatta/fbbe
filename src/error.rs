@@ -23,6 +23,9 @@ pub enum Error {
     HexArray(#[from] bitcoin::hashes::hex::HexToArrayError),
 
     #[error(transparent)]
+    Hex2(#[from] hex::FromHexError),
+
+    #[error(transparent)]
     ParseInt(#[from] std::num::ParseIntError),
 
     #[error(transparent)]

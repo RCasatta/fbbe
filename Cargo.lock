@@ -776,6 +776,7 @@ dependencies = [
  "futures",
  "futures-util",
  "fxhash",
+ "hex",
  "html2text",
  "hyper",
  "lazy_static",
