@@ -218,14 +218,19 @@ impl SharedState {
                 }
             }
         }
-        self.tx_fetch_and_cache(txid).await
+        self.tx_fetch_and_cache(txid, needs_block_hash).await
     }
 
     pub async fn tx_fetch_and_cache(
         &self,
         txid: Txid,
+        needs_block_hash: bool,
     ) -> Result<(SerTx, Option<BlockHash>), Error> {
-        let (block_hash, tx) = rpc::tx::call_parse_json(txid, network()).await?;
+        let (block_hash, tx) = if needs_block_hash {
+            rpc::tx::call_parse_json(txid, network()).await?
+        } else {
+            (None::<BlockHash>, SerTx(rpc::tx::call_raw(txid).await?))
+        };
         let mut txs = self.txs.lock().await;
 
         let _ = txs.insert(txid, &tx.0);
