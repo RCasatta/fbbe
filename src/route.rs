@@ -52,6 +52,8 @@ pub async fn route(
     // let _count = state.requests.fetch_add(1, Ordering::Relaxed);
     let parsed_req = req::parse(&req).await?;
 
+    handle_http_counter(&parsed_req);
+
     // DETERMINE IF NOT MODIFIED
     if let Some(if_modified_since) = req.headers().get(IF_MODIFIED_SINCE) {
         log::trace!("{:?} if modified since {:?}", req.uri(), if_modified_since);
@@ -431,6 +433,39 @@ pub async fn route(
     Ok(resp)
 }
 
+fn handle_http_counter(parsed_req: &req::ParsedRequest) {
+    let resource = match &parsed_req.resource {
+        Resource::Home => "Home",
+        Resource::Favicon => "Favicon",
+        Resource::Css => "Css",
+        Resource::Contact => "Contact",
+        Resource::SearchHeight(_) => "SearchHeight",
+        Resource::SearchBlock(_) => "SearchBlock",
+        Resource::SearchTx(_) => "SearchTx",
+        Resource::SearchAddress(_) => "SearchAddress",
+        Resource::SearchFullTx(_) => "SearchFullTx",
+        Resource::Tx(_, _) => "Tx",
+        Resource::Block(_, _) => "Block",
+        Resource::TxOut(_, _) => "TxOut",
+        Resource::Head => "Head",
+        Resource::Robots => "Robots",
+        Resource::BlockToB(_) => "BlockToB",
+        Resource::TxToT(_) => "TxToT",
+        Resource::Address(_, _) => "Address",
+        Resource::AddressToA(_) => "AddressToA",
+        Resource::FullTx(_) => "FullTx",
+        Resource::Metrics => "Metrics",
+    };
+    let content = match &parsed_req.response_type {
+        ResponseType::Text(_) => "Text",
+        ResponseType::Html => "Html",
+        ResponseType::Bytes => "Bytes",
+    };
+    crate::HTTP_COUNTER
+        .with_label_values(&[resource, content])
+        .inc();
+}
+
 async fn output_status(
     state: &Arc<SharedState>,
     db: Option<Arc<Database>>,
@@ -520,7 +555,6 @@ pub async fn route_infallible(
     state: Arc<SharedState>,
     db: Option<Arc<Database>>,
 ) -> Result<Response<Body>, Infallible> {
-    crate::HTTP_COUNTER.inc();
     let timer = crate::HTTP_REQ_HISTOGRAM
         .with_label_values(&["all"])
         .start_timer();

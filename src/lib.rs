@@ -13,7 +13,7 @@ use hyper::service::{make_service_fn, service_fn};
 use hyper::Server;
 use lazy_static::lazy_static;
 use network_parse::NetworkParse;
-use prometheus::{labels, opts, register_counter, register_histogram_vec, Counter, HistogramVec};
+use prometheus::{register_counter_vec, register_histogram_vec, CounterVec, HistogramVec};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::convert::Infallible;
@@ -286,11 +286,11 @@ struct KnownTx {
 }
 
 lazy_static! {
-    pub(crate) static ref HTTP_COUNTER: Counter = register_counter!(opts!(
-        "fbbe_http_requests_total",
+    pub(crate) static ref HTTP_COUNTER: CounterVec = register_counter_vec!(
+        "fbbe_http_requests",
         "Number of HTTP requests made.",
-        labels! {"handler" => "all",}
-    ))
+        &["resource", "content"]
+    )
     .unwrap();
     pub(crate) static ref HTTP_REQ_HISTOGRAM: HistogramVec = register_histogram_vec!(
         "fbbe_http_request_duration_seconds",
