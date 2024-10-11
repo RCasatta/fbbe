@@ -1,5 +1,5 @@
 use super::{check_status, tx::ScriptPubKey, CLIENT};
-use crate::error::Error;
+use crate::{error::Error, NODE_REST_COUNTER};
 use bitcoin::{BlockHash, Txid};
 use hyper::body::Buf;
 use serde::Deserialize;
@@ -12,6 +12,10 @@ pub async fn _call(txid: Txid, vout: u32) -> Result<TxOutJson, Error> {
     let uri =
         format!("http://{bitcoind_addr}/rest/getutxos/checkmempool/{txid}-{vout}.json").parse()?;
     let resp = client.get(uri).await?;
+    NODE_REST_COUNTER
+        .with_label_values(&["getutxos/checkmempool", "json"])
+        .inc();
+
     check_status(resp.status(), |s| Error::RpcTxOut(s, txid, vout)).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
     let tx: TxOutJson = serde_json::from_reader(body_bytes.reader())?;

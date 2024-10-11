@@ -6,7 +6,7 @@ use std::{
 };
 
 use super::{check_status, ts_to_date_time_utc, CLIENT};
-use crate::error::Error;
+use crate::{error::Error, NODE_REST_COUNTER};
 use bitcoin::{consensus::Decodable, BlockHash};
 use hyper::body::Buf;
 use serde::Deserialize;
@@ -20,6 +20,9 @@ pub async fn call_many(
     //let uri = format!("http://{bitcoind_addr}/rest/headers/{block_hash}.bin?count={count}").parse()?;  // TODO move to this with bitcoind 0.24
     let uri = format!("http://{bitcoind_addr}/rest/headers/{count}/{block_hash}.bin").parse()?;
     let resp = client.get(uri).await?;
+    NODE_REST_COUNTER
+        .with_label_values(&["headers/x", "bin"])
+        .inc();
     check_status(resp.status(), |s| {
         Error::RpcBlockHeaders(s, block_hash, count)
     })
@@ -43,6 +46,9 @@ pub async fn call_one(block_hash: BlockHash) -> Result<BlockheaderJson, Error> {
     let bitcoind_addr = crate::globals::bitcoind_addr();
     let uri = format!("http://{bitcoind_addr}/rest/headers/1/{block_hash}.json").parse()?;
     let resp = client.get(uri).await?;
+    NODE_REST_COUNTER
+        .with_label_values(&["headers/1", "bin"])
+        .inc();
     check_status(resp.status(), |s| Error::RpcBlockHeaderJson(s, block_hash)).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
     let mut blockheader: Vec<BlockheaderJson> = serde_json::from_reader(body_bytes.reader())?;

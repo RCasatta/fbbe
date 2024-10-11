@@ -1,5 +1,5 @@
 use super::{check_status, CLIENT};
-use crate::error::Error;
+use crate::{error::Error, NODE_REST_COUNTER};
 use bitcoin::BlockHash;
 use hyper::body::Buf;
 use serde::Deserialize;
@@ -24,6 +24,9 @@ pub async fn call() -> Result<ChainInfo, Error> {
     let bitcoind_addr = crate::globals::bitcoind_addr();
     let uri = format!("http://{bitcoind_addr}/rest/chaininfo.json",).parse()?;
     let resp = client.get(uri).await?;
+    NODE_REST_COUNTER
+        .with_label_values(&["chaininfo", "json"])
+        .inc();
     check_status(resp.status(), Error::RpcChainInfo).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
     let info: ChainInfo = serde_json::from_reader(body_bytes.reader())?;

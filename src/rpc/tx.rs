@@ -3,6 +3,7 @@ use std::str::FromStr;
 use super::{check_status, CLIENT};
 use crate::error::Error;
 use crate::state::SerTx;
+use crate::NODE_REST_COUNTER;
 use bitcoin::consensus::serialize;
 use bitcoin::hashes::hex::FromHex;
 use bitcoin::{blockdata::constants::genesis_block, BlockHash, Network, Txid};
@@ -24,6 +25,7 @@ pub async fn call_json(txid: Txid) -> Result<TxJson, Error> {
 
     let uri = format!("http://{bitcoind_addr}/rest/tx/{txid}.json").parse()?;
     let resp = client.get(uri).await?;
+    NODE_REST_COUNTER.with_label_values(&["tx", "json"]).inc();
     check_status(resp.status(), |s| Error::RpcTxJson(s, txid)).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
     let tx: TxJson = serde_json::from_reader(body_bytes.reader())?;
@@ -59,6 +61,8 @@ pub async fn call_raw(txid: Txid) -> Result<Vec<u8>, Error> {
 
     let uri = format!("http://{bitcoind_addr}/rest/tx/{txid}.bin").parse()?;
     let resp = client.get(uri).await?;
+    NODE_REST_COUNTER.with_label_values(&["tx", "bin"]).inc();
+
     check_status(resp.status(), |s| Error::RpcTx(s, txid)).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
     Ok(body_bytes.to_vec())

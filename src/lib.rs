@@ -298,4 +298,10 @@ lazy_static! {
         &["handler"]
     )
     .unwrap();
+    pub(crate) static ref NODE_REST_COUNTER: CounterVec = register_counter_vec!(
+        "fbbe_rpc_requests_to_node",
+        "Number of RPC requests made to the node",
+        &["method", "content"]
+    )
+    .unwrap();
 }
