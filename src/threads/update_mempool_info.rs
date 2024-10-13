@@ -285,7 +285,7 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
         }
         drop(mempool_fees);
 
-        sleep(tokio::time::Duration::from_secs(2)).await;
+        sleep(tokio::time::Duration::from_secs(10)).await;
 
         log::trace!("mempool tx with fee: {}", rates.len());
     }
