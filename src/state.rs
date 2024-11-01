@@ -50,6 +50,7 @@ pub struct SharedState {
     pub txs: Mutex<SliceCache<Txid>>,
 
     /// Up to 1M elements
+    /// TODO truncate key to 8 bytes or so, use height as key, keep a lot more
     pub tx_in_block: Mutex<LruCache<Txid, BlockHash>>,
 
     pub hash_to_height_time: Mutex<FxHashMap<BlockHash, HeightTime>>,
@@ -209,6 +210,7 @@ impl SharedState {
                 let mut tx_in_block = self.tx_in_block.lock().await;
                 match (txs.get(&txid), tx_in_block.get(&txid)) {
                     (Some(tx), Some(block_hash)) => {
+                        // add prometheus measure tx="hit/miss" block_hash="hit/miss"
                         log::trace!("tx hit");
                         return Ok((SerTx(tx.to_vec()), Some(*block_hash)));
                     }
