@@ -3,6 +3,13 @@ use env_logger::Env;
 use fbbe::{inner_main, Arguments};
 use std::io::Write;
 
+#[cfg(not(target_env = "msvc"))]
+use jemallocator::Jemalloc;
+
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
+
 #[tokio::main]
 async fn main() {
     let mut builder = env_logger::Builder::from_env(Env::default().default_filter_or("info"));

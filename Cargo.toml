@@ -52,6 +52,9 @@ lazy_static = "1.5.0"
 async_zmq = "0.4.0"
 hex = "0.4.3"
 
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+jemallocator = "0.5"
+
 [dev-dependencies]
 bitcoind = { version = "0.31.0" }
 minreq = "2.8.1"
@@ -60,3 +63,7 @@ scraper = "0.16.0"
 
 [features]
 download_bitcoind = ["bitcoind/23_1"]
+
+[profile.dev.package.jemalloc-sys]
+opt-level = 1 # not sure why but there is compilation error with 0
+
