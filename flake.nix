@@ -48,6 +48,7 @@
             # link rocksdb dynamically
             ROCKSDB_INCLUDE_DIR = "${pkgs.rocksdb}/include";
             ROCKSDB_LIB_DIR = "${pkgs.rocksdb}/lib";
+            JEMALLOC_OVERRIDE = "${pkgs.rust-jemalloc-sys}/lib/libjemalloc.so"; # FIXME systemd dependant
           };
           cargoArtifacts = craneLib.buildDepsOnly commonArgs;
           BITCOIND_EXE = pkgs.bitcoind + "/bin/bitcoind";
@@ -82,6 +83,8 @@
             # link rocksdb dynamically
             ROCKSDB_INCLUDE_DIR = "${pkgs.rocksdb}/include";
             ROCKSDB_LIB_DIR = "${pkgs.rocksdb}/lib";
+
+            JEMALLOC_OVERRIDE = "${pkgs.rust-jemalloc-sys}/lib/libjemalloc.so"; # FIXME systemd dependant
 
             buildInputs = with pkgs; [ dive ];
           };
