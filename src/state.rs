@@ -15,6 +15,7 @@ use lru::LruCache;
 use prometheus::Registry;
 use tokio::sync::{Mutex, MutexGuard};
 
+use crate::cache_counter;
 use crate::rpc::block::SerBlock;
 use crate::{
     error::Error,
@@ -68,6 +69,7 @@ pub struct SharedState {
     // if the mempool has 100k with an average of 1.5 inputs, we have 150k*(36+36) = 10MB
     pub mempool_spending: Mutex<FxHashMap<OutPoint, SpendPoint>>,
 
+    /// A note on known transactions
     pub known_txs: HashMap<Txid, String>,
 }
 
@@ -160,12 +162,13 @@ impl SharedState {
 
     pub async fn height_time(&self, block_hash: BlockHash) -> Result<HeightTime, Error> {
         let mut hash_to_timestamp = self.hash_to_height_time.lock().await;
-        if let Some(height_time) = hash_to_timestamp.get(&block_hash) {
-            log::trace!("timestamp hit");
+        let timestamp = hash_to_timestamp.get(&block_hash);
+
+        cache_counter("height-time", timestamp.is_some());
+
+        if let Some(height_time) = timestamp {
             Ok(*height_time)
         } else {
-            log::debug!("timestamp miss");
-            // let _ = self.rpc_calls.fetch_add(1, Ordering::Relaxed);
             let header = rpc::headers::call_one(block_hash).await?;
             hash_to_timestamp.insert(block_hash, header.height_time);
             drop(hash_to_timestamp);
@@ -203,12 +206,15 @@ impl SharedState {
             let txs = self.txs.lock().await;
             if !needs_block_hash {
                 if let Some(tx) = txs.get(&txid) {
-                    log::trace!("tx hit");
                     return Ok((SerTx(tx.to_vec()), None));
                 }
             } else {
                 let mut tx_in_block = self.tx_in_block.lock().await;
-                match (txs.get(&txid), tx_in_block.get(&txid)) {
+
+                let block_hash = tx_in_block.get(&txid);
+                cache_counter("txid-block_hash", block_hash.is_some());
+
+                match (txs.get(&txid), block_hash) {
                     (Some(tx), Some(block_hash)) => {
                         // add prometheus measure tx="hit/miss" block_hash="hit/miss"
                         log::trace!("tx hit");

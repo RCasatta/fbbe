@@ -13,7 +13,10 @@ use hyper::service::{make_service_fn, service_fn};
 use hyper::Server;
 use lazy_static::lazy_static;
 use network_parse::NetworkParse;
-use prometheus::{register_counter_vec, register_histogram_vec, CounterVec, HistogramVec};
+use prometheus::{
+    register_counter_vec, register_histogram_vec, register_int_counter_vec, CounterVec,
+    HistogramVec, IntCounterVec,
+};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::convert::Infallible;
@@ -304,4 +307,17 @@ lazy_static! {
         &["method", "content"]
     )
     .unwrap();
+    static ref CACHE_COUNTER: IntCounterVec = register_int_counter_vec!(
+        "height_time_cache_counter",
+        "Hit/Miss of the height/time cache",
+        &["name", "event"]
+    )
+    .unwrap();
+}
+
+pub(crate) fn cache_counter(cache_name: &str, hit_miss: bool) {
+    let hit_miss = if hit_miss { "hit" } else { "miss" };
+    crate::CACHE_COUNTER
+        .with_label_values(&[cache_name, hit_miss])
+        .inc();
 }
