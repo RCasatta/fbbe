@@ -308,8 +308,8 @@ lazy_static! {
     )
     .unwrap();
     static ref CACHE_COUNTER: IntCounterVec = register_int_counter_vec!(
-        "height_time_cache_counter",
-        "Hit/Miss of the height/time cache",
+        "fbbe_cache_counter",
+        "Hit/Miss of FBBE caches",
         &["name", "event"]
     )
     .unwrap();
