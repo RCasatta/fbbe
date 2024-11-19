@@ -16,19 +16,29 @@ static GENESIS_TX: Lazy<Txid> = Lazy::new(|| {
 
 // curl -s http://localhost:8332/rest/tx/3d0db8e24ffab61fb96e8a8fc5a0b14989b6e851495232018192b3e98f6b904e.json | jq
 pub async fn call_json(txid: Txid) -> Result<TxJson, Error> {
+    let body_bytes = json_bytes(txid).await?;
+    let tx: TxJson = serde_json::from_reader(body_bytes.reader())?;
+    Ok(tx)
+}
+
+pub async fn call_json_only_hash(txid: Txid) -> Result<Option<BlockHash>, Error> {
+    let body_bytes = json_bytes(txid).await?;
+    let tx: TxJsonOnlyHash = serde_json::from_reader(body_bytes.reader())?;
+    Ok(tx.block_hash)
+}
+
+async fn json_bytes(txid: Txid) -> Result<hyper::body::Bytes, Error> {
     if txid == *GENESIS_TX {
         return Err(Error::GenesisTx);
     }
     let client = CLIENT.clone();
     let bitcoind_addr = crate::globals::bitcoind_addr();
-
     let uri = format!("http://{bitcoind_addr}/rest/tx/{txid}.json").parse()?;
     let resp = client.get(uri).await?;
     NODE_REST_COUNTER.with_label_values(&["tx", "json"]).inc();
     check_status(resp.status(), |s| Error::RpcTxJson(s, txid)).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
-    let tx: TxJson = serde_json::from_reader(body_bytes.reader())?;
-    Ok(tx)
+    Ok(body_bytes)
 }
 
 pub async fn call_parse_json(
@@ -62,6 +72,12 @@ pub async fn call_raw(txid: Txid) -> Result<Vec<u8>, Error> {
     check_status(resp.status(), |s| Error::RpcTx(s, txid)).await?;
     let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
     Ok(body_bytes.to_vec())
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct TxJsonOnlyHash {
+    #[serde(rename = "blockhash")]
+    pub block_hash: Option<BlockHash>,
 }
 
 #[derive(Deserialize, Debug, Clone)]

@@ -203,30 +203,46 @@ impl SharedState {
         needs_block_hash: bool,
     ) -> Result<(SerTx, Option<BlockHash>), Error> {
         {
-            let txs = self.txs.lock().await;
+            let tx = self
+                .txs
+                .lock()
+                .await
+                .get(&txid)
+                .map(|tx| SerTx(tx.to_vec()));
+
             if !needs_block_hash {
-                if let Some(tx) = txs.get(&txid) {
-                    return Ok((SerTx(tx.to_vec()), None));
+                match tx {
+                    Some(tx) => Ok((tx, None)),
+                    None => {
+                        let tx = rpc::tx::call_raw(txid).await?;
+                        let _ = self.txs.lock().await.insert(txid, &tx);
+                        Ok((SerTx(tx), None))
+                    }
                 }
             } else {
-                let mut tx_in_block = self.tx_in_block.lock().await;
-
-                let block_hash = tx_in_block.get(&txid);
+                let block_hash = self.tx_in_block.lock().await.get(&txid).cloned();
                 cache_counter("txid-block_hash", block_hash.is_some());
 
-                match (txs.get(&txid), block_hash) {
-                    (Some(tx), Some(block_hash)) => {
-                        // add prometheus measure tx="hit/miss" block_hash="hit/miss"
-                        log::trace!("tx hit");
-                        return Ok((SerTx(tx.to_vec()), Some(*block_hash)));
+                match (tx, block_hash) {
+                    (Some(tx), Some(block_hash)) => Ok((tx, Some(block_hash))),
+                    (Some(tx), None) => {
+                        // getting only the block hash
+                        let block_hash = rpc::tx::call_json_only_hash(txid).await?;
+                        if let Some(block_hash) = block_hash {
+                            self.tx_in_block.lock().await.push(txid.into(), block_hash);
+                        }
+                        Ok((tx, block_hash))
                     }
-                    (Some(_), None) => log::debug!("tx hit, missing block"),
-                    (None, Some(_)) => log::debug!("tx miss, missing tx"),
-                    (None, None) => log::debug!("tx miss, missing tx and block"),
+                    (None, Some(block_hash)) => {
+                        // getting only the tx
+                        let tx = rpc::tx::call_raw(txid).await?;
+                        let _ = self.txs.lock().await.insert(txid, &tx);
+                        Ok((SerTx(tx), Some(block_hash)))
+                    }
+                    (None, None) => self.tx_fetch_and_cache(txid, needs_block_hash).await,
                 }
             }
         }
-        self.tx_fetch_and_cache(txid, needs_block_hash).await
     }
 
     pub async fn tx_fetch_and_cache(
