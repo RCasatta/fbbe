@@ -65,12 +65,7 @@ async fn update_chain_info(
                             db.write_hashes(index_res)?;
                         }
 
-                        match shared_state
-                            .hash_to_height_time
-                            .lock()
-                            .await
-                            .get(&prev_blockhash)
-                        {
+                        match shared_state.height_time(prev_blockhash).await.ok() {
                             Some(height_time) if height_time.height == last_height - 1 => {
                                 log::debug!("previous block has correct height, breaking");
                                 break;

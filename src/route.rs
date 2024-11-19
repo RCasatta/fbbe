@@ -60,18 +60,16 @@ pub async fn route(
         let modified = match &parsed_req.resource {
             // Resource::Tx(txid) => state.txs.lock().await.get(txid).map,
             Resource::Block(block_hash, _) => state
-                .hash_to_height_time
-                .lock()
+                .height_time(*block_hash)
                 .await
-                .get(block_hash)
+                .ok()
                 .map(|e| e.date_time_utc()),
             Resource::Tx(txid, _) => {
                 if let Some(block_hash) = state.tx_in_block.lock().await.get(txid) {
                     state
-                        .hash_to_height_time
-                        .lock()
+                        .height_time(*block_hash)
                         .await
-                        .get(block_hash)
+                        .ok()
                         .map(|e| e.date_time_utc())
                 } else {
                     None

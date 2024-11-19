@@ -241,12 +241,7 @@ pub async fn address_seen(
     let blocks = shared_state.blocks_from_heights(&heights).await?;
     let mut outpoints_with_script_pubkey = vec![];
     for (h, b) in blocks {
-        let t = *shared_state
-            .hash_to_height_time
-            .lock()
-            .await
-            .get(&h)
-            .unwrap();
+        let t = shared_state.height_time(h).await.unwrap();
         outpoints_with_script_pubkey.extend(
             find_outpoints_with_script_pubkey(&script_pubkey, b)
                 .into_iter()
@@ -269,12 +264,7 @@ pub async fn address_seen(
         .map(|(h, o, t)| AddressSeen::new(o, h, t))
         .collect();
     for (h, b) in blocks {
-        let t = *shared_state
-            .hash_to_height_time
-            .lock()
-            .await
-            .get(&h)
-            .unwrap();
+        let t = shared_state.height_time(h).await.unwrap();
         find_txids_with_prevout(h, b, t, &mut address_seen);
     }
 

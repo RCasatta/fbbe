@@ -5,6 +5,7 @@ use crate::{network, rpc};
 use bitcoin::blockdata::constants::genesis_block;
 use bitcoin::hashes::Hash;
 use bitcoin::BlockHash;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 const HEADERS_PER_REQUEST: usize = 101;
@@ -19,10 +20,11 @@ pub async fn bootstrap_state(shared_state: Arc<SharedState>) -> Result<(), Error
     let geneis_hash = genesis_block(network()).header.block_hash();
     let mut hash = geneis_hash;
     let mut height = 0;
+    let mut hash_to_height_time = HashMap::new();
+
     for i in (0usize..).step_by(HEADERS_PER_REQUEST - 1) {
         let headers = rpc::headers::call_many(hash, HEADERS_PER_REQUEST as u32).await?;
         {
-            let mut hash_to_height_time = shared_state.hash_to_height_time.lock().await;
             let mut height_to_hash = shared_state.height_to_hash.lock().await;
             for (j, header) in headers.iter().enumerate() {
                 hash = header.block_hash();
@@ -39,6 +41,10 @@ pub async fn bootstrap_state(shared_state: Arc<SharedState>) -> Result<(), Error
             }
         }
     }
+
+    shared_state
+        .bootstrap_hash_to_height_time(hash_to_height_time)
+        .await;
 
     let mut current = shared_state.chain_info.lock().await.best_block_hash;
     let mut count = 0;

@@ -54,7 +54,7 @@ pub struct SharedState {
     /// TODO truncate key to 8 bytes or so, use height as key, keep a lot more
     pub tx_in_block: Mutex<LruCache<Txid, BlockHash>>,
 
-    pub hash_to_height_time: Mutex<FxHashMap<BlockHash, HeightTime>>,
+    hash_to_height_time: Mutex<FxHashMap<BlockHash, HeightTime>>,
 
     /// mainnet 800k -> at least 800_000 * 32 B = 25.6 MB
     pub height_to_hash: Mutex<Vec<BlockHash>>, // all zero if missing
@@ -160,18 +160,28 @@ impl SharedState {
         Ok(res)
     }
 
+    pub async fn bootstrap_hash_to_height_time(&self, map: HashMap<BlockHash, HeightTime>) {
+        self.hash_to_height_time.lock().await.extend(map);
+    }
+
     pub async fn height_time(&self, block_hash: BlockHash) -> Result<HeightTime, Error> {
-        let mut hash_to_timestamp = self.hash_to_height_time.lock().await;
-        let timestamp = hash_to_timestamp.get(&block_hash);
+        let timestamp = self
+            .hash_to_height_time
+            .lock()
+            .await
+            .get(&block_hash)
+            .cloned();
 
         cache_counter("height-time", timestamp.is_some());
 
         if let Some(height_time) = timestamp {
-            Ok(*height_time)
+            Ok(height_time)
         } else {
             let header = rpc::headers::call_one(block_hash).await?;
-            hash_to_timestamp.insert(block_hash, header.height_time);
-            drop(hash_to_timestamp);
+            self.hash_to_height_time
+                .lock()
+                .await
+                .insert(block_hash, header.height_time);
 
             let height = header.height() as usize;
             let mut height_to_hash = self.height_to_hash.lock().await;
