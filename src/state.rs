@@ -42,6 +42,29 @@ impl AsRef<[u8]> for SerTx {
     }
 }
 
+#[derive(Eq, Hash, PartialEq)]
+pub struct TruncTxid([u8; 8]);
+
+impl From<Txid> for TruncTxid {
+    fn from(value: Txid) -> Self {
+        TruncTxid(
+            value.to_byte_array()[..8]
+                .try_into()
+                .expect("slice right length"),
+        )
+    }
+}
+
+impl From<&Txid> for TruncTxid {
+    fn from(value: &Txid) -> Self {
+        TruncTxid(
+            value.as_byte_array()[..8]
+                .try_into()
+                .expect("slice right length"),
+        )
+    }
+}
+
 pub struct SharedState {
     // pub requests: AtomicUsize,
     // pub rpc_calls: AtomicUsize,
@@ -52,7 +75,7 @@ pub struct SharedState {
 
     /// Up to 1M elements
     /// TODO truncate key to 8 bytes or so, use height as key, keep a lot more
-    pub tx_in_block: Mutex<LruCache<Txid, BlockHash>>,
+    pub tx_in_block: Mutex<LruCache<TruncTxid, BlockHash>>,
 
     hash_to_height_time: Mutex<FxHashMap<BlockHash, HeightTime>>,
 
@@ -230,7 +253,7 @@ impl SharedState {
                     }
                 }
             } else {
-                let block_hash = self.tx_in_block.lock().await.get(&txid).cloned();
+                let block_hash = self.tx_in_block.lock().await.get(&txid.into()).cloned();
                 cache_counter("txid-block_hash", block_hash.is_some());
 
                 match (tx, block_hash) {
@@ -271,7 +294,7 @@ impl SharedState {
 
         if let Some(block_hash) = block_hash {
             let mut tx_in_block = self.tx_in_block.lock().await;
-            let _ = tx_in_block.put(txid, block_hash);
+            let _ = tx_in_block.put(txid.into(), block_hash);
         }
         Ok((tx, block_hash))
     }
@@ -344,7 +367,7 @@ impl SharedState {
             buffer.clear();
             tx.consensus_encode(&mut buffer).expect("vecs don't error");
             let _ = txs.insert(txid, &buffer);
-            let _ = tx_in_block.put(txid, block_hash);
+            let _ = tx_in_block.put(txid.into(), block_hash);
         }
 
         if let Some(height) = height {
