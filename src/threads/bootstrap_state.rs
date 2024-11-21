@@ -1,6 +1,6 @@
 use crate::error::Error;
 use crate::rpc::headers::HeightTime;
-use crate::state::{reserve, SharedState};
+use crate::state::SharedState;
 use crate::{network, rpc};
 use bitcoin::blockdata::constants::genesis_block;
 use bitcoin::hashes::Hash;
@@ -25,21 +25,21 @@ pub async fn bootstrap_state(shared_state: Arc<SharedState>) -> Result<(), Error
     for i in (0usize..).step_by(HEADERS_PER_REQUEST - 1) {
         let headers = rpc::headers::call_many(hash, HEADERS_PER_REQUEST as u32).await?;
         {
-            let mut height_to_hash = shared_state.height_to_hash.lock().await;
             for (j, header) in headers.iter().enumerate() {
                 hash = header.block_hash();
                 height = (i + j) as u32;
                 let time = header.time;
 
                 hash_to_height_time.insert(hash, HeightTime { height, time });
-
-                reserve(&mut height_to_hash, height as usize);
-                height_to_hash[height as usize] = hash;
             }
             if headers.len() != HEADERS_PER_REQUEST {
                 break;
             }
         }
+    }
+
+    for (k, v) in hash_to_height_time.iter() {
+        shared_state.add_height_hash(v.height, *k).await;
     }
 
     shared_state

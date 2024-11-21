@@ -6,7 +6,7 @@ use bitcoin::BlockHash;
 use hyper::body::Buf;
 use serde::Deserialize;
 
-pub async fn call(height: usize) -> Result<BlockHashByHeight, Error> {
+pub async fn _call(height: usize) -> Result<BlockHashByHeight, Error> {
     let client = CLIENT.clone();
     let bitcoind_addr = crate::globals::bitcoind_addr();
     let uri = format!("http://{bitcoind_addr}/rest/blockhashbyheight/{height}.json",).parse()?;

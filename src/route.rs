@@ -255,7 +255,10 @@ pub async fn route(
         }
 
         Resource::SearchHeight(height) => {
-            let hash = state.hash(height).await?;
+            let hash = state
+                .height_to_hash(height)
+                .await
+                .ok_or_else(|| Error::HeightNotFound)?;
             let network = network().as_url_path();
 
             Response::builder()

@@ -129,6 +129,9 @@ pub enum Error {
 
     #[error("Network '{0}' not parsed, valid values are: bitcoin, mainnet, main | testnet, test | signet | regtest")]
     NetworkParseError(String),
+
+    #[error("Height not found")]
+    HeightNotFound,
 }
 
 impl From<Error> for StatusCode {

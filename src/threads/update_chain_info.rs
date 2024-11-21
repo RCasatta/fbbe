@@ -95,12 +95,14 @@ async fn update_blocks_in_last_hour(shared_state: &Arc<SharedState>, last_tip_he
     let mut data = Vec::with_capacity(6);
 
     {
-        let height_to_hash = shared_state.height_to_hash.lock().await;
         for i in 0..6 {
-            match height_to_hash.get(last_tip_height - i) {
+            match shared_state
+                .height_to_hash((last_tip_height - i) as u32)
+                .await
+            {
                 Some(hash) => {
-                    if hash != &BlockHash::all_zeros() {
-                        match shared_state.height_time(*hash).await {
+                    if hash != BlockHash::all_zeros() {
+                        match shared_state.height_time(hash).await {
                             Ok(ht) => data.push((ht.since_now().as_secs() / 60).to_string()),
                             Err(_) => {
                                 log::warn!("update_blocks_in_last_hour: err getting height_time {last_tip_height} {i}");

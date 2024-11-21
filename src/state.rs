@@ -80,7 +80,7 @@ pub struct SharedState {
     hash_to_height_time: Mutex<FxHashMap<BlockHash, HeightTime>>,
 
     /// mainnet 800k -> at least 800_000 * 32 B = 25.6 MB
-    pub height_to_hash: Mutex<Vec<BlockHash>>, // all zero if missing
+    height_to_hash: Mutex<Vec<BlockHash>>, // all zero if missing
 
     pub args: Arguments,
     pub mempool_info: Mutex<MempoolInfo>,
@@ -175,12 +175,27 @@ impl SharedState {
         let mut res = vec![];
         // TODO cache some blocks
         for h in heights {
-            if let Some(block_hash) = self.height_to_hash.lock().await.get(*h as usize) {
-                let block = rpc::block::call_raw(*block_hash).await?; // TODO use raw block SerBlock
-                res.push((*block_hash, block))
+            if let Some(block_hash) = self.height_to_hash(*h).await {
+                let block = rpc::block::call_raw(block_hash).await?; // TODO use raw block SerBlock
+                res.push((block_hash, block))
             }
         }
         Ok(res)
+    }
+
+    pub async fn height_to_hash(&self, height: u32) -> Option<BlockHash> {
+        self.height_to_hash
+            .lock()
+            .await
+            .get(height as usize)
+            .cloned()
+    }
+
+    pub async fn add_height_hash(&self, height: u32, block_hash: BlockHash) {
+        let mut height_to_hash = self.height_to_hash.lock().await;
+
+        reserve(&mut height_to_hash, height as usize);
+        height_to_hash[height as usize] = block_hash;
     }
 
     pub async fn bootstrap_hash_to_height_time(&self, map: HashMap<BlockHash, HeightTime>) {
@@ -206,27 +221,9 @@ impl SharedState {
                 .await
                 .insert(block_hash, header.height_time);
 
-            let height = header.height() as usize;
-            let mut height_to_hash = self.height_to_hash.lock().await;
-            reserve(&mut height_to_hash, height);
-            height_to_hash[height] = block_hash;
+            self.add_height_hash(header.height(), block_hash).await;
 
             Ok(header.height_time)
-        }
-    }
-
-    pub async fn hash(&self, height: u32) -> Result<BlockHash, Error> {
-        let height = height as usize;
-        let mut height_to_hash = self.height_to_hash.lock().await;
-        reserve(&mut height_to_hash, height);
-        if height_to_hash[height] != BlockHash::all_zeros() {
-            log::trace!("height hit");
-            Ok(height_to_hash[height])
-        } else {
-            log::debug!("height miss");
-            let r = rpc::blockhashbyheight::call(height).await?;
-            height_to_hash[height] = r.block_hash;
-            Ok(r.block_hash)
         }
     }
 
@@ -377,9 +374,7 @@ impl SharedState {
                 .await
                 .insert(block_hash, height_time);
 
-            let mut height_to_hash = self.height_to_hash.lock().await;
-            reserve(&mut height_to_hash, height as usize);
-            height_to_hash[height as usize] = block_hash;
+            self.add_height_hash(height, block_hash).await;
         }
 
         Ok(())

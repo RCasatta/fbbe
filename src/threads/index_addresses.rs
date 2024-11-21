@@ -432,13 +432,8 @@ async fn index_addresses(db: Arc<Database>, shared_state: Arc<SharedState>) -> R
     log::info!("already_indexed:{}", indexed_block_hash.len());
 
     for height in 0.. {
-        let block_hash = match shared_state
-            .height_to_hash
-            .lock()
-            .await
-            .get(height as usize)
-        {
-            Some(hash) if *hash != BlockHash::all_zeros() => *hash,
+        let block_hash = match shared_state.height_to_hash(height).await {
+            Some(hash) if hash != BlockHash::all_zeros() => hash,
             _ => {
                 log::info!("stopping initial block indexing");
                 break;
