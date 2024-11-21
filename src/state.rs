@@ -73,9 +73,8 @@ pub struct SharedState {
     /// By default 100MB of cached transactions, `Txid -> Transaction`
     pub txs: Mutex<SliceCache<Txid>>,
 
-    /// Up to 1M elements
-    /// TODO truncate key to 8 bytes or so, use height as key, keep a lot more
-    pub tx_in_block: Mutex<LruCache<TruncTxid, BlockHash>>,
+    /// A cache to know in which block hash a tx is in
+    tx_in_block: Mutex<LruCache<TruncTxid, BlockHash>>,
 
     hash_to_height_time: Mutex<FxHashMap<BlockHash, HeightTime>>,
 
@@ -191,6 +190,14 @@ impl SharedState {
             .cloned()
     }
 
+    pub async fn tx_in_block(&self, txid: &Txid) -> Option<BlockHash> {
+        self.tx_in_block.lock().await.get(&txid.into()).cloned()
+    }
+
+    pub async fn add_tx_in_block(&self, txid: Txid, block_hash: BlockHash) {
+        self.tx_in_block.lock().await.push(txid.into(), block_hash);
+    }
+
     pub async fn add_height_hash(&self, height: u32, block_hash: BlockHash) {
         let mut height_to_hash = self.height_to_hash.lock().await;
 
@@ -250,7 +257,7 @@ impl SharedState {
                     }
                 }
             } else {
-                let block_hash = self.tx_in_block.lock().await.get(&txid.into()).cloned();
+                let block_hash = self.tx_in_block(&txid).await;
                 cache_counter("txid-block_hash", block_hash.is_some());
 
                 match (tx, block_hash) {
@@ -259,7 +266,7 @@ impl SharedState {
                         // getting only the block hash
                         let block_hash = rpc::tx::call_json_only_hash(txid).await?;
                         if let Some(block_hash) = block_hash {
-                            self.tx_in_block.lock().await.push(txid.into(), block_hash);
+                            self.add_tx_in_block(txid, block_hash).await;
                         }
                         Ok((tx, block_hash))
                     }
@@ -290,8 +297,7 @@ impl SharedState {
         let _ = txs.insert(txid, &tx.0);
 
         if let Some(block_hash) = block_hash {
-            let mut tx_in_block = self.tx_in_block.lock().await;
-            let _ = tx_in_block.put(txid.into(), block_hash);
+            self.add_tx_in_block(txid, block_hash).await;
         }
         Ok((tx, block_hash))
     }

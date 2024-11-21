@@ -65,9 +65,9 @@ pub async fn route(
                 .ok()
                 .map(|e| e.date_time_utc()),
             Resource::Tx(txid, _) => {
-                if let Some(block_hash) = state.tx_in_block.lock().await.get(&txid.into()) {
+                if let Some(block_hash) = state.tx_in_block(txid).await {
                     state
-                        .height_time(*block_hash)
+                        .height_time(block_hash)
                         .await
                         .ok()
                         .map(|e| e.date_time_utc())
