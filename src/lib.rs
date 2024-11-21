@@ -42,13 +42,13 @@ mod threads;
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 pub struct Arguments {
-    /// Number of bytes kept in memory for caching transactions, default 200MB
-    #[arg(long, default_value = "200000000", env)]
-    pub tx_cache_byte_size: usize,
+    /// Number of bytes kept in memory for caching transactions, use reasonable per-network default if missing
+    #[arg(long, env)]
+    tx_cache_byte_size: Option<usize>,
 
-    /// Number of txid->block_hash kept in memory, default 1M, about 128MB
-    #[arg(long, default_value = "2000000", env)]
-    pub txid_blockhash_len: usize,
+    /// Number of txid->block_hash kept in memory, use reasonable per-network default if missing
+    #[arg(long, env)]
+    txid_blockhash_len: Option<usize>,
 
     /// Some requests to the bitcoin core are concurrent, this set the desired parallelism.
     /// Note there is a limit of open files that this setting too high could trigger.
@@ -99,6 +99,31 @@ pub struct Arguments {
     /// Bitcoind ZMQ pub raw tx socket address
     #[arg(short, long, env)]
     pub zmq_rawtx: Option<SocketAddr>,
+}
+
+impl Arguments {
+    pub fn txid_blockhash_len(&self) -> usize {
+        self.txid_blockhash_len
+            .unwrap_or_else(|| match self.network.as_ref() {
+                Some(n) => match n.0 {
+                    Network::Bitcoin => 5_000_000,
+                    _ => 100_000,
+                },
+                None => 100_000,
+            })
+    }
+
+    pub fn tx_cache_byte_size(&self) -> usize {
+        self.tx_cache_byte_size
+            .unwrap_or_else(|| match self.network.as_ref() {
+                Some(n) => match n.0 {
+                    Network::Bitcoin => 1_000_000_000, // 1GB
+                    Network::Regtest => 10_000_000,    // 10MB
+                    _ => 100_000_000,                  // 100MB
+                },
+                None => 100_000_000,
+            })
+    }
 }
 
 pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {

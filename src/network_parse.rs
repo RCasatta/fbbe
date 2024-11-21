@@ -5,7 +5,7 @@ use bitcoin::Network;
 use crate::Error;
 
 #[derive(Clone)]
-pub struct NetworkParse(Network);
+pub struct NetworkParse(pub(crate) Network);
 impl FromStr for NetworkParse {
     type Err = Error;
 
