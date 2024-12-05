@@ -36,8 +36,8 @@ impl AsRef<[u8]> for ScriptHashHeight {
     }
 }
 
-const BLOCK_HASH_CF: &str = "BLOCK_HASH_CF";
-const FUNDING_CF: &str = "FUNDING_CF";
+const BLOCK_HASH_CF: &str = "BLOCK_HASH_CF"; // Index all indexed BlockHash -> []
+const FUNDING_CF: &str = "FUNDING_CF"; // Index script_hash || height -> []
 const SPENDING_CF: &str = "SPENDING_CF";
 
 const COLUMN_FAMILIES: &[&str] = &[BLOCK_HASH_CF, FUNDING_CF, SPENDING_CF];
@@ -72,13 +72,11 @@ impl Database {
     }
 
     fn funding_cf(&self) -> &ColumnFamily {
-        self.db.cf_handle("FUNDING_CF").expect("missing FUNDING_CF")
+        self.db.cf_handle(FUNDING_CF).expect("missing FUNDING_CF")
     }
 
     fn spending_cf(&self) -> &ColumnFamily {
-        self.db
-            .cf_handle("SPENDING_CF")
-            .expect("missing SPENDING_CF")
+        self.db.cf_handle(SPENDING_CF).expect("missing SPENDING_CF")
     }
 
     pub fn indexed_block_hash(&self) -> HashSet<BlockHash> {
