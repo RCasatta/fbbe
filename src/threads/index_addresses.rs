@@ -36,9 +36,9 @@ impl AsRef<[u8]> for ScriptHashHeight {
     }
 }
 
-const BLOCK_HASH_CF: &str = "BLOCK_HASH_CF"; // Index all indexed BlockHash -> []
-const FUNDING_CF: &str = "FUNDING_CF"; // Index script_hash || height -> []
-const SPENDING_CF: &str = "SPENDING_CF";
+const BLOCK_HASH_CF: &str = "BLOCK_HASH_CF"; // BlockHash -> [] // indexed blocks
+const FUNDING_CF: &str = "FUNDING_CF"; // hash(Script) || height -> []
+const SPENDING_CF: &str = "SPENDING_CF"; // hash(prevout) || height -> []
 
 const COLUMN_FAMILIES: &[&str] = &[BLOCK_HASH_CF, FUNDING_CF, SPENDING_CF];
 
