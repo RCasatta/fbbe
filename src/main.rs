@@ -13,9 +13,26 @@ static GLOBAL: Jemalloc = Jemalloc;
 #[tokio::main]
 async fn main() {
     let mut builder = env_logger::Builder::from_env(Env::default().default_filter_or("info"));
-    if std::env::var("LOG_AVOID_TIMESTAMP").is_ok() {
-        builder.format(|buf, r| writeln!(buf, "{:5} {} {}", r.level(), r.target(), r.args()));
-    }
+    match std::env::var("RUST_LOG_STYLE") {
+        Ok(s) if s == "SYSTEMD" => builder
+            .format(|buf, record| {
+                writeln!(
+                    buf,
+                    "<{}>{}: {}",
+                    match record.level() {
+                        log::Level::Error => 3,
+                        log::Level::Warn => 4,
+                        log::Level::Info => 6,
+                        log::Level::Debug => 7,
+                        log::Level::Trace => 7,
+                    },
+                    record.target(),
+                    record.args()
+                )
+            })
+            .init(),
+        _ => (),
+    };
 
     builder.init();
     let args = Arguments::parse();
