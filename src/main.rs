@@ -12,6 +12,15 @@ static GLOBAL: Jemalloc = Jemalloc;
 
 #[tokio::main]
 async fn main() {
+    init_logging();
+    let args = Arguments::parse();
+
+    if let Err(e) = inner_main(args).await {
+        log::error!("{}", e);
+    }
+}
+
+fn init_logging() {
     let mut builder = env_logger::Builder::from_env(Env::default().default_filter_or("info"));
     if let Ok(s) = std::env::var("RUST_LOG_STYLE") {
         if s == "SYSTEMD" {
@@ -29,9 +38,4 @@ async fn main() {
     }
 
     builder.init();
-    let args = Arguments::parse();
-
-    if let Err(e) = inner_main(args).await {
-        log::error!("{}", e);
-    }
 }
