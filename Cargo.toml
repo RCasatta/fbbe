@@ -36,7 +36,7 @@ qr_code = { version = "2.0.0", features = ["bmp"] }
 base64 = "0.21.0"
 percent-encoding = "2.2.0"
 bitcoin-private = "0.1.0"
-bitcoin_slices = { version = "0.9.0", features = [
+bitcoin_slices = { version = "0.10.0", features = [
     "bitcoin",
     "slice_cache",
     "sha2",
@@ -66,4 +66,3 @@ download_bitcoind = ["bitcoind/23_1"]
 
 [profile.dev.package.jemalloc-sys]
 opt-level = 1 # not sure why but there is compilation error with 0
-
