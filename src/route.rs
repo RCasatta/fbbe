@@ -450,7 +450,7 @@ pub async fn route(
             // Add known transactions from state
             for (txid, _description) in &state.known_txs {
                 sitemap.push_str(&format!(
-                    "<url><loc>https://{}/tx/{}</loc><changefreq>never</changefreq><priority>0.8</priority></url>",
+                    "<url><loc>https://{}/t/{}</loc><changefreq>never</changefreq><priority>0.8</priority></url>",
                     dns_host, txid
                 ));
             }
