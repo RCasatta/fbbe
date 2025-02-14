@@ -39,6 +39,7 @@ pub enum Resource {
     AddressToA(Address),
     FullTx(Transaction),
     Metrics,
+    Sitemap,
 }
 
 pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
@@ -116,6 +117,7 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
         (&Method::GET, None, Some(&"css"), Some(&"pico.min.css"), None) => Resource::Css,
         (&Method::GET, None, Some(&"contact"), None, None) => Resource::Contact,
         (&Method::GET, None, Some(&"metrics"), None, None) => Resource::Metrics,
+        (&Method::GET, None, Some(&"sitemap.xml"), None, None) => Resource::Sitemap,
 
         (&Method::GET, None, Some(&"t"), Some(txid), page) => {
             let txid = Txid::from_str(txid)?;

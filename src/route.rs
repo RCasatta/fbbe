@@ -427,6 +427,41 @@ pub async fn route(
                 .header(CONTENT_TYPE, encoder.format_type())
                 .body(Body::from(buffer))?
         }
+        Resource::Sitemap => {
+            let dns_host = match state.args.dns_host.as_ref() {
+                Some(dns_host) => dns_host,
+                None => {
+                    return Err(Error::NotFound);
+                }
+            };
+
+            // Build the XML sitemap
+            // TODO build once and put in the state.
+            let mut sitemap = String::from(
+                r#"<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">"#,
+            );
+
+            // Add home page
+            sitemap.push_str(&format!(
+                "<url><loc>https://{}/</loc><changefreq>always</changefreq><priority>1.0</priority></url>",
+                dns_host
+            ));
+
+            // Add known transactions from state
+            for (txid, _description) in &state.known_txs {
+                sitemap.push_str(&format!(
+                    "<url><loc>https://{}/tx/{}</loc><changefreq>never</changefreq><priority>0.8</priority></url>",
+                    dns_host, txid
+                ));
+            }
+
+            sitemap.push_str("\n</urlset>");
+
+            Response::builder()
+                .header(CONTENT_TYPE, "application/xml; charset=utf-8")
+                .header(CACHE_CONTROL, "public, max-age=86400") // Cache for 24 hours
+                .body(Body::from(sitemap))?
+        }
     };
 
     log::debug!("{:?} executed in {:?}", req.uri(), now.elapsed());
@@ -456,6 +491,7 @@ fn handle_http_counter(parsed_req: &req::ParsedRequest) {
         Resource::AddressToA(_) => "AddressToA",
         Resource::FullTx(_) => "FullTx",
         Resource::Metrics => "Metrics",
+        Resource::Sitemap => "Sitemap",
     };
     let content = match &parsed_req.response_type {
         ResponseType::Text(_) => "Text",

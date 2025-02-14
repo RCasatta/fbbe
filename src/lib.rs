@@ -99,6 +99,10 @@ pub struct Arguments {
     /// Bitcoind ZMQ pub raw tx socket address
     #[arg(short, long, env)]
     pub zmq_rawtx: Option<SocketAddr>,
+
+    /// DNS hostname, used to generate sitemap URLs
+    #[arg(long, env)]
+    pub dns_host: Option<String>,
 }
 
 impl Arguments {
