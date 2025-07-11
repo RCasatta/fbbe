@@ -14,11 +14,7 @@ pub struct MempoolSection {
 impl Render for MempoolSection {
     fn render(&self) -> maud::Markup {
         let transaction_s = Plural::new("transaction", self.info.size as usize);
-        let mempoolminfee = if self.info.mempoolminfee > 0.00000999 {
-            Some(self.info.mempoolminfee)
-        } else {
-            None
-        };
+        let mempoolminfee = self.info.mempoolminfee;
 
         html! {
             hgroup {
@@ -30,11 +26,9 @@ impl Render for MempoolSection {
                 tbody {
                     (AmountRow::new_with_btc("Total fees (BTC)", self.info.total_fee))
 
-                    @if let Some(mempoolminfee) = mempoolminfee {
-                        tr {
-                            th { "Mempool min fee (BTC)" }
-                            td class="number" { (WeightFee::from_btc_kvb(mempoolminfee)) }
-                        }
+                    tr {
+                        th { "Mempool min fee (BTC)" }
+                        td class="number" { (WeightFee::from_btc_kvb(mempoolminfee)) }
                     }
 
                     // (SizeRow::new("Size (bytes)", self.info.bytes as usize))
