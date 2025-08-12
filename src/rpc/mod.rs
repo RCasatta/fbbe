@@ -22,12 +22,14 @@ async fn check_status<F: FnOnce(StatusCode) -> Error>(
     status: StatusCode,
     error: F,
 ) -> Result<(), Error> {
-    if status != 200 {
+    if status == 200 {
+        Ok(())
+    } else {
         let e = error(status);
         log::warn!("status {} error:{:?}", status, e);
-        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+        if status == 503 {
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        }
         Err(e)
-    } else {
-        Ok(())
     }
 }
