@@ -14,6 +14,7 @@ use fxhash::FxHashSet;
 use lru::LruCache;
 use prometheus::Registry;
 use tokio::sync::{Mutex, MutexGuard};
+use tokio::time::{sleep, Duration};
 
 use crate::cache_counter;
 use crate::rpc::block::SerBlock;
@@ -327,7 +328,12 @@ impl SharedState {
         let start = Instant::now();
 
         let got_txs: Vec<_> = stream::iter(needed)
-            .map(rpc::tx::call_raw)
+            .enumerate()
+            .map(|(i, txid)| async move {
+                let delay_ms = i as u64; // first call is 0ms, 101th is 100ms
+                sleep(Duration::from_millis(delay_ms.min(100))).await; // at most 100ms
+                rpc::tx::call_raw(txid).await
+            })
             .buffer_unordered(self.args.fetch_parallelism)
             .collect()
             .await;
@@ -344,11 +350,11 @@ impl SharedState {
 
         if needed_len > 100 {
             log::info!(
-                "needed {} prevouts (out of {}) for {} loaded in {}ms",
+                "needed {} prevouts (out of {}) for {} loaded in {:.2?}",
                 needed_len,
                 count,
                 txid,
-                start.elapsed().as_millis()
+                start.elapsed()
             );
         }
     }
