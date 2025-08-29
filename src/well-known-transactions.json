@@ -90,5 +90,13 @@
     {
         "c": "The Disputed 'Satoshi Proof' Transaction",
         "txid": "0437cd7f8525ceed2324359c2d0ba26006d92d856a9c20fa0241106ee5a597c9"
+    },
+    {
+        "c": "Mt. Gox 'proof of assets' transaction (442,000 BTC moved by CEO Mark Karpeles to demonstrate solvency)",
+        "txid": "3a1b9e330d32fef1ee42f8e86420d2be978bbe0dc5862f17da9027cf9e11f8c4"
+    },
+    {
+        "c": "U.S. Marshal's auction of seized Silk Road Bitcoins (30,000 BTC sold to Tim Draper)",
+        "txid": "9e95c3c3c96f57527cdc649550bf8e92892f7651f718d846033798aee333b0c3"
     }
 ]
