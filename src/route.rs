@@ -102,6 +102,11 @@ pub async fn route(
 
             let minute_since_blocks = state.minutes_since_block.lock().await.clone();
             let height_time = state.height_time(chain_info.best_block_hash).await?;
+            let random_known_tx = if crate::network() == bitcoin::Network::Bitcoin {
+                state.random_known_tx()
+            } else {
+                None
+            };
             let page = pages::home::page(
                 chain_info,
                 height_time,
@@ -109,6 +114,7 @@ pub async fn route(
                 minute_since_blocks,
                 &parsed_req,
                 fees,
+                random_known_tx,
             )
             .into_string();
 

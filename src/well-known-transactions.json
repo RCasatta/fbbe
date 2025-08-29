@@ -86,5 +86,9 @@
     {
         "c": "Most complex transaction Easter egg (https://stacker.news/items/600187)",
         "txid": "b10c0000004da5a9d1d9b4ae32e09f0b3e62d21a5cce5428d4ad714fb444eb5d"
+    },
+    {
+        "c": "The Disputed 'Satoshi Proof' Transaction",
+        "txid": "0437cd7f8525ceed2324359c2d0ba26006d92d856a9c20fa0241106ee5a597c9"
     }
 ]

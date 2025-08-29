@@ -8,6 +8,7 @@ use crate::{
     rpc::{chaininfo::ChainInfo, headers::HeightTime},
     state::BlockTemplate,
 };
+use bitcoin::Txid;
 use maud::{html, Markup, PreEscaped};
 
 const TWO_HOURS: Duration = Duration::from_secs(60 * 60 * 2);
@@ -19,6 +20,7 @@ pub fn page(
     minutes_since_blocks: Option<String>,
     parsed: &ParsedRequest,
     block_template: BlockTemplate,
+    random_known_tx: Option<Txid>,
 ) -> Markup {
     let duration = height_time.since_now();
     let blockchain_size_row = SizeRow::new("Size on disk", info.size_on_disk);
@@ -65,6 +67,17 @@ pub fn page(
                     }
 
                     (blockchain_size_row)
+
+                    @if let Some(txid) = random_known_tx.as_ref() {
+                        tr {
+                            th {
+                                "Random annotated tx"
+                            }
+                            td class="right" {
+                                (txid.html())
+                            }
+                        }
+                    }
 
                 }
             }

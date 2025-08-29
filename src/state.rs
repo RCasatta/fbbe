@@ -391,6 +391,21 @@ impl SharedState {
 
         Ok(())
     }
+
+    pub fn random_known_tx(&self) -> Option<Txid> {
+        if self.known_txs.is_empty() {
+            return None;
+        }
+
+        // Use a simple random selection based on current time
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        let index = (now as usize) % self.known_txs.len();
+        self.known_txs.iter().nth(index).map(|(txid, _desc)| *txid)
+    }
 }
 
 pub(crate) fn reserve(height_to_hash: &mut MutexGuard<Vec<BlockHash>>, height: usize) {
