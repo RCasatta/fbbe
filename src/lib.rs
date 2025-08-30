@@ -245,52 +245,62 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
     log::info!("Listening on http://{}", addr);
 
     loop {
-        let (stream, _) = match listener.accept().await {
-            Ok(result) => result,
-            Err(e) => {
-                log::error!("Failed to accept connection: {}", e);
-                continue;
-            }
-        };
+        tokio::select! {
+            // Handle incoming connections
+            result = listener.accept() => {
+                let (stream, _) = match result {
+                    Ok(conn) => conn,
+                    Err(e) => {
+                        log::error!("Failed to accept connection: {}", e);
+                        continue;
+                    }
+                };
 
-        let shared_state_clone = shared_state.clone();
-        let db_clone = db.clone();
+                let shared_state_clone = shared_state.clone();
+                let db_clone = db.clone();
 
-        tokio::spawn(async move {
-            let io = hyper_util::rt::TokioIo::new(stream);
+                tokio::spawn(async move {
+                    let io = hyper_util::rt::TokioIo::new(stream);
 
-            let service =
-                hyper::service::service_fn(move |req: hyper::Request<hyper::body::Incoming>| {
-                    let shared_state = shared_state_clone.clone();
-                    let db = db_clone.clone();
+                    let service =
+                        hyper::service::service_fn(move |req: hyper::Request<hyper::body::Incoming>| {
+                            let shared_state = shared_state_clone.clone();
+                            let db = db_clone.clone();
 
-                    async move {
-                        // Convert Incoming to Bytes
-                        let (parts, body) = req.into_parts();
-                        let body_bytes = http_body_util::BodyExt::collect(body)
+                            async move {
+                                // Convert Incoming to Bytes
+                                let (parts, body) = req.into_parts();
+                                let body_bytes = http_body_util::BodyExt::collect(body)
+                                    .await
+                                    .map(|collected| collected.to_bytes())
+                                    .unwrap_or_default();
+                                let req = hyper::Request::from_parts(parts, body_bytes);
+
+                                let resp = route_infallible(req, shared_state, db).await?;
+
+                                // Convert response body to Full<Bytes> for hyper
+                                let (parts, body) = resp.into_parts();
+                                let response =
+                                    hyper::Response::from_parts(parts, http_body_util::Full::new(body));
+                                Ok::<_, std::convert::Infallible>(response)
+                            }
+                        });
+
+                    if let Err(e) =
+                        hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new())
+                            .serve_connection(io, service)
                             .await
-                            .map(|collected| collected.to_bytes())
-                            .unwrap_or_default();
-                        let req = hyper::Request::from_parts(parts, body_bytes);
-
-                        let resp = route_infallible(req, shared_state, db).await?;
-
-                        // Convert response body to Full<Bytes> for hyper
-                        let (parts, body) = resp.into_parts();
-                        let response =
-                            hyper::Response::from_parts(parts, http_body_util::Full::new(body));
-                        Ok::<_, std::convert::Infallible>(response)
+                    {
+                        log::error!("Error serving connection: {}", e);
                     }
                 });
-
-            if let Err(e) =
-                hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new())
-                    .serve_connection(io, service)
-                    .await
-            {
-                log::error!("Error serving connection: {}", e);
             }
-        });
+            // Handle shutdown signal
+            _ = shutdown_signal() => {
+                log::info!("Received shutdown signal, exiting gracefully...");
+                break;
+            }
+        }
     }
     Ok(())
 }
