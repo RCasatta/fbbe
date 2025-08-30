@@ -30,7 +30,7 @@ impl<'a> AmountRow<'a> {
     }
 }
 
-impl<'a> Render for AmountRow<'a> {
+impl Render for AmountRow<'_> {
     fn render(&self) -> maud::Markup {
         html! {
             tr {

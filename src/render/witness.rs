@@ -4,7 +4,7 @@ use maud::{html, Render};
 
 pub(crate) struct Witness<'a>(&'a bitcoin::Witness);
 
-impl<'a> Render for Witness<'a> {
+impl Render for Witness<'_> {
     fn render(&self) -> maud::Markup {
         // The following logic makes hex the witness elements, empty elements become "<empty>".
         // Moreover there is a deduplication logic where same consecutive elements like "00 00"

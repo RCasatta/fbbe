@@ -6,13 +6,13 @@ use maud::{html, Render};
 
 pub(crate) struct Address<'a>(&'a bitcoin::Address);
 struct Link<'a>(&'a bitcoin::Address);
-impl<'a> Display for Link<'a> {
+impl Display for Link<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}a/{}", network().as_url_path(), self.0)
     }
 }
 
-impl<'a> Render for Address<'a> {
+impl Render for Address<'_> {
     fn render(&self) -> maud::Markup {
         let link = Link(self.0);
 

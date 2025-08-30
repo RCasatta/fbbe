@@ -281,7 +281,7 @@ fn find_txids_with_prevout(
         height_time: HeightTime,
     }
 
-    impl<'a> Visitor for TxidContainingOutpoint<'a> {
+    impl Visitor for TxidContainingOutpoint<'_> {
         fn visit_tx_in(&mut self, vin: usize, tx_in: &bsl::TxIn) -> core::ops::ControlFlow<()> {
             let current = tx_in.prevout().into();
             for (i, seen) in self.address_seen.iter().enumerate() {
@@ -324,7 +324,7 @@ fn find_outpoints_with_script_pubkey(script_pubkey: &ScriptBuf, b: SerBlock) -> 
         script_pubkey: &'a [u8],
         current_tx_matching_vouts: Vec<u32>,
     }
-    impl<'a> Visitor for TxContainingScript<'a> {
+    impl Visitor for TxContainingScript<'_> {
         fn visit_tx_out(&mut self, vout: usize, tx_out: &bsl::TxOut) -> ControlFlow<()> {
             if self.script_pubkey == tx_out.script_pubkey() {
                 self.current_tx_matching_vouts.push(vout as u32);

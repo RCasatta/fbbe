@@ -7,7 +7,7 @@ use maud::{html, Render};
 pub struct OutPoint(pub bitcoin::OutPoint);
 
 struct Link<'a>(&'a bitcoin::OutPoint);
-impl<'a> Display for Link<'a> {
+impl Display for Link<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}t/{}", network().as_url_path(), self.0.txid)?;
         let page = self.0.vout as usize / IO_PER_PAGE;

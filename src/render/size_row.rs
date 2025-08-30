@@ -12,7 +12,7 @@ impl<'a> SizeRow<'a> {
     }
 }
 
-impl<'a> Render for SizeRow<'a> {
+impl Render for SizeRow<'_> {
     fn render(&self) -> maud::Markup {
         let hb = HumanBytes::new(self.size as f64);
         html! {

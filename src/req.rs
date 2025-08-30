@@ -178,7 +178,7 @@ pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
 }
 
 pub struct TextLink<'a>(&'a Resource);
-impl<'a> Display for TextLink<'a> {
+impl Display for TextLink<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let base = network().as_url_path();
         match self.0 {

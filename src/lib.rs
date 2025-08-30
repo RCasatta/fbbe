@@ -108,7 +108,7 @@ pub struct Arguments {
 impl Arguments {
     pub fn txid_blockhash_len(&self) -> usize {
         self.txid_blockhash_len
-            .unwrap_or_else(|| match self.network.as_ref() {
+            .unwrap_or(match self.network.as_ref() {
                 Some(n) => match n.0 {
                     Network::Bitcoin => 5_000_000,
                     _ => 100_000,
@@ -119,7 +119,7 @@ impl Arguments {
 
     pub fn tx_cache_byte_size(&self) -> usize {
         self.tx_cache_byte_size
-            .unwrap_or_else(|| match self.network.as_ref() {
+            .unwrap_or(match self.network.as_ref() {
                 Some(n) => match n.0 {
                     Network::Bitcoin => 1_000_000_000, // 1GB
                     Network::Regtest => 10_000_000,    // 10MB

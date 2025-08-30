@@ -7,7 +7,7 @@ impl<'a> Plural<'a> {
         Plural(name, size)
     }
 }
-impl<'a> Display for Plural<'a> {
+impl Display for Plural<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.1 == 1 {
             write!(f, "{}", self.0)

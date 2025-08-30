@@ -3,7 +3,7 @@ use maud::{html, Render};
 
 pub(crate) struct Script<'a>(&'a bitcoin::Script);
 
-impl<'a> Render for Script<'a> {
+impl Render for Script<'_> {
     fn render(&self) -> maud::Markup {
         let asm = if self.0.is_empty() {
             "<empty>".to_owned()
