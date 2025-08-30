@@ -97,6 +97,7 @@ pub struct TxJson {
 }
 
 #[derive(Deserialize, Debug, Clone)]
+#[allow(dead_code)]
 pub struct TxIn {
     pub coinbase: Option<String>,
     pub txid: Option<String>,
@@ -109,12 +110,14 @@ pub struct TxIn {
 }
 
 #[derive(Deserialize, Debug, Clone)]
+#[allow(dead_code)]
 pub struct ScriptSig {
     pub asm: String,
     pub hex: String,
 }
 
 #[derive(Deserialize, Debug, Clone)]
+#[allow(dead_code)]
 pub struct TxOut {
     pub value: f64,
     pub n: u32,
@@ -123,6 +126,7 @@ pub struct TxOut {
 }
 
 #[derive(Deserialize, Debug, Clone)]
+#[allow(dead_code)]
 pub struct ScriptPubKey {
     pub asm: String,
     pub hex: String,

@@ -61,6 +61,7 @@ pub async fn call_one(block_hash: BlockHash) -> Result<BlockheaderJson, Error> {
 }
 
 #[derive(Deserialize, Debug)]
+#[allow(dead_code)]
 pub struct BlockheaderJson {
     pub hash: String,
 

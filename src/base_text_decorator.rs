@@ -3,7 +3,7 @@ use html2text::render::text_renderer::{RichAnnotation, TaggedLine, TextDecorator
 pub(crate) struct BaseTextDecorator;
 
 impl BaseTextDecorator {
-    #[cfg_attr(feature = "clippy", allow(new_without_default_derive))]
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {}
     }

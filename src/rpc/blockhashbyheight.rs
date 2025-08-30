@@ -25,6 +25,7 @@ pub async fn _call(height: usize) -> Result<BlockHashByHeight, Error> {
 }
 
 #[derive(Deserialize, Debug)]
+#[allow(dead_code)]
 pub struct BlockHashByHeight {
     #[serde(rename = "blockhash")]
     pub block_hash: BlockHash,

@@ -23,6 +23,7 @@ pub async fn _call(txid: Txid, vout: u32) -> Result<TxOutJson, Error> {
 }
 
 #[derive(Deserialize, Debug, Clone)]
+#[allow(dead_code)]
 pub struct TxOutJson {
     #[serde(rename = "chainHeight")]
     pub chain_height: u32,
@@ -35,6 +36,7 @@ pub struct TxOutJson {
 }
 
 #[derive(Deserialize, Debug, Clone)]
+#[allow(dead_code)]
 pub struct Utxo {
     pub height: u32,
     pub value: f64,

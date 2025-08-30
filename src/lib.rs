@@ -71,7 +71,6 @@ pub struct Arguments {
     /// * testnet: "127.0.0.1:3001"
     /// * signet:  "127.0.0.1:3002"
     /// * regtest: "127.0.0.1:3003"
-
     #[arg(short, long, env)]
     pub local_addr: Option<SocketAddr>,
 

@@ -45,13 +45,14 @@ fn init_fbbe(bitcoind: &BitcoinD, network: Network) -> (SocketAddr, String, Vec<
     };
 
     let fbbe_addr = create_local_socket(bitcoind::get_available_port().unwrap());
-    let mut args = vec![];
-    args.push("--bitcoind-addr".into());
-    args.push(bitcoind.params.rpc_socket.to_string());
-    args.push("--network".to_string());
-    args.push(network.to_string());
-    args.push("--local-addr".to_string());
-    args.push(fbbe_addr.to_string());
+    let args = vec![
+        "--bitcoind-addr".into(),
+        bitcoind.params.rpc_socket.to_string(),
+        "--network".into(),
+        network.to_string(),
+        "--local-addr".into(),
+        fbbe_addr.to_string(),
+    ];
     (fbbe_addr, exe, args)
 }
 

@@ -52,6 +52,7 @@ pub struct BlockNoTxDetails {
     pub hash: BlockHash,
     pub tx: Vec<Txid>,
     pub height: u32,
+    #[allow(dead_code)]
     pub version: u32,
     #[serde(rename = "versionHex")]
     pub version_hex: String,

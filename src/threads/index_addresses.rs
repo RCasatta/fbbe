@@ -18,9 +18,6 @@ use crate::{
     state::SharedState,
 };
 
-#[derive(Debug)]
-struct ScriptHashHeight([u8; 12]);
-
 type ScriptHash = u64;
 pub type Height = u32;
 
@@ -28,12 +25,6 @@ fn script_hash(script: &Script) -> ScriptHash {
     let mut hasher = FxHasher64::default();
     hasher.write(script.as_bytes());
     hasher.finish()
-}
-
-impl AsRef<[u8]> for ScriptHashHeight {
-    fn as_ref(&self) -> &[u8] {
-        &self.0[..]
-    }
 }
 
 const BLOCK_HASH_CF: &str = "BLOCK_HASH_CF"; // BlockHash -> [] // indexed blocks
