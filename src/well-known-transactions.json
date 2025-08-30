@@ -40,7 +40,7 @@
         "txid": "bb41a757f405890fb0f5856228e23b715702d714d59bf2b1feb70d8b2b4e3e08"
     },
     {
-        "c": "Similar transaction by F2Pool made in collaboration with Greg Maxwell that uses the SIGHASH_SINGLE bug to be easy to verify and the short r-value trick for smaller signatures",
+        "c": "Transaction by F2Pool made in collaboration with Greg Maxwell that uses the SIGHASH_SINGLE bug to be easy to verify and the short r-value trick for smaller signatures",
         "txid": "9fdbcf0ef9d8d00f66e47917f67cc5d78aec1ac786e2abb8d2facb4e4790aad6"
     },
     {
