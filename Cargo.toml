@@ -10,7 +10,7 @@ categories = ["cryptography::cryptocurrencies", "command-line-utilities"]
 
 [dependencies]
 hyper = { version = "0.14.23", features = ["full"] }
-tokio = { version = "1.21.2", features = [
+tokio = { version = "1.47.0", features = [
     "rt",
     "rt-multi-thread",
     "signal",

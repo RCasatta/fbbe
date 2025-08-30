@@ -5,6 +5,7 @@ use std::{
     ops::ControlFlow,
     path::Path,
     sync::Arc,
+    time::Duration,
 };
 
 use bitcoin::{hashes::Hash, Address, Block, BlockHash, OutPoint, Script, ScriptBuf, Txid};
@@ -445,7 +446,7 @@ async fn index_addresses(db: Arc<Database>, shared_state: Arc<SharedState>) -> R
                 Ok(block) => break block,
                 Err(e) => {
                     log::warn!("Cannot download block: {block_hash} {e}");
-                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await
+                    tokio::time::sleep(Duration::from_secs(1)).await
                 }
             }
         };

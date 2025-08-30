@@ -7,6 +7,7 @@ use crate::state::SharedState;
 use crate::threads::index_addresses::index_block;
 use bitcoin::hashes::Hash;
 use bitcoin::BlockHash;
+use std::time::Duration;
 use tokio::time::sleep;
 
 use super::index_addresses::Database;
@@ -32,7 +33,7 @@ async fn update_chain_info(
     loop {
         update_blocks_in_last_hour(&shared_state, current.blocks as usize).await;
 
-        sleep(tokio::time::Duration::from_secs(2)).await;
+        sleep(Duration::from_secs(2)).await;
 
         match rpc::chaininfo::call().await {
             Ok(last_tip) => {

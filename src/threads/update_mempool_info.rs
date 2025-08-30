@@ -26,7 +26,7 @@ async fn update_mempool_info(shared_state: Arc<SharedState>) {
         if let Ok(mempool_info) = rpc::mempool::info().await {
             *shared_state.mempool_info.lock().await = mempool_info;
         }
-        sleep(tokio::time::Duration::from_secs(2)).await;
+        sleep(Duration::from_secs(2)).await;
     }
 }
 
@@ -285,7 +285,7 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
         }
         drop(mempool_fees);
 
-        sleep(tokio::time::Duration::from_secs(10)).await;
+        sleep(Duration::from_secs(10)).await;
 
         log::trace!("mempool tx with fee: {}", rates.len());
     }

@@ -24,6 +24,7 @@ use std::fmt::Display;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 use threads::zmq::update_tx_zmq_infallible;
 use tokio::time::sleep;
 
@@ -153,7 +154,7 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
             }
             Err(Error::RpcChainInfo(status_code)) if status_code == 503 => {
                 log::warn!("bitcoind is still loading, waiting... (note: if on regtest you may need to generate a block to terminate IBD)");
-                sleep(tokio::time::Duration::from_secs(10)).await;
+                sleep(Duration::from_secs(10)).await;
                 continue;
             }
             Err(e) => {
@@ -166,7 +167,7 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
         };
         if chain_info.initial_block_download {
             log::warn!("bitcoind is not synced, waiting (on regtest you may need to generate a block)... {:?}", chain_info);
-            sleep(tokio::time::Duration::from_secs(10)).await;
+            sleep(Duration::from_secs(10)).await;
         } else {
             log::info!("bitcoind is synced: {:?}", chain_info);
             break;
