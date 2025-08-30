@@ -12,7 +12,7 @@ env:
 jobs:
 
   test:
-    runs-on: "ubuntu-20.04"
+    runs-on: ubuntu-latest
     env:
       RUST_LOG: fbbe=info
 
@@ -23,7 +23,7 @@ jobs:
       - run: cargo test --features download_bitcoind
 
   cosmetics:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - uses: Swatinem/rust-cache@v2
@@ -34,7 +34,7 @@ jobs:
       - run: cargo clippy -- -D warnings
 
   rust-version:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
