@@ -45,7 +45,7 @@ bitcoin_slices = { version = "0.10.0", features = [
 clap = { version = "4.2.7", features = ["derive", "env"] }
 url = "2.3.1"
 fxhash = "0.2.1"
-rocksdb = "0.22.0"
+rocksdb = "0.24.0"
 lru = "0.12.0"
 prometheus = { version = "0.13.4", features = ["process"] }
 lazy_static = "1.5.0"
