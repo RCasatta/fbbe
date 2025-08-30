@@ -10,7 +10,7 @@ use std::{
 use bitcoin::{hashes::Hash, Address, Block, BlockHash, OutPoint, Script, ScriptBuf, Txid};
 use bitcoin_slices::{bsl, Visit, Visitor};
 use fxhash::FxHasher64;
-use rocksdb::{ColumnFamily, ColumnFamilyDescriptor, Options, WriteBatch, DB};
+use rocksdb::{ColumnFamily, ColumnFamilyDescriptor, DBCompressionType, Options, WriteBatch, DB};
 
 use crate::{
     error::Error,
@@ -42,7 +42,11 @@ impl Database {
     fn create_cf_descriptors() -> Vec<ColumnFamilyDescriptor> {
         COLUMN_FAMILIES
             .iter()
-            .map(|&name| ColumnFamilyDescriptor::new(name, Options::default()))
+            .map(|&name| {
+                let mut opts = Options::default();
+                opts.set_compression_type(DBCompressionType::Zstd);
+                ColumnFamilyDescriptor::new(name, opts)
+            })
             .collect()
     }
 
