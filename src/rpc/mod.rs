@@ -1,10 +1,16 @@
 use crate::error::Error;
 use chrono::DateTime;
-use hyper::{client::HttpConnector, Client, StatusCode};
+use hyper::StatusCode;
+use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use once_cell::sync::Lazy;
 use std::time::Duration;
 
-pub static CLIENT: Lazy<Client<HttpConnector>> = Lazy::new(Client::new);
+pub static CLIENT: Lazy<
+    Client<
+        hyper_util::client::legacy::connect::HttpConnector,
+        http_body_util::Full<hyper::body::Bytes>,
+    >,
+> = Lazy::new(|| Client::builder(TokioExecutor::new()).build_http());
 
 pub mod block;
 pub mod blockhashbyheight;

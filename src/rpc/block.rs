@@ -23,7 +23,7 @@ pub async fn call_json(block_hash: BlockHash) -> Result<BlockNoTxDetails, Error>
         .with_label_values(&["block/notxdetails", "json"])
         .inc();
     check_status(resp.status(), |s| Error::RpcBlockJson(s, block_hash)).await?;
-    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let body_bytes = http_body_util::BodyExt::collect(resp.into_body()).await?.to_bytes();
     let block: BlockNoTxDetails = serde_json::from_reader(body_bytes.reader())?;
     Ok(block)
 }
@@ -42,7 +42,7 @@ pub async fn call_raw(block_hash: BlockHash) -> Result<SerBlock, Error> {
     let resp = client.get(uri).await?;
     NODE_REST_COUNTER.with_label_values(&["block", "bin"]).inc();
     check_status(resp.status(), |s| Error::RpcBlockRaw(s, block_hash)).await?;
-    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let body_bytes = http_body_util::BodyExt::collect(resp.into_body()).await?.to_bytes();
 
     Ok(SerBlock(body_bytes.to_vec()))
 }

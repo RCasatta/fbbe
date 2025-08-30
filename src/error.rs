@@ -11,6 +11,9 @@ pub enum Error {
     Hyper(#[from] hyper::Error),
 
     #[error(transparent)]
+    HyperUtil(#[from] hyper_util::client::legacy::Error),
+
+    #[error(transparent)]
     HyperHttp(#[from] hyper::http::Error),
 
     #[error(transparent)]

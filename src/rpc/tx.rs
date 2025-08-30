@@ -37,7 +37,7 @@ async fn json_bytes(txid: Txid) -> Result<hyper::body::Bytes, Error> {
     let resp = client.get(uri).await?;
     NODE_REST_COUNTER.with_label_values(&["tx", "json"]).inc();
     check_status(resp.status(), |s| Error::RpcTxJson(s, txid)).await?;
-    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let body_bytes = http_body_util::BodyExt::collect(resp.into_body()).await?.to_bytes();
     Ok(body_bytes)
 }
 
@@ -70,7 +70,7 @@ pub async fn call_raw(txid: Txid) -> Result<Vec<u8>, Error> {
     NODE_REST_COUNTER.with_label_values(&["tx", "bin"]).inc();
 
     check_status(resp.status(), |s| Error::RpcTx(s, txid)).await?;
-    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let body_bytes = http_body_util::BodyExt::collect(resp.into_body()).await?.to_bytes();
     Ok(body_bytes.to_vec())
 }
 

@@ -9,7 +9,7 @@ use bitcoin::address::NetworkUnchecked;
 use bitcoin::hashes::{sha256d, Hash};
 use bitcoin::{consensus::deserialize, Address, BlockHash, Transaction, Txid};
 use bitcoin::{OutPoint, Psbt};
-use hyper::{Body, Method, Request};
+use hyper::{Method, Request};
 
 #[derive(Debug, Clone)]
 pub struct ParsedRequest {
@@ -42,7 +42,7 @@ pub enum Resource {
     Sitemap,
 }
 
-pub async fn parse(req: &Request<Body>) -> Result<ParsedRequest, Error> {
+pub async fn parse(req: &Request<hyper::body::Bytes>) -> Result<ParsedRequest, Error> {
     let mut path: Vec<_> = req.uri().path().split('/').skip(1).take(5).collect();
     log::debug!("{:?}", path);
 
@@ -220,7 +220,7 @@ impl Resource {
     }
 }
 
-fn parse_cols(req: &Request<Body>) -> u16 {
+fn parse_cols(req: &Request<hyper::body::Bytes>) -> u16 {
     req.headers()
         .get("columns")
         .and_then(|c| c.to_str().ok())

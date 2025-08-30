@@ -20,7 +20,7 @@ pub async fn info() -> Result<MempoolInfo, Error> {
         .with_label_values(&["mempool/info", "json"])
         .inc();
     check_status(resp.status(), Error::RpcMempoolInfo).await?;
-    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let body_bytes = http_body_util::BodyExt::collect(resp.into_body()).await?.to_bytes();
     let info: MempoolInfo = serde_json::from_reader(body_bytes.reader())?;
     Ok(info)
 }
@@ -39,7 +39,7 @@ pub async fn content(support_verbose: bool) -> Result<FxHashSet<Txid>, Error> {
         .with_label_values(&["mempool/contents", "json"])
         .inc();
     check_status(resp.status(), Error::RpcMempoolContent).await?;
-    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let body_bytes = http_body_util::BodyExt::collect(resp.into_body()).await?.to_bytes();
 
     let content: FxHashSet<Txid> = if support_verbose {
         serde_json::from_reader(body_bytes.reader())?

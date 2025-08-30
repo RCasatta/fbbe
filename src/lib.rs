@@ -9,8 +9,7 @@ use crate::threads::update_mempool_info::update_mempool;
 use bitcoin::{Network, Txid};
 use clap::Parser;
 use globals::networks;
-use hyper::service::{make_service_fn, service_fn};
-use hyper::Server;
+
 use lazy_static::lazy_static;
 use network_parse::NetworkParse;
 use prometheus::{
@@ -19,7 +18,7 @@ use prometheus::{
 };
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::convert::Infallible;
+
 use std::fmt::Display;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
@@ -240,25 +239,58 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
         update_mempool(shared_state_mempool).await;
     });
 
-    let make_service = make_service_fn(move |_| {
-        let shared_state = shared_state.clone();
-        let db = db.clone();
-
-        async move {
-            Ok::<_, Infallible>(service_fn(move |req| {
-                let shared_state = shared_state.clone();
-                let db = db.clone();
-                route_infallible(req, shared_state, db)
-            }))
-        }
-    });
-
-    let server = Server::bind(&addr).serve(make_service);
+    // Create a simple HTTP server using hyper 1.x
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
 
     log::info!("Listening on http://{}", addr);
 
-    if let Err(e) = server.with_graceful_shutdown(shutdown_signal()).await {
-        log::error!("server error: {}", e);
+    loop {
+        let (stream, _) = match listener.accept().await {
+            Ok(result) => result,
+            Err(e) => {
+                log::error!("Failed to accept connection: {}", e);
+                continue;
+            }
+        };
+
+        let shared_state_clone = shared_state.clone();
+        let db_clone = db.clone();
+
+        tokio::spawn(async move {
+            let io = hyper_util::rt::TokioIo::new(stream);
+
+            let service =
+                hyper::service::service_fn(move |req: hyper::Request<hyper::body::Incoming>| {
+                    let shared_state = shared_state_clone.clone();
+                    let db = db_clone.clone();
+
+                    async move {
+                        // Convert Incoming to Bytes
+                        let (parts, body) = req.into_parts();
+                        let body_bytes = http_body_util::BodyExt::collect(body)
+                            .await
+                            .map(|collected| collected.to_bytes())
+                            .unwrap_or_default();
+                        let req = hyper::Request::from_parts(parts, body_bytes);
+
+                        let resp = route_infallible(req, shared_state, db).await?;
+
+                        // Convert response body to Full<Bytes> for hyper
+                        let (parts, body) = resp.into_parts();
+                        let response =
+                            hyper::Response::from_parts(parts, http_body_util::Full::new(body));
+                        Ok::<_, std::convert::Infallible>(response)
+                    }
+                });
+
+            if let Err(e) =
+                hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new())
+                    .serve_connection(io, service)
+                    .await
+            {
+                log::error!("Error serving connection: {}", e);
+            }
+        });
     }
     Ok(())
 }

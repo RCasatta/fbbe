@@ -9,12 +9,16 @@ repository = "https://github.com/RCasatta/fbbe"
 categories = ["cryptography::cryptocurrencies", "command-line-utilities"]
 
 [dependencies]
-hyper = { version = "0.14.23", features = ["full"] }
+hyper = { version = "1.7.0", features = ["full"] }
+hyper-util = { version = "0.1", features = ["full"] }
+http-body-util = "0.1"
+tower = "0.5"
 tokio = { version = "1.47.0", features = [
     "rt",
     "rt-multi-thread",
     "signal",
     "macros",
+    "time",
 ] }
 futures = "0.3"
 futures-util = { version = "0.3", default-features = false }

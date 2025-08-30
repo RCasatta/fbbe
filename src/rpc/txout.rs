@@ -17,7 +17,7 @@ pub async fn _call(txid: Txid, vout: u32) -> Result<TxOutJson, Error> {
         .inc();
 
     check_status(resp.status(), |s| Error::RpcTxOut(s, txid, vout)).await?;
-    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+    let body_bytes = http_body_util::BodyExt::collect(resp.into_body()).await?.to_bytes();
     let tx: TxOutJson = serde_json::from_reader(body_bytes.reader())?;
     Ok(tx)
 }

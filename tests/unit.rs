@@ -2,10 +2,9 @@ use std::{io::BufReader, str::FromStr};
 
 use bitcoin::{consensus::Decodable, Transaction, Txid};
 use futures::{future, prelude::*, stream::FuturesUnordered, StreamExt};
-use hyper::{
-    body::{self, Buf},
-    Client,
-};
+use hyper::body::Buf;
+use hyper_util::client::legacy::Client;
+use hyper_util::rt::TokioExecutor;
 
 #[tokio::test]
 async fn test_unordered() {
@@ -20,7 +19,8 @@ const N_CONCURRENT: usize = 2000;
 #[ignore]
 #[tokio::test]
 async fn test_buffer_unordered() {
-    let client = Client::new();
+    let client: Client<_, http_body_util::Full<hyper::body::Bytes>> =
+        Client::builder(TokioExecutor::new()).build_http();
     let bitcoind_socket = "10.0.0.2:8332";
 
     let txid =
@@ -31,7 +31,10 @@ async fn test_buffer_unordered() {
         .unwrap();
     let resp = client.get(uri).await.unwrap();
 
-    let body_bytes = hyper::body::to_bytes(resp.into_body()).await.unwrap();
+    let body_bytes = http_body_util::BodyExt::collect(resp.into_body())
+        .await
+        .unwrap()
+        .to_bytes();
     let mut reader = BufReader::new(body_bytes.reader());
     let tx = Transaction::consensus_decode(&mut reader).unwrap();
 
@@ -49,7 +52,9 @@ async fn test_buffer_unordered() {
         .then(|res| async {
             let res = res.expect("Error making request: {}");
             let status = res.status();
-            body::to_bytes(res).await.expect("Error reading body");
+            http_body_util::BodyExt::collect(res.into_body())
+                .await
+                .expect("Error reading body");
             status
         })
         .for_each(|status| async move { assert!(status.is_success()) })

@@ -17,10 +17,10 @@ use bitcoin::{
     hashes::Hash,
 };
 use bitcoin_slices::{bsl, Visit, Visitor};
+use hyper::body::Bytes;
 use hyper::{
-    body::Bytes,
     header::{CACHE_CONTROL, CONTENT_TYPE, IF_MODIFIED_SINCE, LAST_MODIFIED, LOCATION},
-    Body, Request, Response, StatusCode,
+    Request, Response, StatusCode,
 };
 use mime::{APPLICATION_OCTET_STREAM, TEXT_HTML_UTF_8, TEXT_PLAIN_UTF_8};
 use prometheus::Encoder;
@@ -44,10 +44,10 @@ impl ResponseType {
 }
 
 pub async fn route(
-    req: Request<Body>,
+    req: Request<Bytes>,
     state: Arc<SharedState>,
     db: Option<Arc<Database>>,
-) -> Result<Response<Body>, Error> {
+) -> Result<Response<Bytes>, Error> {
     let now = Instant::now();
     // let _count = state.requests.fetch_add(1, Ordering::Relaxed);
     let parsed_req = req::parse(&req).await?;
@@ -86,7 +86,7 @@ pub async fn route(
 
                 return Ok(Response::builder()
                     .status(StatusCode::NOT_MODIFIED)
-                    .body(Body::empty())?);
+                    .body(Bytes::new())?);
             }
         }
     }
@@ -125,7 +125,7 @@ pub async fn route(
                     .body(convert_text_html(&page, col))?,
                 ResponseType::Html => builder
                     .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
-                    .body(page.into())?,
+                    .body(Bytes::from(page))?,
                 ResponseType::Bytes => {
                     return Err(Error::ContentTypeUnsupported(
                         parsed_req.response_type,
@@ -153,7 +153,7 @@ pub async fn route(
                     .body(convert_text_html(&page, col))?,
                 ResponseType::Html => builder
                     .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
-                    .body(page.into())?,
+                    .body(Bytes::from(page))?,
                 ResponseType::Bytes => {
                     return Err(Error::ContentTypeUnsupported(
                         parsed_req.response_type,
@@ -209,10 +209,10 @@ pub async fn route(
                     .body(convert_text_html(&page, col))?,
                 ResponseType::Html => builder
                     .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
-                    .body(page.into())?,
+                    .body(Bytes::from(page))?,
                 ResponseType::Bytes => builder
                     .header(CONTENT_TYPE, APPLICATION_OCTET_STREAM.as_ref())
-                    .body(Bytes::from(ser_tx.0).into())?,
+                    .body(Bytes::from(ser_tx.0))?,
             }
         }
 
@@ -257,7 +257,7 @@ pub async fn route(
             Response::builder()
                 .header(LOCATION, format!("{network}t/{txid}#i{vin}"))
                 .status(StatusCode::TEMPORARY_REDIRECT)
-                .body(Body::empty())?
+                .body(Bytes::new())?
         }
 
         Resource::SearchHeight(height) => {
@@ -270,7 +270,7 @@ pub async fn route(
             Response::builder()
                 .header(LOCATION, format!("{network}b/{hash}"))
                 .status(StatusCode::TEMPORARY_REDIRECT) // PERMANENT_REDIRECT cause issues in lynx
-                .body(Body::empty())?
+                .body(Bytes::new())?
         }
 
         Resource::SearchBlock(hash) => {
@@ -278,7 +278,7 @@ pub async fn route(
             Response::builder()
                 .header(LOCATION, format!("{network}b/{hash}"))
                 .status(StatusCode::TEMPORARY_REDIRECT) // PERMANENT_REDIRECT cause issues in lynx
-                .body(Body::empty())?
+                .body(Bytes::new())?
         }
 
         Resource::SearchTx(txid) => {
@@ -286,7 +286,7 @@ pub async fn route(
             Response::builder()
                 .header(LOCATION, format!("{network}t/{txid}"))
                 .status(StatusCode::TEMPORARY_REDIRECT)
-                .body(Body::empty())?
+                .body(Bytes::new())?
         }
 
         Resource::SearchAddress(address) => {
@@ -294,54 +294,56 @@ pub async fn route(
             Response::builder()
                 .header(LOCATION, format!("{network}a/{address}"))
                 .status(StatusCode::TEMPORARY_REDIRECT)
-                .body(Body::empty())?
+                .body(Bytes::new())?
         }
 
-        Resource::Head => Response::new(Body::empty()),
+        Resource::Head => Response::new(Bytes::new()),
 
         Resource::Css => Response::builder()
             .header(LAST_MODIFIED, CSS_LAST_MODIFIED)
             .header(CACHE_CONTROL, "public, max-age=31536000")
             .header(CONTENT_TYPE, "text/css; charset=utf-8")
-            .body(Body::from(include_str!("css/pico.min.css")))?,
+            .body(Bytes::from(include_str!("css/pico.min.css")))?,
 
         Resource::Contact => Response::builder()
             .header(LAST_MODIFIED, CONTACT_PAGE_LAST_MODIFIED)
             .header(CACHE_CONTROL, "public, max-age=3600")
             .header(CONTENT_TYPE, "text/html; charset=utf-8")
-            .body(Body::from(pages::contact::page(&parsed_req)?.into_string()))?,
+            .body(Bytes::from(
+                pages::contact::page(&parsed_req)?.into_string(),
+            ))?,
 
         Resource::Favicon => Response::builder()
             .header(LAST_MODIFIED, CONTACT_PAGE_LAST_MODIFIED)
             .header(CACHE_CONTROL, "public, max-age=31536000")
             .header(CONTENT_TYPE, "image/vnd.microsoft.icon")
-            .body(Bytes::from_static(include_bytes!("favicon.ico")).into())?,
+            .body(Bytes::from_static(include_bytes!("favicon.ico")))?,
 
         Resource::Robots => Response::builder()
             .header(LAST_MODIFIED, ROBOTS_LAST_MODIFIED)
             .header(CACHE_CONTROL, "public, max-age=3600")
             .header(CONTENT_TYPE, "text/plain")
-            .body(Bytes::from_static(include_bytes!("robots.txt")).into())?,
+            .body(Bytes::from_static(include_bytes!("robots.txt")))?,
         Resource::BlockToB(block_hash) => {
             let network = network().as_url_path();
             Response::builder()
                 .header(LOCATION, format!("{network}b/{block_hash}"))
                 .status(StatusCode::TEMPORARY_REDIRECT)
-                .body(Body::empty())?
+                .body(Bytes::new())?
         }
         Resource::TxToT(txid) => {
             let network = network().as_url_path();
             Response::builder()
                 .header(LOCATION, format!("{network}t/{txid}"))
                 .status(StatusCode::TEMPORARY_REDIRECT)
-                .body(Body::empty())?
+                .body(Bytes::new())?
         }
         Resource::AddressToA(address) => {
             let network = network().as_url_path();
             Response::builder()
                 .header(LOCATION, format!("{network}a/{address}"))
                 .status(StatusCode::TEMPORARY_REDIRECT)
-                .body(Body::empty())?
+                .body(Bytes::new())?
         }
         Resource::Address(ref address, ref query) => {
             let address = address.clone().require_network(network())?;
@@ -358,10 +360,12 @@ pub async fn route(
             match parsed_req.response_type {
                 ResponseType::Text(col) => builder
                     .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
-                    .body(pages::address::text_page(&address, &page, col)?.into())?,
+                    .body(Bytes::from(pages::address::text_page(
+                        &address, &page, col,
+                    )?))?,
                 ResponseType::Html => builder
                     .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
-                    .body(page.into())?,
+                    .body(Bytes::from(page))?,
                 ResponseType::Bytes => {
                     return Err(Error::ContentTypeUnsupported(
                         parsed_req.response_type,
@@ -378,7 +382,7 @@ pub async fn route(
                 Response::builder()
                     .header(LOCATION, format!("{network}t/{txid}"))
                     .status(StatusCode::TEMPORARY_REDIRECT)
-                    .body(Body::empty())?
+                    .body(Bytes::new())?
             } else {
                 let bytes = serialize(&tx);
                 let hex = bytes.to_lower_hex_string();
@@ -386,7 +390,7 @@ pub async fn route(
                 Response::builder()
                     .header(LOCATION, format!("{network}txhex/{hex}"))
                     .status(StatusCode::TEMPORARY_REDIRECT)
-                    .body(Body::empty())?
+                    .body(Bytes::new())?
             }
         }
         Resource::FullTx(ref tx) => {
@@ -416,10 +420,10 @@ pub async fn route(
                     .body(convert_text_html(&page, col))?,
                 ResponseType::Html => builder
                     .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
-                    .body(page.into())?,
+                    .body(Bytes::from(page))?,
                 ResponseType::Bytes => builder
                     .header(CONTENT_TYPE, APPLICATION_OCTET_STREAM.as_ref())
-                    .body(Bytes::from(serialize(&tx)).into())?,
+                    .body(Bytes::from(serialize(&tx)))?,
             }
         }
         Resource::Metrics => {
@@ -431,7 +435,7 @@ pub async fn route(
             Response::builder()
                 .status(200)
                 .header(CONTENT_TYPE, encoder.format_type())
-                .body(Body::from(buffer))?
+                .body(Bytes::from(buffer))?
         }
         Resource::Sitemap => {
             let dns_host = match state.args.dns_host.as_ref() {
@@ -466,7 +470,7 @@ pub async fn route(
             Response::builder()
                 .header(CONTENT_TYPE, "application/xml; charset=utf-8")
                 .header(CACHE_CONTROL, "public, max-age=86400") // Cache for 24 hours
-                .body(Body::from(sitemap))?
+                .body(Bytes::from(sitemap))?
         }
     };
 
@@ -540,8 +544,8 @@ async fn output_status(
     result
 }
 
-fn convert_text_html(page: &str, columns: u16) -> Body {
-    convert_text_html_string(page, columns).into()
+fn convert_text_html(page: &str, columns: u16) -> Bytes {
+    Bytes::from(convert_text_html_string(page, columns))
 }
 
 pub(crate) fn convert_text_html_string(page: &str, columns: u16) -> String {
@@ -594,10 +598,10 @@ pub async fn fetch_prevouts(
 }
 
 pub async fn route_infallible(
-    req: Request<Body>,
+    req: Request<Bytes>,
     state: Arc<SharedState>,
     db: Option<Arc<Database>>,
-) -> Result<Response<Body>, Infallible> {
+) -> Result<Response<Bytes>, Infallible> {
     let timer = crate::HTTP_REQ_HISTOGRAM
         .with_label_values(&["all"])
         .start_timer();
@@ -606,7 +610,7 @@ pub async fn route_infallible(
         let body = format!("{}", e);
         Response::builder()
             .status(StatusCode::from(e)) // TODO map errors to bad request or internal error
-            .body(body.into())
+            .body(Bytes::from(body))
             .expect("msg")
     });
 
