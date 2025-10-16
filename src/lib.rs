@@ -157,10 +157,14 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
                 continue;
             }
             Err(e) => {
-                let network = network();
-                log::error!(
-                    "bitcoind is probably not running, or running on wrong network {network}",
+                for i in 0..12 {
+                    // TODO in case bitcoin and fbbe starts together, we should wait for the bitcoind to be ready.
+                    let bitcoind_addr = crate::globals::bitcoind_addr().to_string();
+                    log::warn!(
+                    "I am trying to connect to {bitcoind_addr} without success {i}/12. error: {e:?}",
                 );
+                    sleep(Duration::from_secs(10)).await;
+                }
                 return Err(e);
             }
         };
