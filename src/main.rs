@@ -16,7 +16,7 @@ async fn main() {
     let args = Arguments::parse();
 
     if let Err(e) = inner_main(args).await {
-        log::error!("{}", e);
+        panic!("error: {}", e);
     }
 }
 
