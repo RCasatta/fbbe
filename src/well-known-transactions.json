@@ -98,5 +98,9 @@
     {
         "c": "U.S. Marshal's auction of seized Silk Road Bitcoins (30,000 BTC sold to Tim Draper)",
         "txid": "9e95c3c3c96f57527cdc649550bf8e92892f7651f718d846033798aee333b0c3"
+    },
+    {
+        "c": "Huge OP_RETURN containing an image https://x.com/ottosch_/status/1980366319544594916",
+        "txid": "4719e7252f4bdefd9f7bdf5058f17af28729b79c303b067eb01c107e57235754"
     }
 ]
