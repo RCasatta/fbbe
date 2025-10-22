@@ -16,6 +16,7 @@ pub fn page(parsed: &ParsedRequest) -> Result<Markup, Error> {
                 li { "low-bandwidth: no images, no blocking javascript, no external fonts, small html, a single external stylesheets which is preloaded. After the first, a single network request load any page." }
                 li { "privacy-friendly: we use a privacy-friendly analytics service (" a href="https://plausible.io/" { "Plausible" } ") that does not track personal information. It's the only loaded javascript and it's loaded asynchronously to not block the page load." }
                 li { "open-source: the code is available on " a href="https://github.com/RCasatta/fbbe" { "GitHub" } "." }
+                li { "high-performance: the site achieves perfect 100 scores on all " a href="https://pagespeed.web.dev/analysis/https-fbbe-info/br6pboz6h5?form_factor=desktop" { "PageSpeed Insights" } " metrics." }
             }
         }
     };
