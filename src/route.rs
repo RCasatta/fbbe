@@ -27,7 +27,8 @@ use prometheus::Encoder;
 use std::{convert::Infallible, sync::Arc, time::Instant};
 
 const CSS_LAST_MODIFIED: &str = "2022-10-03 07:53:03 UTC";
-const CONTACT_PAGE_LAST_MODIFIED: &str = "2022-12-16 07:53:03 UTC";
+const ABOUT_PAGE_LAST_MODIFIED: &str = "2022-12-16 07:53:03 UTC";
+const FAVICON_LAST_MODIFIED: &str = "2024-03-25 08:25:36 UTC";
 const ROBOTS_LAST_MODIFIED: &str = "2023-01-17 07:53:03 UTC";
 
 #[derive(Debug, Clone, Copy)]
@@ -76,7 +77,7 @@ pub async fn route(
                 }
             }
             Resource::Css => Some(CSS_LAST_MODIFIED.to_string()),
-            Resource::Contact => Some(CONTACT_PAGE_LAST_MODIFIED.to_string()),
+            Resource::About => Some(ABOUT_PAGE_LAST_MODIFIED.to_string()),
 
             _ => None,
         };
@@ -305,16 +306,14 @@ pub async fn route(
             .header(CONTENT_TYPE, "text/css; charset=utf-8")
             .body(Bytes::from(include_str!("css/pico.min.css")))?,
 
-        Resource::Contact => Response::builder()
-            .header(LAST_MODIFIED, CONTACT_PAGE_LAST_MODIFIED)
+        Resource::About => Response::builder()
+            .header(LAST_MODIFIED, ABOUT_PAGE_LAST_MODIFIED)
             .header(CACHE_CONTROL, "public, max-age=3600")
             .header(CONTENT_TYPE, "text/html; charset=utf-8")
-            .body(Bytes::from(
-                pages::contact::page(&parsed_req)?.into_string(),
-            ))?,
+            .body(Bytes::from(pages::about::page(&parsed_req)?.into_string()))?,
 
         Resource::Favicon => Response::builder()
-            .header(LAST_MODIFIED, CONTACT_PAGE_LAST_MODIFIED)
+            .header(LAST_MODIFIED, FAVICON_LAST_MODIFIED)
             .header(CACHE_CONTROL, "public, max-age=31536000")
             .header(CONTENT_TYPE, "image/vnd.microsoft.icon")
             .body(Bytes::from_static(include_bytes!("favicon.ico")))?,
@@ -484,7 +483,7 @@ fn handle_http_counter(parsed_req: &req::ParsedRequest) {
         Resource::Home => "Home",
         Resource::Favicon => "Favicon",
         Resource::Css => "Css",
-        Resource::Contact => "Contact",
+        Resource::About => "About",
         Resource::SearchHeight(_) => "SearchHeight",
         Resource::SearchBlock(_) => "SearchBlock",
         Resource::SearchTx(_) => "SearchTx",

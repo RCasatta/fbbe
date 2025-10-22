@@ -22,7 +22,7 @@ pub enum Resource {
     Home,
     Favicon,
     Css,
-    Contact,
+    About,
     SearchHeight(u32),
     SearchBlock(BlockHash),
     SearchTx(Txid),
@@ -115,7 +115,7 @@ pub async fn parse(req: &Request<hyper::body::Bytes>) -> Result<ParsedRequest, E
         (&Method::GET, None, Some(&"favicon.ico"), None, None) => Resource::Favicon,
         (&Method::GET, None, Some(&"robots.txt"), None, None) => Resource::Robots,
         (&Method::GET, None, Some(&"css"), Some(&"pico.min.css"), None) => Resource::Css,
-        (&Method::GET, None, Some(&"contact"), None, None) => Resource::Contact,
+        (&Method::GET, None, Some(&"about"), None, None) => Resource::About,
         (&Method::GET, None, Some(&"metrics"), None, None) => Resource::Metrics,
         (&Method::GET, None, Some(&"sitemap.xml"), None, None) => Resource::Sitemap,
 

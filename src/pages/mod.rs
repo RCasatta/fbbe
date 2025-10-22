@@ -11,9 +11,9 @@ use crate::{
 use bitcoin::Network;
 use maud::{html, Markup, PreEscaped, DOCTYPE};
 
+pub mod about;
 pub mod address;
 pub mod block;
-pub mod contact;
 pub mod home;
 pub mod tx;
 
@@ -100,7 +100,7 @@ pub fn footer(parsed: &ParsedRequest) -> Markup {
                 @if let Some(link) = parsed.resource.link() {
                     " | " a href=(link) { "Text" }
                 }
-                " | " a href="/contact" { "Contact" }
+                " | " a href="/about" { "About" }
                 " | " a href="https://github.com/RCasatta/fbbe" { "Source" }
 
             }
