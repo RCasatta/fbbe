@@ -2,10 +2,10 @@
 
 # Fast Bitcoin Block Explorer
 
-A light Bitcoin block explorer without address indexing, using only a bitcoin
-core instance without RPC credentials (unauthenticated REST interface).
+A light Bitcoin block explorer using only a bitcoin
+core instance without RPC credentials (unauthenticated REST interface) and with txindex.
 
-Runs live on mainnet, testnet and signet @ http://fbbe.info
+Runs live on mainnet and signet @ http://fbbe.info
 
 Locally can run on regtest.
 
