@@ -26,6 +26,7 @@ pub fn header(title: &str) -> Markup {
             meta charset="utf-8";
             meta name="viewport" content="width=device-width, initial-scale=1";
             meta name="description" content="A Fast Bitcoin Block Explorer: simple, bitcoin-only, cache-friendly, terminal-friendly, low-bandwith, no images, no javascript. With mainnet and signet.";
+            link rel="preload" href="/css/pico.min.css" as="style";
             link rel="stylesheet" href="/css/pico.min.css";
             style { (include_str!("../css/custom.min.css")) }
             script defer data-domain="fbbe.info" src="https://plausible.casatta.it/js/script.js" {}
