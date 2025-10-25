@@ -5,7 +5,7 @@ use maud::{html, Markup};
 pub fn page(parsed: &ParsedRequest) -> Result<Markup, Error> {
     let content = html! {
         section {
-            h1 { "About" }
+            h1 { "Aboutt" }
 
             p { "A Fast Bitcoin Block Explorer with the following features:" }
             ul {
