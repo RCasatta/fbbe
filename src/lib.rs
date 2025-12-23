@@ -102,6 +102,10 @@ pub struct Arguments {
     /// DNS hostname, used to generate sitemap URLs
     #[arg(long, env)]
     pub dns_host: Option<String>,
+
+    /// HTML content to display in the Ads row on the home page Blockchain table
+    #[arg(long, env)]
+    pub ads: Option<String>,
 }
 
 impl Arguments {

@@ -116,6 +116,7 @@ pub async fn route(
                 &parsed_req,
                 fees,
                 random_known_tx,
+                state.args.ads.as_deref(),
             )
             .into_string();
 

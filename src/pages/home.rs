@@ -21,6 +21,7 @@ pub fn page(
     parsed: &ParsedRequest,
     block_template: BlockTemplate,
     random_known_tx: Option<Txid>,
+    ads: Option<&str>,
 ) -> Markup {
     let duration = height_time.since_now();
     let blockchain_size_row = SizeRow::new("Size on disk", info.size_on_disk);
@@ -75,6 +76,17 @@ pub fn page(
                             }
                             td class="right" {
                                 (txid.html())
+                            }
+                        }
+                    }
+
+                    @if let Some(ads_html) = ads {
+                        tr {
+                            th {
+                                "Ads"
+                            }
+                            td class="right" {
+                                (PreEscaped(ads_html))
                             }
                         }
                     }
