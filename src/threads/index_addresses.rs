@@ -31,8 +31,9 @@ fn script_hash(script: &Script) -> ScriptHash {
 const BLOCK_HASH_CF: &str = "BLOCK_HASH_CF"; // BlockHash -> [] // indexed blocks
 const FUNDING_CF: &str = "FUNDING_CF"; // hash(Script) || height -> []
 const SPENDING_CF: &str = "SPENDING_CF"; // hash(prevout) || height -> []
+const FEE_CF: &str = "FEE_CF"; // txid[..12] -> fee
 
-const COLUMN_FAMILIES: &[&str] = &[BLOCK_HASH_CF, FUNDING_CF, SPENDING_CF];
+const COLUMN_FAMILIES: &[&str] = &[BLOCK_HASH_CF, FUNDING_CF, SPENDING_CF, FEE_CF];
 
 #[derive(Debug)]
 pub struct Database {
@@ -73,6 +74,10 @@ impl Database {
 
     fn spending_cf(&self) -> &ColumnFamily {
         self.db.cf_handle(SPENDING_CF).expect("missing SPENDING_CF")
+    }
+
+    fn fee_cf(&self) -> &ColumnFamily {
+        self.db.cf_handle(FEE_CF).expect("missing FEE_CF")
     }
 
     pub fn indexed_block_hash(&self) -> HashSet<BlockHash> {
@@ -145,6 +150,20 @@ impl Database {
         todo!()
     }
 
+    pub fn get_fee(&self, txid: &Txid) -> Option<u64> {
+        let key = txid_fee_key(txid);
+        let value = self.db.get_pinned_cf(self.fee_cf(), key).unwrap()?;
+        if value.len() != 8 {
+            return None;
+        }
+        Some(u64::from_be_bytes(value[..].try_into().unwrap()))
+    }
+
+    pub fn put_fee(&self, txid: &Txid, fee: u64) -> Result<(), rocksdb::Error> {
+        let key = txid_fee_key(txid);
+        self.db.put_cf(self.fee_cf(), key, fee.to_be_bytes())
+    }
+
     pub fn write_hashes(&self, index_res: IndexBlockResult) -> Result<(), Error> {
         let mut batch = WriteBatch::default();
         let height_bytes = index_res.height.to_be_bytes();
@@ -182,6 +201,12 @@ pub fn outpoint_to_key_vec(out_point: &OutPoint) -> Vec<u8> {
     let mut vec = Vec::with_capacity(8);
     outpoint_to_key(out_point, &mut vec);
     vec
+}
+
+fn txid_fee_key(txid: &Txid) -> [u8; 12] {
+    txid.as_byte_array()[..12]
+        .try_into()
+        .expect("slice right length")
 }
 pub struct IndexBlockResult {
     block_hash: BlockHash,

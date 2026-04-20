@@ -41,6 +41,7 @@ pub fn page(
     tx: &Transaction,
     height_time: Option<(BlockHash, HeightTime)>,
     prevouts: &[TxOut],
+    fee: Option<u64>,
     output_status: Vec<OutputStatus>,
     page: usize,
     mempool_fees: BlockTemplate,
@@ -85,10 +86,6 @@ pub fn page(
     let next_output = (page < last_page_output)
         .then(|| format!("{}t/{}/{}#outputs", network_url_path, txid, page + 1));
     let separator_output = (prev_output.is_some() && next_output.is_some()).then_some(" | ");
-
-    let sum_outputs: u64 = tx.output.iter().map(|o| o.value.to_sat()).sum();
-    let sum_inputs: u64 = prevouts.iter().map(|o| o.value.to_sat()).sum();
-    let fee = sum_inputs.saturating_sub(sum_outputs); // saturating never happens on confirmed/mempool-accepted tx, but we show also user made txs
 
     let inputs = tx
         .input
@@ -257,10 +254,10 @@ pub fn page(
         html! { (serialize_hex(&tx)) }
     };
 
-    let wf = WeightFee {
+    let wf = fee.map(|fee| WeightFee {
         weight: tx.weight(),
         fee: fee as usize,
-    };
+    });
 
     let content = html! {
 
@@ -273,7 +270,7 @@ pub fn page(
             table class="striped" {
                 tbody {
                     (block_link)
-                    @if !tx.is_coinbase() && !prevouts.iter().any(|p| p.value.to_sat() == u64::MAX) {
+                    @if let Some(wf) = wf {
                         (fee_rows( wf, last_in_block))
                     }
                 }

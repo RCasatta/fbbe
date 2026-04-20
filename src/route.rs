@@ -177,7 +177,8 @@ pub async fn route(
                 Some(block_hash) => Some((*block_hash, state.height_time(*block_hash).await?)),
                 None => None,
             };
-            let prevouts = fetch_prevouts(txid, &tx, &state, false).await?;
+            let (prevouts, fee) =
+                tx_page_prevouts_and_fee(txid, &tx, &state, db.as_deref(), pagination).await?;
             let current_tip = state.chain_info.lock().await.clone();
             let mempool_fees = state.mempool_fees.lock().await.clone();
             let known_tx = state.known_txs.get(&txid).cloned();
@@ -188,6 +189,7 @@ pub async fn route(
                 &tx,
                 ts,
                 &prevouts,
+                fee,
                 output_status,
                 pagination,
                 mempool_fees,
@@ -404,6 +406,7 @@ pub async fn route(
                 tx,
                 None,
                 &prevouts,
+                None,
                 output_status,
                 0,
                 mempool_fees,
@@ -595,6 +598,77 @@ pub async fn fetch_prevouts(
         }
     }
     Ok(prevouts)
+}
+
+async fn fetch_prevouts_page(
+    txid: Txid,
+    tx: &bitcoin::Transaction,
+    state: &SharedState,
+    page: usize,
+) -> Result<Vec<bitcoin::TxOut>, Error> {
+    let start = page * pages::tx::IO_PER_PAGE;
+    if start >= tx.input.len() {
+        return Ok(vec![TxOut::NULL; tx.input.len()]);
+    }
+    let end = (start + pages::tx::IO_PER_PAGE).min(tx.input.len());
+    let mut prevouts = vec![TxOut::NULL; tx.input.len()];
+
+    if end > start && end - start > 1 {
+        state
+            .preload_prevouts_inner(
+                txid,
+                tx.input[start..end].iter().map(|i| &i.previous_output),
+                "tx_page",
+            )
+            .await;
+    }
+
+    for (i, input) in tx.input.iter().enumerate().skip(start).take(end - start) {
+        if input.previous_output.txid != Txid::all_zeros() {
+            let (previous_tx, _) = state.tx(input.previous_output.txid, false).await?;
+            let tx_out = tx_output(previous_tx.as_ref(), input.previous_output.vout, true)
+                .expect("invalid bytes");
+            prevouts[i] = tx_out;
+        }
+    }
+
+    Ok(prevouts)
+}
+
+async fn tx_page_prevouts_and_fee(
+    txid: Txid,
+    tx: &bitcoin::Transaction,
+    state: &SharedState,
+    db: Option<&Database>,
+    page: usize,
+) -> Result<(Vec<bitcoin::TxOut>, Option<u64>), Error> {
+    const FEE_CACHE_INPUT_THRESHOLD: usize = 10;
+
+    if tx.input.len() > FEE_CACHE_INPUT_THRESHOLD {
+        if let Some(db) = db {
+            if let Some(fee) = db.get_fee(&txid) {
+                let prevouts = fetch_prevouts_page(txid, tx, state, page).await?;
+                return Ok((prevouts, Some(fee)));
+            }
+        }
+    }
+
+    let prevouts = fetch_prevouts(txid, tx, state, false).await?;
+    let fee = if tx.is_coinbase() {
+        None
+    } else {
+        let sum_outputs: u64 = tx.output.iter().map(|o| o.value.to_sat()).sum();
+        let sum_inputs: u64 = prevouts.iter().map(|o| o.value.to_sat()).sum();
+        Some(sum_inputs.saturating_sub(sum_outputs))
+    };
+
+    if tx.input.len() > FEE_CACHE_INPUT_THRESHOLD {
+        if let (Some(db), Some(fee)) = (db, fee) {
+            db.put_fee(&txid, fee)?;
+        }
+    }
+
+    Ok((prevouts, fee))
 }
 
 pub async fn route_infallible(
