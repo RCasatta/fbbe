@@ -5,3 +5,4 @@
 .direnv
 /result
 *.swp
+.codex
