@@ -14,6 +14,7 @@ use fxhash::FxHasher64;
 use rocksdb::{ColumnFamily, ColumnFamilyDescriptor, DBCompressionType, Options, WriteBatch, DB};
 
 use crate::{
+    cache_counter,
     error::Error,
     rpc::{self, block::SerBlock, headers::HeightTime},
     state::SharedState,
@@ -152,7 +153,9 @@ impl Database {
 
     pub fn get_fee(&self, txid: &Txid) -> Option<u64> {
         let key = txid_fee_key(txid);
-        let value = self.db.get_pinned_cf(self.fee_cf(), key).unwrap()?;
+        let value = self.db.get_pinned_cf(self.fee_cf(), key).unwrap();
+        cache_counter("fee", value.is_some());
+        let value = value?;
         if value.len() != 8 {
             return None;
         }
