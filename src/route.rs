@@ -570,7 +570,7 @@ pub async fn fetch_prevouts(
     fill_missing: bool,
 ) -> Result<Vec<bitcoin::TxOut>, Error> {
     if tx.input.len() > 1 {
-        state.preload_prevouts(txid, tx).await;
+        state.preload_prevouts(txid, tx, "tx_page").await;
     }
     let mut prevouts = Vec::with_capacity(tx.input.len());
     for input in tx.input.iter() {

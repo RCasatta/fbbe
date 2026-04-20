@@ -386,6 +386,12 @@ lazy_static! {
         &["method", "content"]
     )
     .unwrap();
+    pub(crate) static ref PREVOUT_PRELOAD_COUNTER: CounterVec = register_counter_vec!(
+        "fbbe_prevout_preload_total",
+        "Prevout preload work before and after deduplication",
+        &["caller", "kind"]
+    )
+    .unwrap();
     static ref CACHE_COUNTER: IntCounterVec = register_int_counter_vec!(
         "fbbe_cache_counter",
         "Hit/Miss of FBBE caches",

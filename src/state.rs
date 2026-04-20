@@ -15,8 +15,8 @@ use lru::LruCache;
 use prometheus::Registry;
 use tokio::sync::{Mutex, MutexGuard};
 
-use crate::cache_counter;
 use crate::rpc::block::SerBlock;
+use crate::{cache_counter, PREVOUT_PRELOAD_COUNTER};
 use crate::{
     error::Error,
     network,
@@ -246,6 +246,7 @@ impl SharedState {
                 .await
                 .get(&txid)
                 .map(|tx| SerTx(tx.to_vec()));
+            cache_counter("tx", tx.is_some());
 
             if !needs_block_hash {
                 match tx {
@@ -302,8 +303,8 @@ impl SharedState {
         Ok((tx, block_hash))
     }
 
-    pub async fn preload_prevouts(&self, txid: Txid, tx: &Transaction) {
-        self.preload_prevouts_inner(txid, tx.input.iter().map(|i| &i.previous_output))
+    pub async fn preload_prevouts(&self, txid: Txid, tx: &Transaction, caller: &'static str) {
+        self.preload_prevouts_inner(txid, tx.input.iter().map(|i| &i.previous_output), caller)
             .await;
     }
 
@@ -311,6 +312,7 @@ impl SharedState {
         &self,
         txid: Txid,
         tx_ins: impl Iterator<Item = &OutPoint>,
+        caller: &'static str,
     ) {
         let mut count = 0;
         let needed: Vec<_> = {
@@ -327,6 +329,12 @@ impl SharedState {
         };
 
         let needed_len = needed.len();
+        PREVOUT_PRELOAD_COUNTER
+            .with_label_values(&[caller, "inputs"])
+            .inc_by(count as f64);
+        PREVOUT_PRELOAD_COUNTER
+            .with_label_values(&[caller, "unique_txids"])
+            .inc_by(needed_len as f64);
         let start = Instant::now();
 
         let got_txs: Vec<_> = stream::iter(needed)

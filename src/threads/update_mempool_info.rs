@@ -217,7 +217,7 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
 
                     if prevouts.len() > 1 {
                         shared_state
-                            .preload_prevouts_inner(*txid, prevouts.iter())
+                            .preload_prevouts_inner(*txid, prevouts.iter(), "mempool_update")
                             .await;
                     }
 
