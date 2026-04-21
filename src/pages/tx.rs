@@ -40,7 +40,7 @@ pub fn page(
     txid: Txid,
     tx: &Transaction,
     height_time: Option<(BlockHash, HeightTime)>,
-    prevouts: &[TxOut],
+    prevouts: &[TxOut], // May be sparse: non-visible inputs can be represented as TxOut::NULL
     fee: Option<u64>,
     output_status: Vec<OutputStatus>,
     page: usize,

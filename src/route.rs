@@ -645,6 +645,7 @@ async fn tx_page_prevouts_and_fee(
     const FEE_CACHE_INPUT_THRESHOLD: usize = 10;
 
     if tx.input.len() > FEE_CACHE_INPUT_THRESHOLD {
+        // For large transactions, a cached fee lets us fetch only the prevouts visible in the page.
         if let Some(db) = db {
             if let Some(fee) = db.get_fee(&txid) {
                 let prevouts = fetch_prevouts_page(txid, tx, state, page).await?;
