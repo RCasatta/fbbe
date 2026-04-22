@@ -10,12 +10,6 @@ use std::sync::Arc;
 
 const HEADERS_PER_REQUEST: usize = 101;
 
-pub(crate) async fn bootstrap_state_infallible(shared_state: Arc<SharedState>) {
-    if let Err(e) = bootstrap_state(shared_state).await {
-        log::error!("{:?}", e);
-    }
-}
-
 pub async fn bootstrap_state(shared_state: Arc<SharedState>) -> Result<(), Error> {
     let geneis_hash = genesis_block(network()).header.block_hash();
     let mut hash = geneis_hash;

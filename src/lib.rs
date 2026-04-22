@@ -2,7 +2,7 @@ pub use crate::error::Error;
 use crate::globals::{init_globals, network};
 use crate::route::route_infallible;
 use crate::state::SharedState;
-use crate::threads::bootstrap_state::bootstrap_state_infallible;
+use crate::threads::bootstrap_state::bootstrap_state;
 use crate::threads::index_addresses::{index_addresses_infallible, Database};
 use crate::threads::update_chain_info::update_chain_info_infallible;
 use crate::threads::update_db_stats::update_db_stats_infallible;
@@ -210,8 +210,7 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
     ));
 
     // initialize cache with information from headers
-    let shared_state_bootstrap = shared_state.clone();
-    let h = tokio::spawn(async move { bootstrap_state_infallible(shared_state_bootstrap).await });
+    bootstrap_state(shared_state.clone()).await?;
 
     // keep chain info updated
     let shared_state_chain = shared_state.clone();
@@ -225,28 +224,25 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
 
     #[allow(clippy::let_underscore_future)]
     let _ = tokio::spawn(async move {
-        h.await.unwrap();
-        let db_clone2 = db_clone.clone();
-        #[allow(clippy::let_underscore_future)]
+        update_chain_info_infallible(shared_state_chain, chain_info_chain, db_clone).await
+    });
+
+    if let Some(db) = db.as_ref() {
+        let db_stats = db.clone();
+        let db_index = db.clone();
+        let _ = tokio::spawn(async move { update_db_stats_infallible(db_stats).await });
         let _ = tokio::spawn(async move {
-            update_chain_info_infallible(shared_state_chain, chain_info_chain, db_clone2).await
+            index_addresses_infallible(db_index, shared_state_addresses).await
         });
+    }
 
-        if let Some(db) = db_clone {
-            let db_stats = db.clone();
-            let _ = tokio::spawn(async move { update_db_stats_infallible(db_stats).await });
-            let _ = tokio::spawn(async move {
-                index_addresses_infallible(db.clone(), shared_state_addresses).await
-            });
-        }
+    if let Some(socket) = zmq_rawtx {
+        let _ =
+            tokio::spawn(async move { update_tx_zmq_infallible(&socket, shared_state_zmq).await });
+    }
 
-        if let Some(socket) = zmq_rawtx {
-            let _ =
-                tokio::spawn(
-                    async move { update_tx_zmq_infallible(&socket, shared_state_zmq).await },
-                );
-        }
-
+    #[allow(clippy::let_underscore_future)]
+    let _ = tokio::spawn(async move {
         update_mempool(shared_state_mempool).await;
     });
 
