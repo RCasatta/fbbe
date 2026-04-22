@@ -175,6 +175,10 @@ impl SharedState {
         // TODO cache some blocks
         for h in heights {
             if let Some(block_hash) = self.height_to_hash(*h).await {
+                if block_hash == BlockHash::all_zeros() {
+                    log::warn!("blocks_from_heights: missing block hash for height {}", h);
+                    continue;
+                }
                 let block = rpc::block::call_raw(block_hash).await?; // TODO use raw block SerBlock
                 res.push((block_hash, block))
             }
