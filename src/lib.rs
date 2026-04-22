@@ -299,7 +299,15 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
                             .serve_connection(io, service)
                             .await
                     {
-                        log::error!("Error serving connection: {}", e);
+                        if let Some(e) = e.downcast_ref::<hyper::Error>() {
+                            if e.is_incomplete_message() || e.is_closed() || e.is_canceled() {
+                                log::debug!("Connection closed by peer: {}", e);
+                            } else {
+                                log::error!("Error serving connection: {}", e);
+                            }
+                        } else {
+                            log::error!("Error serving connection: {}", e);
+                        }
                     }
                 });
             }
