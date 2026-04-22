@@ -34,7 +34,6 @@ const BLOCK_HASH_CF: &str = "BLOCK_HASH_CF"; // BlockHash -> [] // indexed block
 const FUNDING_CF: &str = "FUNDING_CF"; // hash(Script) || height -> []
 const SPENDING_CF: &str = "SPENDING_CF"; // hash(prevout) || height -> []
 const FEE_CF: &str = "FEE_CF"; // txid[..12] -> fee
-const LEGACY_HEIGHT_BLOCK_HASH_CF: &str = "HEIGHT_BLOCK_HASH_CF";
 
 const COLUMN_FAMILIES: &[&str] = &[BLOCK_HASH_CF, FUNDING_CF, SPENDING_CF, FEE_CF];
 
@@ -44,12 +43,10 @@ pub struct Database {
 }
 
 impl Database {
-    fn create_cf_descriptors<'a>(
-        column_families: impl IntoIterator<Item = &'a str>,
-    ) -> Vec<ColumnFamilyDescriptor> {
-        column_families
-            .into_iter()
-            .map(|name| {
+    fn create_cf_descriptors() -> Vec<ColumnFamilyDescriptor> {
+        COLUMN_FAMILIES
+            .iter()
+            .map(|&name| {
                 let mut opts = Options::default();
                 opts.set_compression_type(DBCompressionType::Zstd);
                 ColumnFamilyDescriptor::new(name, opts)
@@ -59,31 +56,11 @@ impl Database {
 
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, rocksdb::Error> {
         let mut db_opts = Options::default();
-        let path = path.as_ref();
 
         db_opts.create_if_missing(true);
         db_opts.create_missing_column_families(true);
 
-        if let Ok(existing_cfs) = DB::list_cf(&db_opts, path) {
-            if existing_cfs
-                .iter()
-                .any(|cf| cf == LEGACY_HEIGHT_BLOCK_HASH_CF)
-            {
-                log::info!("dropping legacy RocksDB column family {LEGACY_HEIGHT_BLOCK_HASH_CF}");
-                let mut db = DB::open_cf_descriptors(
-                    &db_opts,
-                    path,
-                    Self::create_cf_descriptors(existing_cfs.iter().map(String::as_str)),
-                )?;
-                db.drop_cf(LEGACY_HEIGHT_BLOCK_HASH_CF)?;
-            }
-        }
-
-        let db = DB::open_cf_descriptors(
-            &db_opts,
-            path,
-            Self::create_cf_descriptors(COLUMN_FAMILIES.iter().copied()),
-        )?;
+        let db = DB::open_cf_descriptors(&db_opts, path, Self::create_cf_descriptors())?;
         Ok(Self { db })
     }
 
