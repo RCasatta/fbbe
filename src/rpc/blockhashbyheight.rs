@@ -12,7 +12,7 @@ pub async fn _call(height: usize) -> Result<BlockHashByHeight, Error> {
     let uri = format!("http://{bitcoind_addr}/rest/blockhashbyheight/{height}.json",).parse()?;
     let resp = client.get(uri).await?;
     NODE_REST_COUNTER
-        .with_label_values(&["blockhashbyheight", "json"])
+        .with_label_values(&["blockhashbyheight", "json", resp.status().as_str()])
         .inc();
 
     check_status(resp.status(), |s| {

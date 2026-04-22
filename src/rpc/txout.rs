@@ -13,7 +13,7 @@ pub async fn _call(txid: Txid, vout: u32) -> Result<TxOutJson, Error> {
         format!("http://{bitcoind_addr}/rest/getutxos/checkmempool/{txid}-{vout}.json").parse()?;
     let resp = client.get(uri).await?;
     NODE_REST_COUNTER
-        .with_label_values(&["getutxos/checkmempool", "json"])
+        .with_label_values(&["getutxos/checkmempool", "json", resp.status().as_str()])
         .inc();
 
     check_status(resp.status(), |s| Error::RpcTxOut(s, txid, vout)).await?;

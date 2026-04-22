@@ -25,7 +25,7 @@ pub async fn call() -> Result<ChainInfo, Error> {
     let uri = format!("http://{bitcoind_addr}/rest/chaininfo.json",).parse()?;
     let resp = client.get(uri).await?;
     NODE_REST_COUNTER
-        .with_label_values(&["chaininfo", "json"])
+        .with_label_values(&["chaininfo", "json", resp.status().as_str()])
         .inc();
     check_status(resp.status(), Error::RpcChainInfo).await?;
     let body_bytes = http_body_util::BodyExt::collect(resp.into_body())

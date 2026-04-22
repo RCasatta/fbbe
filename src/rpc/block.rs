@@ -20,7 +20,7 @@ pub async fn call_json(block_hash: BlockHash) -> Result<BlockNoTxDetails, Error>
     log::trace!("asking {:?}", uri);
     let resp = client.get(uri).await?;
     NODE_REST_COUNTER
-        .with_label_values(&["block/notxdetails", "json"])
+        .with_label_values(&["block/notxdetails", "json", resp.status().as_str()])
         .inc();
     check_status(resp.status(), |s| Error::RpcBlockJson(s, block_hash)).await?;
     let body_bytes = http_body_util::BodyExt::collect(resp.into_body())
@@ -42,7 +42,9 @@ pub async fn call_raw(block_hash: BlockHash) -> Result<SerBlock, Error> {
 
     let uri = format!("http://{bitcoind_addr}/rest/block/{block_hash}.bin",).parse()?;
     let resp = client.get(uri).await?;
-    NODE_REST_COUNTER.with_label_values(&["block", "bin"]).inc();
+    NODE_REST_COUNTER
+        .with_label_values(&["block", "bin", resp.status().as_str()])
+        .inc();
     check_status(resp.status(), |s| Error::RpcBlockRaw(s, block_hash)).await?;
     let body_bytes = http_body_util::BodyExt::collect(resp.into_body())
         .await?

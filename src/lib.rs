@@ -391,7 +391,7 @@ lazy_static! {
     pub(crate) static ref NODE_REST_COUNTER: CounterVec = register_counter_vec!(
         "fbbe_rpc_requests_to_node",
         "Number of RPC requests made to the node",
-        &["method", "content"]
+        &["method", "content", "status"]
     )
     .unwrap();
     pub(crate) static ref PREVOUT_PRELOAD_COUNTER: CounterVec = register_counter_vec!(

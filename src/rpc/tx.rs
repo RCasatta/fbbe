@@ -35,7 +35,9 @@ async fn json_bytes(txid: Txid) -> Result<hyper::body::Bytes, Error> {
     let bitcoind_addr = crate::globals::bitcoind_addr();
     let uri = format!("http://{bitcoind_addr}/rest/tx/{txid}.json").parse()?;
     let resp = client.get(uri).await?;
-    NODE_REST_COUNTER.with_label_values(&["tx", "json"]).inc();
+    NODE_REST_COUNTER
+        .with_label_values(&["tx", "json", resp.status().as_str()])
+        .inc();
     check_status(resp.status(), |s| Error::RpcTxJson(s, txid)).await?;
     let body_bytes = http_body_util::BodyExt::collect(resp.into_body())
         .await?
@@ -69,7 +71,9 @@ pub async fn call_raw(txid: Txid) -> Result<Vec<u8>, Error> {
 
     let uri = format!("http://{bitcoind_addr}/rest/tx/{txid}.bin").parse()?;
     let resp = client.get(uri).await?;
-    NODE_REST_COUNTER.with_label_values(&["tx", "bin"]).inc();
+    NODE_REST_COUNTER
+        .with_label_values(&["tx", "bin", resp.status().as_str()])
+        .inc();
 
     check_status(resp.status(), |s| Error::RpcTx(s, txid)).await?;
     let body_bytes = http_body_util::BodyExt::collect(resp.into_body())

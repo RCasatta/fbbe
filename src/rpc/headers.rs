@@ -21,7 +21,7 @@ pub async fn call_many(
     let uri = format!("http://{bitcoind_addr}/rest/headers/{count}/{block_hash}.bin").parse()?;
     let resp = client.get(uri).await?;
     NODE_REST_COUNTER
-        .with_label_values(&["headers/x", "bin"])
+        .with_label_values(&["headers/x", "bin", resp.status().as_str()])
         .inc();
     check_status(resp.status(), |s| {
         Error::RpcBlockHeaders(s, block_hash, count)
@@ -49,7 +49,7 @@ pub async fn call_one(block_hash: BlockHash) -> Result<BlockheaderJson, Error> {
     let uri = format!("http://{bitcoind_addr}/rest/headers/1/{block_hash}.json").parse()?;
     let resp = client.get(uri).await?;
     NODE_REST_COUNTER
-        .with_label_values(&["headers/1", "bin"])
+        .with_label_values(&["headers/1", "bin", resp.status().as_str()])
         .inc();
     check_status(resp.status(), |s| Error::RpcBlockHeaderJson(s, block_hash)).await?;
     let body_bytes = http_body_util::BodyExt::collect(resp.into_body())

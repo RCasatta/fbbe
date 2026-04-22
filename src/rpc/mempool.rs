@@ -17,7 +17,7 @@ pub async fn info() -> Result<MempoolInfo, Error> {
     let uri = format!("http://{bitcoind_addr}/rest/mempool/info.json").parse()?;
     let resp = client.get(uri).await?;
     NODE_REST_COUNTER
-        .with_label_values(&["mempool/info", "json"])
+        .with_label_values(&["mempool/info", "json", resp.status().as_str()])
         .inc();
     check_status(resp.status(), Error::RpcMempoolInfo).await?;
     let body_bytes = http_body_util::BodyExt::collect(resp.into_body())
@@ -38,7 +38,7 @@ pub async fn content(support_verbose: bool) -> Result<FxHashSet<Txid>, Error> {
     let uri = format!("http://{bitcoind_addr}/rest/mempool/contents.json?verbose=false").parse()?;
     let resp = client.get(uri).await?;
     NODE_REST_COUNTER
-        .with_label_values(&["mempool/contents", "json"])
+        .with_label_values(&["mempool/contents", "json", resp.status().as_str()])
         .inc();
     check_status(resp.status(), Error::RpcMempoolContent).await?;
     let body_bytes = http_body_util::BodyExt::collect(resp.into_body())
