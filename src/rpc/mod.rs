@@ -33,9 +33,11 @@ async fn check_status<F: FnOnce(StatusCode) -> Error>(
         Ok(())
     } else {
         let e = error(status);
-        log::warn!("status {} error:{:?}", status, e);
         if status == 503 {
+            log::debug!("returned 503, {e:?}");
             tokio::time::sleep(Duration::from_secs(1)).await;
+        } else {
+            log::warn!("status {status} error:{e:?}");
         }
         Err(e)
     }
