@@ -11,6 +11,7 @@ use std::{
 use bitcoin::{hashes::Hash, Address, Block, BlockHash, OutPoint, Script, ScriptBuf, Txid};
 use bitcoin_slices::{bsl, Visit, Visitor};
 use fxhash::FxHasher64;
+use rocksdb::properties;
 use rocksdb::{ColumnFamily, ColumnFamilyDescriptor, DBCompressionType, Options, WriteBatch, DB};
 
 use crate::{
@@ -165,6 +166,25 @@ impl Database {
     pub fn put_fee(&self, txid: &Txid, fee: u64) -> Result<(), rocksdb::Error> {
         let key = txid_fee_key(txid);
         self.db.put_cf(self.fee_cf(), key, fee.to_be_bytes())
+    }
+
+    pub fn estimated_num_keys(&self) -> Result<Vec<(&'static str, u64)>, rocksdb::Error> {
+        let cfs = [
+            ("block_hash", self.block_hash_cf()),
+            ("funding", self.funding_cf()),
+            ("spending", self.spending_cf()),
+            ("fee", self.fee_cf()),
+        ];
+
+        cfs.into_iter()
+            .map(|(name, cf)| {
+                let value = self
+                    .db
+                    .property_int_value_cf(cf, properties::ESTIMATE_NUM_KEYS)?
+                    .unwrap_or(0);
+                Ok((name, value))
+            })
+            .collect()
     }
 
     pub fn write_hashes(&self, index_res: IndexBlockResult) -> Result<(), Error> {

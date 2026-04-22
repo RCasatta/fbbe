@@ -5,6 +5,7 @@ use crate::state::SharedState;
 use crate::threads::bootstrap_state::bootstrap_state_infallible;
 use crate::threads::index_addresses::{index_addresses_infallible, Database};
 use crate::threads::update_chain_info::update_chain_info_infallible;
+use crate::threads::update_db_stats::update_db_stats_infallible;
 use crate::threads::update_mempool_info::update_mempool;
 use bitcoin::{Network, Txid};
 use clap::Parser;
@@ -13,8 +14,8 @@ use globals::networks;
 use lazy_static::lazy_static;
 use network_parse::NetworkParse;
 use prometheus::{
-    register_counter_vec, register_histogram_vec, register_int_counter_vec, CounterVec,
-    HistogramVec, IntCounterVec,
+    register_counter_vec, register_gauge_vec, register_histogram_vec, register_int_counter_vec,
+    CounterVec, GaugeVec, HistogramVec, IntCounterVec,
 };
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -232,6 +233,8 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
         });
 
         if let Some(db) = db_clone {
+            let db_stats = db.clone();
+            let _ = tokio::spawn(async move { update_db_stats_infallible(db_stats).await });
             let _ = tokio::spawn(async move {
                 index_addresses_infallible(db.clone(), shared_state_addresses).await
             });
@@ -398,6 +401,12 @@ lazy_static! {
         "fbbe_prevout_preload_total",
         "Prevout preload work before and after deduplication",
         &["caller", "kind"]
+    )
+    .unwrap();
+    pub(crate) static ref ROCKSDB_ESTIMATED_KEYS_GAUGE: GaugeVec = register_gauge_vec!(
+        "fbbe_rocksdb_estimated_keys",
+        "Estimated number of keys per RocksDB column family",
+        &["cf"]
     )
     .unwrap();
     static ref CACHE_COUNTER: IntCounterVec = register_int_counter_vec!(
