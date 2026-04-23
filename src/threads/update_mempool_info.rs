@@ -181,8 +181,10 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
     let support_verbose = rpc::mempool::content_verbose().await.is_ok();
     log::info!("Node support verbose mempool: {support_verbose}");
     let mut count_503 = 0;
+    let mut count_loop = 0;
 
     loop {
+        count_loop += 1;
         let (mempool, source) = if support_verbose {
             let mempool = match update_mempool_rates_from_verbose(&shared_state, &mut rates).await {
                 Ok(mempool) => mempool,
@@ -243,8 +245,9 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
         drop(mempool_fees);
 
         log::info!(
-            "mempool fee iteration completed source:{source} mempool:{mempool_len} block_template:{:?} count_503:{count_503}",
+            "mempool fee iteration completed source:{source} mempool:{mempool_len} block_template:{:?} 503:{:.2}%",
             block_template_last.map(|n| n + 1),
+            (count_503 as f32 / count_loop as f32) * 100.0
         );
 
         log::trace!("mempool tx with fee: {}", rates.len());
