@@ -178,84 +178,30 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
 
     let mut rates: BTreeSet<TxidWeightFeeCompact> = BTreeSet::new();
     let mut rates_id: FxHashSet<Txid> = FxHashSet::default();
-    let support_verbose = rpc::mempool::content(true).await.is_ok();
-    log::info!("Node support compact mempool: {support_verbose}");
+    let support_verbose = rpc::mempool::content_verbose().await.is_ok();
+    log::info!("Node support verbose mempool: {support_verbose}");
 
     loop {
-        if let Ok(mempool) = rpc::mempool::content(support_verbose).await {
-            rates.retain(|k| mempool.contains(&k.txid)); // keep only current mempool elements
-
-            // keep only elements in the mempool
-            shared_state
-                .mempool_spending
-                .lock()
-                .await
-                .retain(|_, v| mempool.contains(v.txid()));
-
-            log::trace!("mempool content returns {} txids", mempool.len());
-
-            let start = Instant::now();
-            rates_id.clear();
-            rates_id.extend(rates.iter().map(|e| e.txid));
-            'outer: for txid in mempool.iter() {
-                if rates_id.contains(txid) {
+        let mempool = if support_verbose {
+            match update_mempool_rates_from_verbose(&shared_state, &mut rates).await {
+                Ok(mempool) => mempool,
+                Err(e) => {
+                    log::warn!("verbose mempool content doesn't parse: {e:?}");
+                    sleep(Duration::from_secs(10)).await;
                     continue;
                 }
-                if let Ok((tx, _)) = shared_state.tx(*txid, false).await {
-                    let OutPointsAndSum {
-                        prevouts,
-                        sum,
-                        weight,
-                    } = outpoints_and_sum(tx.as_ref()).expect("invalid tx bytes");
-
-                    {
-                        let mut mempool_spending = shared_state.mempool_spending.lock().await;
-                        for (i, prevout) in prevouts.iter().enumerate() {
-                            mempool_spending.insert(*prevout, SpendPoint::new(*txid, i as u32));
-                        }
-                    }
-
-                    if prevouts.len() > 1 {
-                        shared_state
-                            .preload_prevouts_inner(*txid, prevouts.iter(), "mempool_update")
-                            .await;
-                    }
-
-                    let mut sum_inputs = 0u64;
-                    for prevout in prevouts.iter() {
-                        if let Ok((prev_tx, _)) = shared_state.tx(prevout.txid, false).await {
-                            let res = tx_output(prev_tx.as_ref(), prevout.vout, false)
-                                .expect("invalid tx bytes");
-                            sum_inputs += res.value.to_sat();
-                        } else {
-                            continue 'outer;
-                        }
-                    }
-                    let fee = (sum_inputs - sum) as usize;
-                    let wf = WeightFee { weight, fee };
-
-                    if let Ok(wfc) = wf.try_into() {
-                        rates.insert(TxidWeightFeeCompact {
-                            wf: wfc,
-                            txid: *txid,
-                        });
-                    }
-
-                    if start.elapsed() > Duration::from_secs(60) {
-                        log::info!(
-                            "mempool info is taking more than a minute, breaking. Cache len: {} mempool: {}",
-                            rates.len(),
-                            mempool.len(),
-                        );
-                        break;
-                    }
+            }
+        } else {
+            match update_mempool_rates_from_tx_fetch(&shared_state, &mut rates, &mut rates_id).await
+            {
+                Ok(mempool) => mempool,
+                Err(e) => {
+                    log::warn!("mempool content doesn't parse: {e:?}");
+                    sleep(Duration::from_secs(10)).await;
+                    continue;
                 }
             }
-            let mut mempool_fees = shared_state.mempool_fees.lock().await;
-            mempool_fees.mempool = mempool;
-        } else {
-            log::warn!("mempool content doesn't parse");
-        }
+        };
 
         let mut sum = Weight::ZERO;
         let max = Weight::from_wu(4_000_000); // TODO use bitcoin::Weight::MAX_BLOCK once 0.31 released
@@ -276,6 +222,7 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
 
         let mut mempool_fees = shared_state.mempool_fees.lock().await;
 
+        mempool_fees.mempool = mempool;
         mempool_fees.highest = rates.last().map(Into::into);
 
         if let Some(n) = block_template_last {
@@ -289,6 +236,114 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
 
         log::trace!("mempool tx with fee: {}", rates.len());
     }
+}
+
+async fn update_mempool_rates_from_verbose(
+    shared_state: &Arc<SharedState>,
+    rates: &mut BTreeSet<TxidWeightFeeCompact>,
+) -> Result<FxHashSet<Txid>, crate::Error> {
+    const SATS_PER_BTC: f64 = 100_000_000.0;
+
+    let content = rpc::mempool::content_verbose().await?;
+    let mempool: FxHashSet<_> = content.keys().copied().collect();
+
+    shared_state
+        .mempool_spending
+        .lock()
+        .await
+        .retain(|_, v| mempool.contains(v.txid()));
+
+    rates.clear();
+    for (txid, entry) in content {
+        let wf = WeightFee {
+            weight: Weight::from_wu(entry.weight),
+            fee: (entry.fees.base * SATS_PER_BTC).round() as usize,
+        };
+
+        if let Ok(wfc) = wf.try_into() {
+            rates.insert(TxidWeightFeeCompact { wf: wfc, txid });
+        }
+    }
+
+    log::trace!("verbose mempool content returns {} txids", mempool.len());
+    Ok(mempool)
+}
+
+async fn update_mempool_rates_from_tx_fetch(
+    shared_state: &Arc<SharedState>,
+    rates: &mut BTreeSet<TxidWeightFeeCompact>,
+    rates_id: &mut FxHashSet<Txid>,
+) -> Result<FxHashSet<Txid>, crate::Error> {
+    let mempool = rpc::mempool::content(false).await?;
+    rates.retain(|k| mempool.contains(&k.txid)); // keep only current mempool elements
+
+    shared_state
+        .mempool_spending
+        .lock()
+        .await
+        .retain(|_, v| mempool.contains(v.txid()));
+
+    log::trace!("mempool content returns {} txids", mempool.len());
+
+    let start = Instant::now();
+    rates_id.clear();
+    rates_id.extend(rates.iter().map(|e| e.txid));
+    'outer: for txid in mempool.iter() {
+        if rates_id.contains(txid) {
+            continue;
+        }
+        if let Ok((tx, _)) = shared_state.tx(*txid, false).await {
+            let OutPointsAndSum {
+                prevouts,
+                sum,
+                weight,
+            } = outpoints_and_sum(tx.as_ref()).expect("invalid tx bytes");
+
+            {
+                let mut mempool_spending = shared_state.mempool_spending.lock().await;
+                for (i, prevout) in prevouts.iter().enumerate() {
+                    mempool_spending.insert(*prevout, SpendPoint::new(*txid, i as u32));
+                }
+            }
+
+            if prevouts.len() > 1 {
+                shared_state
+                    .preload_prevouts_inner(*txid, prevouts.iter(), "mempool_update")
+                    .await;
+            }
+
+            let mut sum_inputs = 0u64;
+            for prevout in prevouts.iter() {
+                if let Ok((prev_tx, _)) = shared_state.tx(prevout.txid, false).await {
+                    let res =
+                        tx_output(prev_tx.as_ref(), prevout.vout, false).expect("invalid tx bytes");
+                    sum_inputs += res.value.to_sat();
+                } else {
+                    continue 'outer;
+                }
+            }
+            let fee = (sum_inputs - sum) as usize;
+            let wf = WeightFee { weight, fee };
+
+            if let Ok(wfc) = wf.try_into() {
+                rates.insert(TxidWeightFeeCompact {
+                    wf: wfc,
+                    txid: *txid,
+                });
+            }
+
+            if start.elapsed() > Duration::from_secs(60) {
+                log::info!(
+                    "mempool info is taking more than a minute, breaking. Cache len: {} mempool: {}",
+                    rates.len(),
+                    mempool.len(),
+                );
+                break;
+            }
+        }
+    }
+
+    Ok(mempool)
 }
 
 #[cfg(test)]
