@@ -243,14 +243,13 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
         drop(mempool_fees);
 
         log::info!(
-            "mempool fee iteration completed source:{source} mempool:{mempool_len} rates:{} block_template:{:?} count_503:{count_503}",
-            rates.len(),
+            "mempool fee iteration completed source:{source} mempool:{mempool_len} block_template:{:?} count_503:{count_503}",
             block_template_last.map(|n| n + 1),
         );
 
-        sleep(Duration::from_secs(10)).await;
-
         log::trace!("mempool tx with fee: {}", rates.len());
+
+        sleep(Duration::from_secs(60)).await;
     }
 }
 
