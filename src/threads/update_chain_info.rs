@@ -85,6 +85,11 @@ async fn update_chain_info(
                     *shared_state.chain_info.lock().await = last_tip;
                 }
             }
+            Err(Error::RpcChainInfo(status))
+                if status == hyper::StatusCode::SERVICE_UNAVAILABLE =>
+            {
+                log::debug!("RpcChainInfo(503)");
+            }
             Err(e) => {
                 log::warn!("{:?}", e);
             }
