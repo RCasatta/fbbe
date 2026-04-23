@@ -190,7 +190,7 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
                     if log_mempool_content_error("verbose mempool content doesn't parse", &e) {
                         count_503 += 1;
                     }
-                    sleep(Duration::from_secs(10)).await;
+                    sleep(Duration::from_secs(1)).await;
                     continue;
                 }
             };
@@ -205,7 +205,7 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
                         if log_mempool_content_error("mempool content doesn't parse", &e) {
                             count_503 += 1;
                         }
-                        sleep(Duration::from_secs(10)).await;
+                        sleep(Duration::from_secs(1)).await;
                         continue;
                     }
                 };
