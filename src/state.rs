@@ -357,7 +357,7 @@ impl SharedState {
             }
         }
 
-        if needed_len > 100 {
+        if needed_len > 10 {
             log::info!(
                 "needed {} unique prevouts (from {} inputs) for {} loaded in {}ms",
                 needed_len,
