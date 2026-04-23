@@ -180,13 +180,16 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
     let mut rates_id: FxHashSet<Txid> = FxHashSet::default();
     let support_verbose = rpc::mempool::content_verbose().await.is_ok();
     log::info!("Node support verbose mempool: {support_verbose}");
+    let mut count_503 = 0;
 
     loop {
         let (mempool, source) = if support_verbose {
             let mempool = match update_mempool_rates_from_verbose(&shared_state, &mut rates).await {
                 Ok(mempool) => mempool,
                 Err(e) => {
-                    log::warn!("verbose mempool content doesn't parse: {e:?}");
+                    if log_mempool_content_error("verbose mempool content doesn't parse", &e) {
+                        count_503 += 1;
+                    }
                     sleep(Duration::from_secs(10)).await;
                     continue;
                 }
@@ -199,7 +202,9 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
                 {
                     Ok(mempool) => mempool,
                     Err(e) => {
-                        log::warn!("mempool content doesn't parse: {e:?}");
+                        if log_mempool_content_error("mempool content doesn't parse", &e) {
+                            count_503 += 1;
+                        }
                         sleep(Duration::from_secs(10)).await;
                         continue;
                     }
@@ -238,7 +243,7 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
         drop(mempool_fees);
 
         log::info!(
-            "mempool fee iteration completed source:{source} mempool:{mempool_len} rates:{} block_template:{:?}",
+            "mempool fee iteration completed source:{source} mempool:{mempool_len} rates:{} block_template:{:?} count_503:{count_503}",
             rates.len(),
             block_template_last.map(|n| n + 1),
         );
@@ -246,6 +251,21 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
         sleep(Duration::from_secs(10)).await;
 
         log::trace!("mempool tx with fee: {}", rates.len());
+    }
+}
+
+fn log_mempool_content_error(context: &str, e: &crate::Error) -> bool {
+    match e {
+        crate::Error::RpcMempoolContent(status)
+            if *status == hyper::StatusCode::SERVICE_UNAVAILABLE =>
+        {
+            log::debug!("{context}: {e:?}");
+            true
+        }
+        _ => {
+            log::warn!("{context}: {e:?}");
+            false
+        }
     }
 }
 
