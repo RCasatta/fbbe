@@ -182,26 +182,31 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
     log::info!("Node support verbose mempool: {support_verbose}");
 
     loop {
-        let mempool = if support_verbose {
-            match update_mempool_rates_from_verbose(&shared_state, &mut rates).await {
+        let (mempool, source) = if support_verbose {
+            let mempool = match update_mempool_rates_from_verbose(&shared_state, &mut rates).await {
                 Ok(mempool) => mempool,
                 Err(e) => {
                     log::warn!("verbose mempool content doesn't parse: {e:?}");
                     sleep(Duration::from_secs(10)).await;
                     continue;
                 }
-            }
+            };
+            (mempool, "verbose")
         } else {
-            match update_mempool_rates_from_tx_fetch(&shared_state, &mut rates, &mut rates_id).await
-            {
-                Ok(mempool) => mempool,
-                Err(e) => {
-                    log::warn!("mempool content doesn't parse: {e:?}");
-                    sleep(Duration::from_secs(10)).await;
-                    continue;
-                }
-            }
+            let mempool =
+                match update_mempool_rates_from_tx_fetch(&shared_state, &mut rates, &mut rates_id)
+                    .await
+                {
+                    Ok(mempool) => mempool,
+                    Err(e) => {
+                        log::warn!("mempool content doesn't parse: {e:?}");
+                        sleep(Duration::from_secs(10)).await;
+                        continue;
+                    }
+                };
+            (mempool, "tx-fetch")
         };
+        let mempool_len = mempool.len();
 
         let mut sum = Weight::ZERO;
         let max = Weight::from_wu(4_000_000); // TODO use bitcoin::Weight::MAX_BLOCK once 0.31 released
@@ -231,6 +236,12 @@ async fn update_mempool_details(shared_state: Arc<SharedState>) {
             mempool_fees.transactions = Some(n + 1);
         }
         drop(mempool_fees);
+
+        log::info!(
+            "mempool fee iteration completed source:{source} mempool:{mempool_len} rates:{} block_template:{:?}",
+            rates.len(),
+            block_template_last.map(|n| n + 1),
+        );
 
         sleep(Duration::from_secs(10)).await;
 
