@@ -119,7 +119,7 @@ pub async fn parse(req: &Request<hyper::body::Bytes>) -> Result<ParsedRequest, E
         (&Method::GET, None, Some(&"metrics"), None, None) => Resource::Metrics,
         (&Method::GET, None, Some(&"sitemap.xml"), None, None) => Resource::Sitemap,
 
-        (&Method::GET, None, Some(&"t"), Some(txid), page) => {
+        (&Method::GET, _, Some(&"t"), Some(txid), page) => {
             let txid = Txid::from_str(txid)?;
             let page = match page {
                 Some(page) => page.parse::<usize>()?,
@@ -226,4 +226,59 @@ fn parse_cols(req: &Request<hyper::body::Bytes>) -> u16 {
         .and_then(|c| c.to_str().ok())
         .and_then(|e| e.parse::<u16>().ok())
         .unwrap_or(80)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hyper::body::Bytes;
+
+    fn request(uri: &str) -> Request<Bytes> {
+        Request::builder()
+            .uri(uri)
+            .body(Bytes::new())
+            .expect("valid request")
+    }
+
+    #[tokio::test]
+    async fn parse_tx_ignores_query_string() {
+        let txid =
+            Txid::from_str("e5f65dd2b995966c74a5beec6a09934864fbdb64e7fb6b3b487e6bb9af2b236c")
+                .unwrap();
+
+        let parsed = parse(&request(
+            "/t/e5f65dd2b995966c74a5beec6a09934864fbdb64e7fb6b3b487e6bb9af2b236c?mode=details",
+        ))
+        .await
+        .unwrap();
+
+        match parsed.resource {
+            Resource::Tx(parsed_txid, page) => {
+                assert_eq!(parsed_txid, txid);
+                assert_eq!(page, 0);
+            }
+            resource => panic!("unexpected resource: {resource:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn parse_paginated_tx_ignores_query_string() {
+        let txid =
+            Txid::from_str("e5f65dd2b995966c74a5beec6a09934864fbdb64e7fb6b3b487e6bb9af2b236c")
+                .unwrap();
+
+        let parsed = parse(&request(
+            "/t/e5f65dd2b995966c74a5beec6a09934864fbdb64e7fb6b3b487e6bb9af2b236c/2?mode=details",
+        ))
+        .await
+        .unwrap();
+
+        match parsed.resource {
+            Resource::Tx(parsed_txid, page) => {
+                assert_eq!(parsed_txid, txid);
+                assert_eq!(page, 2);
+            }
+            resource => panic!("unexpected resource: {resource:?}"),
+        }
+    }
 }
