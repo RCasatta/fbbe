@@ -152,7 +152,7 @@ pub async fn parse(req: &Request<hyper::body::Bytes>) -> Result<ParsedRequest, E
             let block_hash = BlockHash::from_str(block_hash)?;
             Resource::BlockToB(block_hash)
         }
-        (&Method::GET, None, Some(&"tx"), Some(txid), None) => {
+        (&Method::GET, _, Some(&"tx"), Some(txid), None) => {
             let txid = Txid::from_str(txid)?;
             Resource::TxToT(txid)
         }
@@ -278,6 +278,24 @@ mod tests {
                 assert_eq!(parsed_txid, txid);
                 assert_eq!(page, 2);
             }
+            resource => panic!("unexpected resource: {resource:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn parse_tx_redirect_ignores_query_string() {
+        let txid =
+            Txid::from_str("e5f65dd2b995966c74a5beec6a09934864fbdb64e7fb6b3b487e6bb9af2b236c")
+                .unwrap();
+
+        let parsed = parse(&request(
+            "/tx/e5f65dd2b995966c74a5beec6a09934864fbdb64e7fb6b3b487e6bb9af2b236c?mode=details",
+        ))
+        .await
+        .unwrap();
+
+        match parsed.resource {
+            Resource::TxToT(parsed_txid) => assert_eq!(parsed_txid, txid),
             resource => panic!("unexpected resource: {resource:?}"),
         }
     }
