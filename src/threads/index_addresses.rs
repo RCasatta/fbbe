@@ -101,30 +101,21 @@ impl Database {
             .is_some()
     }
 
-    pub fn script_hash_heights(&self, script_pubkey: &Script) -> Vec<Height> {
+    pub fn script_hash_latest_height(&self, script_pubkey: &Script) -> Option<Height> {
         let script_hash = script_hash(script_pubkey).to_be_bytes();
         let mut starting = script_hash.to_vec();
         starting.extend(&[0xff; 4]);
-        let mut result = vec![];
 
-        for el in self.db.iterator_cf(
+        let mut iter = self.db.iterator_cf(
             self.funding_cf(),
             rocksdb::IteratorMode::From(&starting[..], rocksdb::Direction::Reverse),
-        ) {
-            let el = el.unwrap().0;
-            if el.starts_with(&script_hash) {
-                let height = u32::from_be_bytes(el[8..].try_into().unwrap());
-                result.push(height);
-            } else {
-                break;
-            }
-            if result.len() > 9 {
-                // TODO paging
-                break;
-            }
+        );
+        let el = iter.next()?.unwrap().0;
+        if el.starts_with(&script_hash) {
+            Some(u32::from_be_bytes(el[8..].try_into().unwrap()))
+        } else {
+            None
         }
-
-        result
     }
 
     pub fn get_spending(&self, outpoint: &OutPoint) -> Option<Height> {
@@ -279,7 +270,10 @@ pub async fn address_seen(
     shared_state: Arc<SharedState>,
 ) -> Result<Vec<AddressSeen>, Error> {
     let script_pubkey = address.script_pubkey();
-    let heights = db.script_hash_heights(&script_pubkey);
+    let heights: Vec<_> = db
+        .script_hash_latest_height(&script_pubkey)
+        .into_iter()
+        .collect();
     let blocks = shared_state.blocks_from_heights(&heights).await?;
     let mut outpoints_with_script_pubkey = vec![];
     for (h, b) in blocks {
@@ -291,13 +285,14 @@ pub async fn address_seen(
         );
     }
 
-    let mut heights_with_spending = vec![];
+    let mut heights_with_spending = BTreeSet::new();
     for (_, outpoint, _) in outpoints_with_script_pubkey.iter().take(10) {
         //TODO handle pagination?
         if let Some(h) = db.get_spending(outpoint) {
-            heights_with_spending.push(h);
+            heights_with_spending.insert(h);
         }
     }
+    let heights_with_spending: Vec<_> = heights_with_spending.into_iter().collect();
     let blocks = shared_state
         .blocks_from_heights(&heights_with_spending)
         .await?;

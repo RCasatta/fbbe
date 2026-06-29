@@ -51,9 +51,9 @@ stores at most one funding key per distinct script hash, even if that script
 appears in multiple outputs in the same block.
 
 Address page lookup computes the queried address script hash, iterates this
-column family in reverse height order, loads the matching blocks, and scans the
-full blocks for outputs whose script exactly matches the queried script. The
-current UI returns at most 10 matching funding heights.
+column family in reverse height order, loads the latest matching block, and
+scans the full block for outputs whose script exactly matches the queried
+script.
 
 ### `SPENDING_CF`
 
