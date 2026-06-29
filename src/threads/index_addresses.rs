@@ -121,15 +121,11 @@ impl Database {
     pub fn get_spending(&self, outpoint: &OutPoint) -> Option<Height> {
         let searched_key_start = outpoint_to_key_vec(outpoint);
 
-        let (key, _val) = self
-            .db
-            .iterator_cf(
-                self.spending_cf(),
-                rocksdb::IteratorMode::From(&searched_key_start[..], rocksdb::Direction::Forward),
-            )
-            .next()
-            .unwrap()
-            .unwrap();
+        let mut iter = self.db.iterator_cf(
+            self.spending_cf(),
+            rocksdb::IteratorMode::From(&searched_key_start[..], rocksdb::Direction::Forward),
+        );
+        let (key, _val) = iter.next()?.unwrap();
 
         if key[..8] == searched_key_start[..] {
             Some(u32::from_be_bytes((&key[8..]).try_into().unwrap()))
