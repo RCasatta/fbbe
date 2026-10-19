@@ -150,6 +150,7 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
     log::debug!("local address {:?}", addr);
 
     let mut chain_info;
+    let mut connect_attempts = 0;
     loop {
         chain_info = match rpc::chaininfo::call().await {
             Ok(chain_info) => chain_info,
@@ -162,15 +163,16 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
                 continue;
             }
             Err(e) => {
-                for i in 0..12 {
-                    // TODO in case bitcoin and fbbe starts together, we should wait for the bitcoind to be ready.
-                    let bitcoind_addr = crate::globals::bitcoind_addr().to_string();
-                    log::warn!(
-                    "I am trying to connect to {bitcoind_addr} without success {i}/12. error: {e:?}",
-                );
-                    sleep(Duration::from_secs(10)).await;
+                if connect_attempts >= 12 {
+                    return Err(e);
                 }
-                return Err(e);
+                let bitcoind_addr = crate::globals::bitcoind_addr().to_string();
+                log::warn!(
+                    "I am trying to connect to {bitcoind_addr} without success {connect_attempts}/12. error: {e:?}",
+                );
+                connect_attempts += 1;
+                sleep(Duration::from_secs(10)).await;
+                continue;
             }
         };
         if chain_info.initial_block_download {
