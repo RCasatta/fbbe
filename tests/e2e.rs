@@ -1,5 +1,5 @@
 use bitcoin::Network;
-use bitcoind::{bitcoincore_rpc::RpcApi, BitcoinD, Conf};
+use bitcoind::{BitcoinD, Conf};
 use env_logger::Env;
 use fbbe::create_local_socket;
 use nix::{
@@ -17,11 +17,7 @@ fn init_node() -> BitcoinD {
     let path = bitcoind::exe_path();
     let bitcoind = bitcoind::BitcoinD::with_conf(path.unwrap(), &config).unwrap();
 
-    let addr = bitcoind
-        .client
-        .get_new_address(None, None)
-        .unwrap()
-        .assume_checked();
+    let addr = bitcoind.client.new_address().unwrap();
     let _blocks = bitcoind.client.generate_to_address(1, &addr).unwrap();
     bitcoind
 }
