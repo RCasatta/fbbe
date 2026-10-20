@@ -13,6 +13,7 @@ use maud::{html, Markup, PreEscaped};
 
 const TWO_HOURS: Duration = Duration::from_secs(60 * 60 * 2);
 
+#[allow(clippy::too_many_arguments)]
 pub fn page(
     info: ChainInfo,
     height_time: HeightTime,
