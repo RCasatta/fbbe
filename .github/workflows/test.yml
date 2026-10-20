@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: Swatinem/rust-cache@v2
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.85.0
       - run: cargo test --features download_bitcoind
 
   cosmetics:
@@ -27,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: Swatinem/rust-cache@v2
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.85.0
         with:
           components: rustfmt, clippy
       - run: cargo fmt -- --check
@@ -39,6 +39,9 @@ jobs:
       fail-fast: false
       matrix:
         toolchain: ["1.85.0", "stable", "nightly"]
+    env:
+      # override rust-toolchain.toml, otherwise every job builds with the pinned toolchain
+      RUSTUP_TOOLCHAIN: ${{ matrix.toolchain }}
 
     steps:
       - uses: actions/checkout@v3
@@ -48,6 +51,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.toolchain }}
+      - run: rustc --version
       - run: cargo build
 
   nix-build:
