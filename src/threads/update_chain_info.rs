@@ -66,6 +66,11 @@ async fn update_chain_info(
                             db.write_hashes(index_res)?;
                         }
 
+                        if last_height == 0 {
+                            log::debug!("reached genesis, breaking");
+                            break;
+                        }
+
                         match shared_state.height_time(prev_blockhash).await.ok() {
                             Some(height_time) if height_time.height == last_height - 1 => {
                                 log::debug!("previous block has correct height, breaking");
@@ -102,10 +107,11 @@ async fn update_blocks_in_last_hour(shared_state: &Arc<SharedState>, last_tip_he
 
     {
         for i in 0..6 {
-            match shared_state
-                .height_to_hash((last_tip_height - i) as u32)
-                .await
-            {
+            // chain shorter than 6 blocks: not enough data, leave `data` incomplete
+            let Some(height) = last_tip_height.checked_sub(i) else {
+                break;
+            };
+            match shared_state.height_to_hash(height as u32).await {
                 Some(hash) => {
                     if hash != BlockHash::all_zeros() {
                         match shared_state.height_time(hash).await {
