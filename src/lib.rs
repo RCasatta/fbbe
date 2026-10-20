@@ -232,13 +232,16 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
     if let Some(db) = db.as_ref() {
         let db_stats = db.clone();
         let db_index = db.clone();
+        #[allow(clippy::let_underscore_future)]
         let _ = tokio::spawn(async move { update_db_stats_infallible(db_stats).await });
+        #[allow(clippy::let_underscore_future)]
         let _ = tokio::spawn(async move {
             index_addresses_infallible(db_index, shared_state_addresses).await
         });
     }
 
     if let Some(socket) = zmq_rawtx {
+        #[allow(clippy::let_underscore_future)]
         let _ =
             tokio::spawn(async move { update_tx_zmq_infallible(&socket, shared_state_zmq).await });
     }
