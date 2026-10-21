@@ -13,11 +13,16 @@ fn init_node() -> BitcoinD {
     let mut config = Conf::default();
 
     config.args.push("-rest");
+    // No wallet: wallet RPC responses change across Core versions and break typed clients
+    // when the node (eg. BITCOIND_EXE from nix) is newer than the selected feature.
+    config.wallet = None;
 
     let path = bitcoind::exe_path();
     let bitcoind = bitcoind::BitcoinD::with_conf(path.unwrap(), &config).unwrap();
 
-    let addr = bitcoind.client.new_address().unwrap();
+    // P2WSH(OP_TRUE): anyone-can-spend address, no keys or wallet needed
+    let script = bitcoin::ScriptBuf::from_bytes(vec![bitcoin::opcodes::OP_TRUE.to_u8()]);
+    let addr = bitcoin::Address::p2wsh(&script, Network::Regtest);
     let _blocks = bitcoind.client.generate_to_address(1, &addr).unwrap();
     bitcoind
 }
