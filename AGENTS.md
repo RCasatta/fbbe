@@ -4,7 +4,7 @@
 `src/` contains the application crate. HTTP entrypoints live in `src/main.rs` and `src/lib.rs`; request routing is in `src/route.rs`; page handlers are under `src/pages/`; HTML helpers are in `src/render/`; Bitcoin Core REST calls are grouped in `src/rpc/`; background sync/indexing tasks live in `src/threads/`. Static assets such as CSS and the favicon are also kept in `src/`. Integration-style tests are in `tests/e2e.rs`; smaller async and utility checks are in `tests/unit.rs`. Docker and Nix packaging files live in `docker/`, `flake.nix`, and `rocksdb-overlay.nix`.
 
 ## Build, Test, and Development Commands
-Use the pinned Rust toolchain from `rust-toolchain.toml` (`1.85.0`).
+Use the pinned Rust toolchain from `rust-toolchain.toml` (`1.85.0`). The MSRV is also declared as `rust-version = "1.85"` in `Cargo.toml` (keep the two in sync); together with `resolver = "3"` this makes `cargo update` pick only dependency versions compatible with Rust 1.85.
 
 - `cargo run --release` starts the explorer locally on `http://localhost:3000/`.
 - `cargo build` checks the default build used in CI.
