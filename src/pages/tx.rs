@@ -1,11 +1,9 @@
 use std::str::from_utf8;
 
-use bitcoin::hex::DisplayHex;
 use bitcoin::Txid;
 use bitcoin::{
-    blockdata::script::Instruction,
-    consensus::{encode::serialize_hex, serialize},
-    Address, Amount, BlockHash, Denomination, OutPoint, Script, ScriptBuf, Transaction, TxOut,
+    blockdata::script::Instruction, consensus::encode::serialize_hex, Address, Amount, BlockHash,
+    Denomination, OutPoint, Script, ScriptBuf, Transaction, TxOut,
 };
 use maud::{html, Markup};
 
@@ -242,16 +240,10 @@ pub fn page(
         }
     };
 
-    let hex = if tx.total_size() > 1_000 {
-        let bytes = serialize(&tx);
-        html! {
-            (&bytes[..500].to_lower_hex_string())
-            b { "...truncated, original size " (tx.total_size()) " bytes..." }
-            (&bytes[tx.total_size()-500..].to_lower_hex_string())
-
-        }
+    let hex_link = if user_provided {
+        format!("{network_url_path}txhex/{}/hex", serialize_hex(&tx))
     } else {
-        html! { (serialize_hex(&tx)) }
+        format!("{network_url_path}t/{txid}/hex")
     };
 
     let wf = fee.map(|fee| WeightFee {
@@ -441,12 +433,12 @@ pub fn page(
                         th { "Lock time" }
                         td class="right" { (tx.lock_time.to_consensus_u32()) }
                     }
+                    tr {
+                        th { "Hex" }
+                        td class="right" { a href=(hex_link) { "raw transaction hex" } }
+                    }
                 }
             }
-
-            h2 id="hex" { "Hex "}
-
-            code { (hex) }
 
         }
     };

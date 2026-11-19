@@ -52,10 +52,11 @@ pub async fn parse(req: &Request<hyper::body::Bytes>) -> Result<ParsedRequest, E
     let response_type = match path.last() {
         Some(&"text") => ResponseType::Text(parse_cols(req)),
         Some(&"bin") => ResponseType::Bytes,
+        Some(&"hex") => ResponseType::Hex,
         _ => ResponseType::Html,
     };
     log::debug!("{:?}", response_type);
-    if let ResponseType::Text(_) | ResponseType::Bytes = response_type {
+    if let ResponseType::Text(_) | ResponseType::Bytes | ResponseType::Hex = response_type {
         path.pop();
         if path.is_empty() {
             // home page corner case

@@ -119,6 +119,11 @@ fn check_pages() {
     let page = get(tx_page);
     assert!(page.contains(genesis_block));
     assert!(page.contains(genesis_tx));
+    assert!(page.contains(&format!("/t/{genesis_tx}/hex")));
+
+    let tx_hex = get(format!("http://{fbbe_addr}/t/{genesis_tx}/hex"));
+    let tx: bitcoin::Transaction = bitcoin::consensus::encode::deserialize_hex(&tx_hex).unwrap();
+    assert_eq!(tx.compute_txid().to_string(), genesis_tx);
 }
 #[test]
 fn check_wrong_network() {

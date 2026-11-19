@@ -36,6 +36,7 @@ pub enum ResponseType {
     Text(u16),
     Html,
     Bytes,
+    Hex,
 }
 
 impl ResponseType {
@@ -128,7 +129,7 @@ pub async fn route(
                 ResponseType::Html => builder
                     .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
                     .body(Bytes::from(page))?,
-                ResponseType::Bytes => {
+                ResponseType::Bytes | ResponseType::Hex => {
                     return Err(Error::ContentTypeUnsupported(
                         parsed_req.response_type,
                         req.uri().to_string(),
@@ -156,7 +157,7 @@ pub async fn route(
                 ResponseType::Html => builder
                     .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
                     .body(Bytes::from(page))?,
-                ResponseType::Bytes => {
+                ResponseType::Bytes | ResponseType::Hex => {
                     return Err(Error::ContentTypeUnsupported(
                         parsed_req.response_type,
                         req.uri().to_string(),
@@ -167,11 +168,24 @@ pub async fn route(
 
         Resource::Tx(txid, pagination) => {
             if pagination > 0 {
-                if let ResponseType::Bytes = parsed_req.response_type {
+                if let ResponseType::Bytes | ResponseType::Hex = parsed_req.response_type {
                     return Err(Error::BadRequest);
                 }
             }
             let (ser_tx, block_hash) = state.tx(txid, true).await?;
+            if let ResponseType::Hex = parsed_req.response_type {
+                let current_tip = state.chain_info.lock().await.clone();
+                let ts = match block_hash.as_ref() {
+                    Some(block_hash) => Some(state.height_time(*block_hash).await?),
+                    None => None,
+                };
+                let cache_seconds =
+                    cache_time_from_confirmations(ts.map(|t| current_tip.blocks - t.height));
+                return Ok(Response::builder()
+                    .header(CACHE_CONTROL, format!("public, max-age={cache_seconds}"))
+                    .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
+                    .body(Bytes::from(ser_tx.0.to_lower_hex_string()))?);
+            }
             let tx: bitcoin::Transaction = deserialize(ser_tx.as_ref()).expect("invalid tx bytes");
             let ts = match block_hash.as_ref() {
                 Some(block_hash) => Some((*block_hash, state.height_time(*block_hash).await?)),
@@ -217,6 +231,7 @@ pub async fn route(
                 ResponseType::Bytes => builder
                     .header(CONTENT_TYPE, APPLICATION_OCTET_STREAM.as_ref())
                     .body(Bytes::from(ser_tx.0))?,
+                ResponseType::Hex => unreachable!("handled above"),
             }
         }
 
@@ -368,7 +383,7 @@ pub async fn route(
                 ResponseType::Html => builder
                     .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
                     .body(Bytes::from(page))?,
-                ResponseType::Bytes => {
+                ResponseType::Bytes | ResponseType::Hex => {
                     return Err(Error::ContentTypeUnsupported(
                         parsed_req.response_type,
                         req.uri().to_string(),
@@ -396,6 +411,12 @@ pub async fn route(
             }
         }
         Resource::FullTx(ref tx) => {
+            if let ResponseType::Hex = parsed_req.response_type {
+                return Ok(Response::builder()
+                    .header(CACHE_CONTROL, "public, max-age=3600")
+                    .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
+                    .body(Bytes::from(serialize(tx).to_lower_hex_string()))?);
+            }
             let mempool_fees = state.mempool_fees.lock().await.clone();
             let txid = tx.compute_txid();
             let prevouts = fetch_prevouts(txid, tx, &state, true).await?;
@@ -427,6 +448,7 @@ pub async fn route(
                 ResponseType::Bytes => builder
                     .header(CONTENT_TYPE, APPLICATION_OCTET_STREAM.as_ref())
                     .body(Bytes::from(serialize(&tx)))?,
+                ResponseType::Hex => unreachable!("handled above"),
             }
         }
         Resource::Metrics => {
@@ -510,6 +532,7 @@ fn handle_http_counter(parsed_req: &req::ParsedRequest) {
         ResponseType::Text(_) => "Text",
         ResponseType::Html => "Html",
         ResponseType::Bytes => "Bytes",
+        ResponseType::Hex => "Hex",
     };
     crate::HTTP_COUNTER
         .with_label_values(&[resource, content])
