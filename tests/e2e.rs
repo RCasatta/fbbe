@@ -144,7 +144,15 @@ fn check_pages() {
         .send()
         .unwrap();
     assert_eq!(resp.as_str().unwrap(), tx_text);
-    assert_eq!(resp.headers.get("vary").unwrap(), "Accept");
+    assert_eq!(resp.headers.get("vary").unwrap(), "Accept, columns");
+
+    // text width depends on the columns header, caches must know it
+    let resp = minreq::get(format!("http://{fbbe_addr}/t/{genesis_tx}/text"))
+        .with_header("columns", "40")
+        .send()
+        .unwrap();
+    assert_ne!(resp.as_str().unwrap(), tx_text);
+    assert_eq!(resp.headers.get("vary").unwrap(), "columns");
 
     // missing resources are 404, invalid input is 400
     let status = |url: String| minreq::get(url).send().unwrap();

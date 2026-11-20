@@ -77,14 +77,24 @@ pub async fn route(
     db: Option<Arc<Database>>,
 ) -> Result<Response<Bytes>, Error> {
     let parsed_req = req::parse(&req).await.map_err(Error::into_input_error)?;
-    let vary_accept = parsed_req.vary_accept;
+    let vary = vary_header(&parsed_req);
     let mut resp = route_parsed(req, parsed_req, state, db).await?;
-    if vary_accept {
-        // shared caches must not serve the text page to browsers, or the opposite
+    if let Some(vary) = vary {
         resp.headers_mut()
-            .insert(VARY, HeaderValue::from_static("Accept"));
+            .insert(VARY, HeaderValue::from_static(vary));
     }
     Ok(resp)
+}
+
+/// Request headers other than the url changing the response, shared caches must keep apart
+/// the text page from the html one, and text pages with different widths
+fn vary_header(parsed_req: &req::ParsedRequest) -> Option<&'static str> {
+    match (parsed_req.vary_accept, parsed_req.response_type.is_text()) {
+        (true, true) => Some("Accept, columns"),
+        (true, false) => Some("Accept"),
+        (false, true) => Some("columns"),
+        (false, false) => None,
+    }
 }
 
 async fn route_parsed(
