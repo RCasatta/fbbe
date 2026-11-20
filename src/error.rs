@@ -139,8 +139,8 @@ pub enum Error {
     #[error("Network '{0}' not parsed, valid values are: bitcoin, mainnet, main | testnet, test | signet | regtest")]
     NetworkParseError(String),
 
-    #[error("Height not found")]
-    HeightNotFound,
+    #[error("Block at height {0} not found")]
+    HeightNotFound(u32),
 }
 
 impl Error {
@@ -161,7 +161,7 @@ impl Error {
             | Error::BitcoinAddress(_)
             | Error::AddressWrongNetwork { .. } => StatusCode::BAD_REQUEST,
 
-            Error::NotFound | Error::HeightNotFound | Error::HeaderNotFound(_) => {
+            Error::NotFound | Error::HeightNotFound(_) | Error::HeaderNotFound(_) => {
                 StatusCode::NOT_FOUND
             }
 

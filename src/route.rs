@@ -336,7 +336,7 @@ async fn route_parsed(
             let hash = state
                 .height_to_hash(height)
                 .await
-                .ok_or_else(|| Error::HeightNotFound)?;
+                .ok_or(Error::HeightNotFound(height))?;
             redirect(&format!("b/{hash}"), parsed_req.response_type)?
         }
 

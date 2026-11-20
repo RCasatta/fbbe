@@ -101,9 +101,9 @@ pub async fn parse(req: &Request<hyper::body::Bytes>) -> Result<ParsedRequest, E
                                     _ => {
                                         let val = percent_encoding::percent_decode(val.as_bytes())
                                             .decode_utf8()
-                                            .map_err(|_| Error::BadRequest)?;
+                                            .map_err(|_| search_error())?;
                                         let psbt = Psbt::from_str(val.as_ref())
-                                            .map_err(|_| Error::BadRequest)?;
+                                            .map_err(|_| search_error())?;
                                         let tx = psbt.extract_tx()?;
                                         Resource::SearchFullTx(tx)
                                     }
@@ -149,7 +149,7 @@ pub async fn parse(req: &Request<hyper::body::Bytes>) -> Result<ParsedRequest, E
             Resource::Block(block_hash, page)
         }
         (&Method::GET, query, Some(&"a"), Some(address), None) => {
-            let address = Address::from_str(address)?;
+            let address = parse_address(address)?;
             Resource::Address(address, query.map(ToString::to_string))
         }
         (&Method::GET, None, Some(&"block"), Some(block_hash), None) => {
@@ -166,7 +166,7 @@ pub async fn parse(req: &Request<hyper::body::Bytes>) -> Result<ParsedRequest, E
             Resource::FullTx(tx)
         }
         (&Method::GET, None, Some(&"address"), Some(address), None) => {
-            let address = Address::from_str(address)?;
+            let address = parse_address(address)?;
             Resource::AddressToA(address.assume_checked())
         }
         _ => return Err(Error::NotFound),
@@ -180,6 +180,18 @@ pub async fn parse(req: &Request<hyper::body::Bytes>) -> Result<ParsedRequest, E
         response_type,
         vary_accept,
     })
+}
+
+fn search_error() -> Error {
+    Error::InvalidInput(
+        "search for a txid, block hash, height, address, raw transaction hex or PSBT".to_owned(),
+    )
+}
+
+/// The parse error of an invalid bech32 address is reported as base58, which is misleading
+fn parse_address(address: &str) -> Result<Address<NetworkUnchecked>, Error> {
+    Address::from_str(address)
+        .map_err(|_| Error::InvalidInput(format!("invalid address {address}")))
 }
 
 /// True when the client asks for `text/plain` and not for html, as agents do, browsers always

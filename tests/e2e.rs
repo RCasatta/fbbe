@@ -171,10 +171,21 @@ fn check_pages() {
         status(format!("http://{fbbe_addr}/b/{missing_block}/text")).status_code,
         404
     );
+    let resp = status(format!("http://{fbbe_addr}/h/999999"));
+    assert_eq!(resp.status_code, 404);
+    assert_eq!(resp.as_str().unwrap(), "Block at height 999999 not found\n");
+    let resp = status(format!("http://{fbbe_addr}/a/tb1qxyz/text"));
+    assert_eq!(resp.status_code, 400);
     assert_eq!(
-        status(format!("http://{fbbe_addr}/h/999999")).status_code,
-        404
+        resp.as_str().unwrap(),
+        "Bad request: invalid address tb1qxyz\n"
     );
+    let resp = status(format!("http://{fbbe_addr}/text?s=garbage"));
+    assert_eq!(resp.status_code, 400);
+    assert!(resp
+        .as_str()
+        .unwrap()
+        .starts_with("Bad request: search for a txid"));
     assert_eq!(
         status(format!("http://{fbbe_addr}/t/nothex/text")).status_code,
         400
