@@ -135,9 +135,11 @@ pub fn page(
                         p2wsh_witness_script.html(),
                     ));
                 }
+                // in text the outpoint already links the previous tx, a second footnote is noise
+                let amount_text = html! { (amount) };
                 let amount = html! { a href=(link) { (amount) } };
 
-                Some((i + input_start, fields, amount))
+                Some((i + input_start, fields, amount, amount_text))
             }
         });
 
@@ -324,8 +326,8 @@ pub fn page(
             table class="striped" {
                 tbody {
                     @for val in inputs {
-                        @if let Some((i, fields, amount)) = val {
-                            (io_rows(parsed, format!("i{i}"), i, i != input_start, &fields, amount.clone(), amount))
+                        @if let Some((i, fields, amount, amount_text)) = val {
+                            (io_rows(parsed, format!("i{i}"), i, i != input_start, &fields, amount, amount_text))
                         }
                         @else {
                             td { "Coinbase" }
