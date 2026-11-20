@@ -137,7 +137,7 @@ fn check_pages() {
         get(format!("http://{fbbe_addr}/text?s={genesis_tx}"))
     );
 
-    // agents asking for text/plain get the text page
+    // agents asking for text/plain or text/markdown get the text page
     let tx_text = get(format!("http://{fbbe_addr}/t/{genesis_tx}/text"));
     let resp = minreq::get(format!("http://{fbbe_addr}/t/{genesis_tx}"))
         .with_header("Accept", "text/plain")
@@ -145,6 +145,11 @@ fn check_pages() {
         .unwrap();
     assert_eq!(resp.as_str().unwrap(), tx_text);
     assert_eq!(resp.headers.get("vary").unwrap(), "Accept, columns");
+    let resp = minreq::get(format!("http://{fbbe_addr}/t/{genesis_tx}"))
+        .with_header("Accept", "text/markdown")
+        .send()
+        .unwrap();
+    assert_eq!(resp.as_str().unwrap(), tx_text);
 
     // text width depends on the columns header, caches must know it
     let resp = minreq::get(format!("http://{fbbe_addr}/t/{genesis_tx}/text"))

@@ -194,20 +194,24 @@ fn parse_address(address: &str) -> Result<Address<NetworkUnchecked>, Error> {
         .map_err(|_| Error::InvalidInput(format!("invalid address {address}")))
 }
 
-/// True when the client asks for `text/plain` and not for html, as agents do, browsers always
-/// list `text/html`
+/// True when the client asks for `text/plain` or `text/markdown` and not for html, as agents do,
+/// browsers always list `text/html`. The text page reads well as markdown, so it serves both.
 fn accepts_text_not_html(req: &Request<hyper::body::Bytes>) -> bool {
     let Some(accept) = req.headers().get(ACCEPT).and_then(|a| a.to_str().ok()) else {
         return false;
     };
-    let mut media_types = accept
-        .split(',')
-        .map(|m| m.split(';').next().unwrap_or_default().trim());
+    let media_types = accept.split(',').map(|m| {
+        m.split(';')
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_lowercase()
+    });
     let mut text = false;
-    for media_type in &mut media_types {
-        match media_type {
+    for media_type in media_types {
+        match media_type.as_str() {
             "text/html" | "application/xhtml+xml" => return false,
-            "text/plain" => text = true,
+            "text/plain" | "text/markdown" => text = true,
             _ => (),
         }
     }
@@ -286,6 +290,9 @@ mod tests {
             parsed.response_type.is_text()
         }
         assert!(text("text/plain").await);
+        assert!(text("text/markdown").await);
+        assert!(text("Text/Markdown;charset=utf-8").await);
+        assert!(!text("text/markdown, text/html;q=0.5").await);
         assert!(text("text/markdown, text/plain;q=0.9, */*;q=0.1").await);
         assert!(!text("text/html,application/xhtml+xml,*/*;q=0.8").await);
         assert!(!text("text/plain, text/html").await);
