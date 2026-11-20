@@ -7,6 +7,7 @@ use bitcoin::hashes::Hash;
 use bitcoin::BlockHash;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 
 const HEADERS_PER_REQUEST: usize = 101;
 
@@ -17,6 +18,7 @@ pub async fn bootstrap_state(shared_state: Arc<SharedState>) -> Result<(), Error
     let mut hash_to_height_time = HashMap::new();
 
     log::info!("bootstrap_state: starting header bootstrap from genesis {geneis_hash}");
+    let start = Instant::now();
 
     for i in (0usize..).step_by(HEADERS_PER_REQUEST - 1) {
         let headers = rpc::headers::call_many(hash, HEADERS_PER_REQUEST as u32).await?;
@@ -34,7 +36,10 @@ pub async fn bootstrap_state(shared_state: Arc<SharedState>) -> Result<(), Error
         }
     }
 
-    log::info!("bootstrap_state: header bootstrap completed at height {height} hash {hash}");
+    log::info!(
+        "bootstrap_state: header bootstrap completed at height {height} hash {hash} in {:?}",
+        start.elapsed()
+    );
 
     for (k, v) in hash_to_height_time.iter() {
         shared_state.add_height_hash(v.height, *k).await;
@@ -46,6 +51,7 @@ pub async fn bootstrap_state(shared_state: Arc<SharedState>) -> Result<(), Error
 
     let mut current = shared_state.chain_info.lock().await.best_block_hash;
     log::info!("bootstrap_state: starting block cache warmup from tip {current}");
+    let start = Instant::now();
     let mut count = 0;
     loop {
         let block = rpc::block::call(current).await?;
@@ -66,7 +72,10 @@ pub async fn bootstrap_state(shared_state: Arc<SharedState>) -> Result<(), Error
         }
     }
 
-    log::info!("bootstrap ending, headers ending at {}", height);
+    log::info!(
+        "bootstrap ending, headers ending at {height}, block cache warmup took {:?}",
+        start.elapsed()
+    );
 
     Ok(())
 }
