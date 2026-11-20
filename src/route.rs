@@ -578,6 +578,8 @@ pub(crate) fn convert_text_html_string(page: &str, columns: u16) -> Result<Strin
     let page = strip_span_tags(page);
     Ok(html2text::config::with_decorator(BaseTextDecorator {})
         .allow_width_overflow()
+        .link_footnotes(true)
+        .min_wrap_width(12) // avoid wrapping amounts in narrow columns
         .string_from_read(page.as_bytes(), columns as usize)?)
 }
 
@@ -758,5 +760,33 @@ mod tests {
         let html = r#"<table><tbody><tr><th>Type</th><td>p2wpkh</td></tr><tr><th>Script</th><td><code><span class="script">OP_0</span> <span class="script">OP_PUSHBYTES_20</span> e8df018c7e326cc253faac7e46cdc51e68542c42</code></td></tr></tbody></table>"#;
         let text = convert_text_html_string(html, 80).unwrap();
         assert!(text.contains("OP_0 OP_PUSHBYTES_20 e8df018c7e326cc253faac7e46cdc51e68542c42"));
+    }
+
+    #[test]
+    fn footnote_url_points_to_text() {
+        use crate::base_text_decorator::footnote_url;
+        let txid = "e5f65dd2b995966c74a5beec6a09934864fbdb64e7fb6b3b487e6bb9af2b236c";
+        let host = Some("fbbe.info");
+        assert_eq!(footnote_url("/", host), "https://fbbe.info/text");
+        assert_eq!(footnote_url("/", None), "/text");
+        assert_eq!(footnote_url("/signet/", None), "/signet/text");
+        assert_eq!(
+            footnote_url(&format!("/t/{txid}#o2"), host),
+            format!("https://fbbe.info/t/{txid}/text")
+        );
+        assert_eq!(
+            footnote_url(&format!("/signet/b/{txid}/2"), None),
+            format!("/signet/b/{txid}/2/text")
+        );
+        assert_eq!(footnote_url("/a/bc1q?q=1", None), "/a/bc1q/text?q=1");
+        assert_eq!(
+            footnote_url(&format!("/t/{txid}/hex"), None),
+            format!("/t/{txid}/hex")
+        );
+        assert_eq!(footnote_url("/about", host), "https://fbbe.info/about");
+        assert_eq!(
+            footnote_url("https://github.com/x", host),
+            "https://github.com/x"
+        );
     }
 }

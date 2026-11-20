@@ -16,6 +16,13 @@ pub(crate) fn bitcoind_addr() -> &'static SocketAddr {
     BITCOIND_ADDR.get().expect("must be initialized")
 }
 
+static DNS_HOST: OnceCell<String> = OnceCell::new();
+
+/// DNS hostname if configured, `None` also when globals are not initialized (eg. in tests)
+pub(crate) fn dns_host() -> Option<&'static str> {
+    DNS_HOST.get().map(String::as_str)
+}
+
 static NETWORKS: OnceCell<Vec<Network>> = OnceCell::new();
 
 pub(crate) fn networks() -> &'static [Network] {
@@ -31,6 +38,12 @@ pub(crate) fn init_globals(args: &mut Arguments) {
                 .unwrap_or(Network::Bitcoin),
         )
         .expect("static global must be empty here");
+
+    if let Some(dns_host) = args.dns_host.clone() {
+        DNS_HOST
+            .set(dns_host)
+            .expect("static global must be empty here");
+    }
 
     let mut networks = HashSet::new();
     networks.insert(network());

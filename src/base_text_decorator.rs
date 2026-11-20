@@ -1,5 +1,8 @@
 use html2text::render::{RichAnnotation, TaggedLine, TextDecorator};
 
+use crate::globals::dns_host;
+use bitcoin::Network;
+
 pub(crate) struct BaseTextDecorator;
 
 impl BaseTextDecorator {
@@ -80,11 +83,59 @@ impl TextDecorator for BaseTextDecorator {
         format!("{}. ", i)
     }
 
-    fn finalise(&mut self, _links: Vec<String>) -> Vec<TaggedLine<Self::Annotation>> {
-        Vec::new()
+    fn finalise(&mut self, links: Vec<String>) -> Vec<TaggedLine<Self::Annotation>> {
+        links
+            .into_iter()
+            .enumerate()
+            .map(|(i, link)| {
+                let line = format!("[{}]: {}", i + 1, footnote_url(&link, dns_host()));
+                TaggedLine::from_string(line, &Default::default())
+            })
+            .collect()
     }
 
     fn make_subblock_decorator(&self) -> Self {
         Self::new()
     }
+}
+
+/// Internal links to pages having a text version are converted to point to it, so that following
+/// links from a text page remains in text, if `dns_host` is given links are made absolute.
+pub(crate) fn footnote_url(link: &str, dns_host: Option<&str>) -> String {
+    if !link.starts_with('/') {
+        return link.to_string();
+    }
+    let link = link.split('#').next().unwrap_or_default();
+    let (path, query) = match link.split_once('?') {
+        Some((path, query)) => (path, Some(query)),
+        None => (link, None),
+    };
+    let mut segments: Vec<_> = path.split('/').filter(|s| !s.is_empty()).collect();
+    let resource = match segments.first() {
+        Some(net) if net.parse::<Network>().is_ok() => &segments[1..],
+        _ => &segments[..],
+    };
+    let has_text = match resource {
+        [] => true, // home
+        [kind, _id] => matches!(*kind, "t" | "b" | "a"),
+        [kind, _id, page] => matches!(*kind, "t" | "b") && page.parse::<usize>().is_ok(),
+        _ => false,
+    };
+    if has_text {
+        segments.push("text");
+    }
+    let mut result = String::new();
+    if let Some(dns_host) = dns_host {
+        result.push_str("https://");
+        result.push_str(dns_host);
+    }
+    for segment in segments {
+        result.push('/');
+        result.push_str(segment);
+    }
+    if let Some(query) = query {
+        result.push('?');
+        result.push_str(query);
+    }
+    result
 }

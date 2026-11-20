@@ -226,7 +226,7 @@ fn parse_cols(req: &Request<hyper::body::Bytes>) -> u16 {
         .get("columns")
         .and_then(|c| c.to_str().ok())
         .and_then(|e| e.parse::<u16>().ok())
-        .unwrap_or(80)
+        .unwrap_or(200)
 }
 
 #[cfg(test)]

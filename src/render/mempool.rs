@@ -27,7 +27,7 @@ impl Render for MempoolSection {
                     (AmountRow::new_with_btc("Total fees (BTC)", self.info.total_fee))
 
                     tr {
-                        th { "Mempool min fee (BTC)" }
+                        th { "Mempool min fee (BTC/kvB)" }
                         td class="number" { (WeightFee::from_btc_kvb(mempoolminfee)) }
                     }
 
@@ -50,6 +50,13 @@ impl Render for BlockTemplate {
                     p { (transactions) " transactions" }
                 }
                 table class="striped" {
+                    thead {
+                        tr {
+                            th { "Position" }
+                            th class="number" { "Fee rate (BTC/kvB)" }
+                            th class="right" { "Transaction" }
+                        }
+                    }
                     tbody {
                         @if let Some(highest) = self.highest.as_ref()  {
                             tr {
