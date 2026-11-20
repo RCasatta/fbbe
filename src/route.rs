@@ -576,11 +576,19 @@ fn convert_text_html(page: &str, columns: u16) -> Result<Bytes, Error> {
 
 pub(crate) fn convert_text_html_string(page: &str, columns: u16) -> Result<String, Error> {
     let page = strip_span_tags(page);
-    Ok(html2text::config::with_decorator(BaseTextDecorator {})
+    let text = html2text::config::with_decorator(BaseTextDecorator {})
         .allow_width_overflow()
         .link_footnotes(true)
         .min_wrap_width(12) // avoid wrapping amounts in narrow columns
-        .string_from_read(page.as_bytes(), columns as usize)?)
+        .string_from_read(page.as_bytes(), columns as usize)?;
+
+    // table cells are padded with spaces, useless at the end of the line and costly for LLMs
+    let mut result = String::with_capacity(text.len());
+    for line in text.lines() {
+        result.push_str(line.trim_end());
+        result.push('\n');
+    }
+    Ok(result)
 }
 
 /// Spans are used only for styling, in text mode they are useless and html2text undercounts
@@ -760,6 +768,7 @@ mod tests {
         let html = r#"<table><tbody><tr><th>Type</th><td>p2wpkh</td></tr><tr><th>Script</th><td><code><span class="script">OP_0</span> <span class="script">OP_PUSHBYTES_20</span> e8df018c7e326cc253faac7e46cdc51e68542c42</code></td></tr></tbody></table>"#;
         let text = convert_text_html_string(html, 80).unwrap();
         assert!(text.contains("OP_0 OP_PUSHBYTES_20 e8df018c7e326cc253faac7e46cdc51e68542c42"));
+        assert!(text.lines().all(|l| l == l.trim_end()));
     }
 
     #[test]
