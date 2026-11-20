@@ -9,7 +9,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 
-const HEADERS_PER_REQUEST: usize = 101;
+/// Maximum allowed by the bitcoind REST interface, with a remote node every request costs a round trip
+const HEADERS_PER_REQUEST: usize = 2000;
 
 pub async fn bootstrap_state(shared_state: Arc<SharedState>) -> Result<(), Error> {
     let geneis_hash = genesis_block(network()).header.block_hash();
