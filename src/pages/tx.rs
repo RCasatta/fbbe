@@ -113,18 +113,31 @@ pub fn page(
                     .flatten();
 
                 let sequence = format!("0x{:x}", input.sequence);
-                Some((
-                    i + input_start,
-                    po,
-                    amount,
-                    link,
-                    previous_script_pubkey,
-                    previous_script_pubkey_type,
-                    script_sig,
-                    witness,
-                    p2wsh_witness_script,
-                    sequence,
-                ))
+
+                let mut fields = vec![("Previous outpoint".to_string(), po.html())];
+                if let Some(previous_script_pubkey) = previous_script_pubkey {
+                    let label = match previous_script_pubkey_type {
+                        Some(t) => format!("Previous script pubkey ({t})"),
+                        None => "Previous script pubkey".to_string(),
+                    };
+                    fields.push((label, previous_script_pubkey.html()));
+                }
+                fields.push(("Sequence".to_string(), html! { code { (sequence) } }));
+                if let Some(script_sig) = script_sig {
+                    fields.push(("Script sig".to_string(), script_sig.html()));
+                }
+                if !witness.is_empty() {
+                    fields.push(("Witness".to_string(), witness.html()));
+                }
+                if let Some(p2wsh_witness_script) = p2wsh_witness_script {
+                    fields.push((
+                        "P2wsh witness script".to_string(),
+                        p2wsh_witness_script.html(),
+                    ));
+                }
+                let amount = html! { a href=(link) { (amount) } };
+
+                Some((i + input_start, fields, amount))
             }
         });
 
@@ -175,15 +188,40 @@ pub fn page(
                 })
                 .flatten();
 
-            (
-                i + output_start,
-                address,
-                amount,
-                output_link,
-                script_pubkey,
-                script_type,
-                op_return_string,
-            )
+            let mut fields = vec![];
+            if let Some(address) = address {
+                fields.push(("Address".to_string(), address.html()));
+            }
+            let label = match script_type {
+                Some(t) => format!("Script pubkey ({t})"),
+                None => "Script pubkey".to_string(),
+            };
+            fields.push((label, script_pubkey.html()));
+            if let Some(op_return_string) = op_return_string {
+                fields.push((
+                    "Op return in utf8".to_string(),
+                    html! { code { (op_return_string) } },
+                ));
+            }
+
+            let (amount, amount_text) = if let Some(output_link) = output_link {
+                (
+                    html! { a data-tooltip="Spent" href=(output_link) { (amount) } },
+                    html! { a href=(output_link) { (amount) } " (spent)" },
+                )
+            } else {
+                let status = if script_pubkey.is_op_return() {
+                    "Provably unspendable"
+                } else {
+                    "Unspent"
+                };
+                (
+                    html! { em data-tooltip=(status) style="font-style: normal" { (amount) } },
+                    html! { (amount) " (" (status.to_lowercase()) ")" },
+                )
+            };
+
+            (i + output_start, fields, amount, amount_text)
         });
 
     let inputs_plural = Plural::new("input", tx.input.len());
@@ -286,55 +324,8 @@ pub fn page(
             table class="striped" {
                 tbody {
                     @for val in inputs {
-                        @if let Some((i, outpoint, amount, link, previous_script_pubkey, previous_script_pubkey_type, script_sig, witness, p2wsh_witness_script, sequence)) = val {
-
-                            tr id=(format!("i{i}")) {
-                                th class="row-index" {
-                                    (i)
-                                }
-
-                                td {
-                                    @if !parsed.response_type.is_text() {
-                                        br;
-                                    }
-
-                                    div {
-                                        "Previous outpoint"
-                                        p { (outpoint.html()) }
-                                    }
-
-                                    @if let Some(previous_script_pubkey) = previous_script_pubkey {
-                                        div {
-                                            "Previous script pubkey"
-                                            @if let Some(previous_script_pubkey_type) = previous_script_pubkey_type {
-                                                 " (" (previous_script_pubkey_type) ")"
-                                            }
-                                        }
-
-                                        p {  (previous_script_pubkey.html()) }
-                                    }
-
-                                    div { "Sequence"}
-                                    p { code { (sequence) } }
-
-                                    @if let Some(script_sig) = script_sig {
-                                        div { "Script sig"}
-                                        p { (script_sig.html()) }
-                                    }
-                                    @if !witness.is_empty() {
-                                        div { "Witness"}
-                                        p { (witness.html()) }
-                                    }
-                                    @if let Some(p2wsh_witness_script) = p2wsh_witness_script {
-                                        div { "P2wsh witness script"}
-                                        p { (p2wsh_witness_script.html()) }
-                                    }
-
-                                }
-                                td class="number" {
-                                    a href=(link) { (amount) }
-                                }
-                            }
+                        @if let Some((i, fields, amount)) = val {
+                            (io_rows(parsed, format!("i{i}"), i, &fields, amount.clone(), amount))
                         }
                         @else {
                             td { "Coinbase" }
@@ -370,44 +361,8 @@ pub fn page(
             }
             table class="striped" {
                 tbody {
-                    @for (i, address, amount, output_link, script_pubkey, script_type, op_return_string) in outputs {
-                        tr id=(format!("o{i}")) {
-                            th class="row-index" {
-                                (i)
-                            }
-                            td {
-                                @if !parsed.response_type.is_text() {
-                                    br;
-                                }
-                                @if let Some(address) = address {
-                                    div {
-                                        "Address"
-                                        p { (address.html()) }
-                                    }
-                                }
-                                div {
-                                    "Script pubkey"
-                                    @if let Some(script_type) = script_type {
-                                        " (" (script_type) ")"
-                                    }
-                                }
-                                p { (script_pubkey.html()) }
-
-                                @if let Some(op_return_string) = op_return_string {
-                                    div { "Op return in utf8" }
-                                    p { code { (op_return_string) } }
-                                }
-                            }
-                            td class="number" {
-                                @if let Some(output_link) = output_link {
-                                    a data-tooltip="Spent" href=(output_link) { (amount) }
-                                } @else if script_pubkey.is_op_return() {
-                                    em data-tooltip="Provably unspendable" style="font-style: normal" { (amount) }
-                                } @else {
-                                    em data-tooltip="Unspent" style="font-style: normal" { (amount) }
-                                }
-                            }
-                        }
+                    @for (i, fields, amount, amount_text) in outputs {
+                        (io_rows(parsed, format!("o{i}"), i, &fields, amount, amount_text))
                     }
                 }
                 @if let Some(next) = next_output {
@@ -444,6 +399,49 @@ pub fn page(
     };
 
     Ok(html_page("Transaction", content, parsed))
+}
+
+/// Renders an input or output: in html the fields are stacked in a single cell, in text every
+/// field has its own row, because html2text sizes a cell on the sum of its lines instead of the
+/// widest, making the table much wider than needed.
+fn io_rows(
+    parsed: &ParsedRequest,
+    id: String,
+    index: usize,
+    fields: &[(String, Markup)],
+    amount: Markup,
+    amount_text: Markup,
+) -> Markup {
+    if parsed.response_type.is_text() {
+        let rows = fields.len() + 1;
+        html! {
+            tr id=(id) {
+                th rowspan=(rows) { (index) }
+                th { "Amount (BTC)" }
+                td { (amount_text) }
+            }
+            @for (label, value) in fields {
+                tr {
+                    th { (label) }
+                    td { (value) }
+                }
+            }
+        }
+    } else {
+        html! {
+            tr id=(id) {
+                th class="row-index" { (index) }
+                td {
+                    br;
+                    @for (label, value) in fields {
+                        div { (label) }
+                        p { (value) }
+                    }
+                }
+                td class="number" { (amount) }
+            }
+        }
+    }
 }
 
 fn amount_str(val: u64) -> String {

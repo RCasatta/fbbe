@@ -579,6 +579,7 @@ pub(crate) fn convert_text_html_string(page: &str, columns: u16) -> Result<Strin
     let text = html2text::config::with_decorator(BaseTextDecorator {})
         .allow_width_overflow()
         .link_footnotes(true)
+        .no_link_wrapping() // a footnote url split in multiple lines is unusable
         .min_wrap_width(12) // avoid wrapping amounts in narrow columns
         .string_from_read(page.as_bytes(), columns as usize)?;
 
@@ -769,6 +770,14 @@ mod tests {
         let text = convert_text_html_string(html, 80).unwrap();
         assert!(text.contains("OP_0 OP_PUSHBYTES_20 e8df018c7e326cc253faac7e46cdc51e68542c42"));
         assert!(text.lines().all(|l| l == l.trim_end()));
+    }
+
+    #[test]
+    fn text_footnotes_are_not_wrapped() {
+        let link = format!("https://example.com/{}", "a".repeat(100));
+        let html = format!(r#"<p><a href="{link}">link</a></p>"#);
+        let text = convert_text_html_string(&html, 80).unwrap();
+        assert!(text.contains(&format!("[1]: {link}\n")));
     }
 
     #[test]
