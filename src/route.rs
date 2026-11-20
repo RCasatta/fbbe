@@ -607,7 +607,7 @@ pub(crate) fn convert_text_html_string(page: &str, columns: u16) -> Result<Strin
         .link_footnotes(true)
         .no_table_borders() // borders are mostly a 200 columns rule between rows, costly for LLMs
         .no_link_wrapping() // a footnote url split in multiple lines is unusable
-        .min_wrap_width(12) // avoid wrapping amounts in narrow columns
+        .min_wrap_width(min_wrap_width(columns))
         .string_from_read(page.as_bytes(), columns as usize)?;
 
     // table cells are padded with spaces, useless at the end of the line and costly for LLMs
@@ -617,6 +617,14 @@ pub(crate) fn convert_text_html_string(page: &str, columns: u16) -> Result<Strin
         result.push('\n');
     }
     Ok(result)
+}
+
+/// html2text sizes table columns proportionally to their content, a long value like a witness
+/// squeezes the label column and wraps labels like "Previous script pubkey (v0 p2wpkh)".
+/// A column is never narrower than the minimum wrap width (or its content), so a bigger one keeps
+/// labels on a line; it scales with the width to keep narrow terminals tabular.
+fn min_wrap_width(columns: u16) -> usize {
+    (columns as usize / 5).clamp(12, 36) // 12 avoids wrapping amounts in narrow columns
 }
 
 /// Spans are used only for styling, in text mode they are useless and html2text undercounts
@@ -820,6 +828,19 @@ mod tests {
         let text = convert_text_html_string(html, 80).unwrap();
         assert!(text.contains("OP_0 OP_PUSHBYTES_20 e8df018c7e326cc253faac7e46cdc51e68542c42"));
         assert!(text.lines().all(|l| l == l.trim_end()));
+    }
+
+    #[test]
+    fn text_label_does_not_wrap_next_to_long_value() {
+        let long = "ab".repeat(90);
+        let html = format!(
+            "<table><tbody><tr><th>Previous script pubkey (v0 p2wpkh)</th><td><code>{long}</code></td></tr></tbody></table>"
+        );
+        let text = convert_text_html_string(&html, 200).unwrap();
+        assert!(
+            text.starts_with("Previous script pubkey (v0 p2wpkh) abab"),
+            "{text}"
+        );
     }
 
     #[test]
