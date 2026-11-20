@@ -128,6 +128,8 @@ fn check_pages() {
     // redirects keep the requested text format
     let block_text = get(format!("http://{fbbe_addr}/b/{genesis_block}/text"));
     assert!(block_text.starts_with("* Fast Bitcoin Block Explorer"));
+    assert!(block_text.contains("Coinbase value (BTC) 50.00000000\n"));
+    assert!(block_text.contains("Fees (BTC)           0.00000000\n"));
     assert_eq!(block_text, get(format!("http://{fbbe_addr}/text?s=0")));
     assert_eq!(block_text, get(format!("http://{fbbe_addr}/h/0/text")));
     assert_eq!(

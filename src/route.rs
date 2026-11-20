@@ -182,7 +182,12 @@ async fn route_parsed(
 
         Resource::Block(block_hash, page) => {
             let block = rpc::block::call_json(block_hash).await?;
-            let page = pages::block::page(&block, page, &parsed_req)?.into_string();
+            let coinbase_txid = *block.tx.first().ok_or(Error::NotFound)?;
+            let (coinbase, _) = state.tx(coinbase_txid, true).await?;
+            let coinbase: bitcoin::Transaction =
+                deserialize(coinbase.as_ref()).expect("invalid tx bytes");
+            let coinbase_value = coinbase.output.iter().map(|o| o.value.to_sat()).sum();
+            let page = pages::block::page(&block, page, coinbase_value, &parsed_req)?.into_string();
             let current_tip = state.chain_info.lock().await.clone();
             let block_confirmations = current_tip.blocks - block.height;
             let cache_seconds = cache_time_from_confirmations(Some(block_confirmations));

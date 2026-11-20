@@ -2,7 +2,7 @@ use crate::{
     error::Error,
     network,
     pages::{html_page, size_rows},
-    render::{self, Html, Plural},
+    render::{self, AmountRow, Html, Plural},
     req::ParsedRequest,
     rpc::block::BlockNoTxDetails,
     NetworkExt,
@@ -11,9 +11,25 @@ use maud::{html, Markup};
 
 const PER_PAGE: usize = 10;
 
+/// Block reward without fees, in satoshi
+pub fn subsidy(height: u32, network: bitcoin::Network) -> u64 {
+    let halving_interval = match network {
+        bitcoin::Network::Regtest => 150,
+        _ => 210_000,
+    };
+    let halvings = height / halving_interval;
+    if halvings >= 64 {
+        0
+    } else {
+        (50 * 100_000_000u64) >> halvings
+    }
+}
+
+/// `coinbase_value` is the sum of the coinbase outputs, in satoshi
 pub fn page(
     block: &BlockNoTxDetails,
     page: usize,
+    coinbase_value: u64,
     parsed: &ParsedRequest,
 ) -> Result<Markup, Error> {
     let from_tx = page * PER_PAGE;
@@ -52,6 +68,9 @@ pub fn page(
                         td class="right" { (block.date_time_utc()) }
                     }
                     (size_rows(block.size, block.weight))
+                    (AmountRow::new_with_sat("Coinbase value (BTC)", coinbase_value))
+                    // miners may claim less than allowed, it happened rarely in early blocks
+                    (AmountRow::new_with_sat("Fees (BTC)", coinbase_value.saturating_sub(subsidy(block.height, network()))))
                 }
             }
 
@@ -116,4 +135,20 @@ pub fn page(
     };
 
     Ok(html_page("Block", content, parsed))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::subsidy;
+    use bitcoin::Network;
+
+    #[test]
+    fn block_subsidy() {
+        assert_eq!(subsidy(0, Network::Bitcoin), 5_000_000_000);
+        assert_eq!(subsidy(209_999, Network::Bitcoin), 5_000_000_000);
+        assert_eq!(subsidy(210_000, Network::Bitcoin), 2_500_000_000);
+        assert_eq!(subsidy(840_000, Network::Bitcoin), 312_500_000);
+        assert_eq!(subsidy(150, Network::Regtest), 2_500_000_000);
+        assert_eq!(subsidy(64 * 210_000, Network::Bitcoin), 0);
+    }
 }
