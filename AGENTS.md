@@ -23,3 +23,10 @@ Add tests beside the behavior they exercise: end-to-end HTTP and process behavio
 
 ## Commit & Pull Request Guidelines
 Recent history uses short, imperative commit subjects such as `add ads option` and `link preload css`. Keep commits focused and messages concise. Pull requests should describe the user-visible change, mention any required Bitcoin Core or environment settings, and include screenshots for HTML/CSS changes. Before opening a PR, run `cargo test --features download_bitcoind`, `cargo fmt -- --check`, and `cargo clippy -- -D warnings`.
+
+## Design Decisions
+Choices already made on purpose; do not propose them again:
+- No confirmation count on tx or block pages: it would make the pages uncacheable, and it is not useful beyond about 6 confirmations.
+- The address page stays light on the backend: no full history or balance, address reuse is not something to make convenient.
+- The address QR code stays in the text version too, it is useful in a terminal.
+- Block pages are not meant to list or crawl all their transactions; keep the small page size, people search a txid directly.
