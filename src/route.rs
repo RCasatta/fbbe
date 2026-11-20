@@ -356,11 +356,26 @@ async fn route_parsed(
             .header(CONTENT_TYPE, "text/css; charset=utf-8")
             .body(Bytes::from(include_str!("css/pico.min.css")))?,
 
-        Resource::About => Response::builder()
-            .header(LAST_MODIFIED, ABOUT_PAGE_LAST_MODIFIED)
-            .header(CACHE_CONTROL, "public, max-age=3600")
-            .header(CONTENT_TYPE, "text/html; charset=utf-8")
-            .body(Bytes::from(pages::about::page(&parsed_req)?.into_string()))?,
+        Resource::About => {
+            let page = pages::about::page(&parsed_req)?.into_string();
+            let builder = Response::builder()
+                .header(LAST_MODIFIED, ABOUT_PAGE_LAST_MODIFIED)
+                .header(CACHE_CONTROL, "public, max-age=3600");
+            match parsed_req.response_type {
+                ResponseType::Text(col) => builder
+                    .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
+                    .body(convert_text_html(&page, col)?)?,
+                ResponseType::Html => builder
+                    .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
+                    .body(Bytes::from(page))?,
+                ResponseType::Bytes | ResponseType::Hex => {
+                    return Err(Error::ContentTypeUnsupported(
+                        parsed_req.response_type,
+                        req.uri().to_string(),
+                    ))
+                }
+            }
+        }
 
         Resource::Favicon => Response::builder()
             .header(LAST_MODIFIED, FAVICON_LAST_MODIFIED)
@@ -840,7 +855,7 @@ mod tests {
             footnote_url(&format!("/t/{txid}/hex"), None),
             format!("/t/{txid}/hex")
         );
-        assert_eq!(footnote_url("/about", host), "https://fbbe.info/about");
+        assert_eq!(footnote_url("/about", host), "https://fbbe.info/about/text");
         assert_eq!(
             footnote_url("https://github.com/x", host),
             "https://github.com/x"

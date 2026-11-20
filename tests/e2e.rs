@@ -154,6 +154,9 @@ fn check_pages() {
     assert_ne!(resp.as_str().unwrap(), tx_text);
     assert_eq!(resp.headers.get("vary").unwrap(), "columns");
 
+    let about = get(format!("http://{fbbe_addr}/about/text"));
+    assert!(about.starts_with("* Fast Bitcoin Block Explorer"));
+
     // missing resources are 404, invalid input is 400
     let status = |url: String| minreq::get(url).send().unwrap();
     let missing_tx = "00000000000000000000000000000000000000000000000000000000deadbeef";
