@@ -36,7 +36,7 @@ env_logger = { version = "0.11", default-features = false, features = [
 bitcoin = { version = "0.32", features = ["serde", "base64"] }
 log = "0.4.17"
 chrono = "0.4.23"
-html2text = "0.6"
+html2text = "0.17"
 mime = "0.3.16"
 qr_code = { version = "2.0.0", features = ["bmp"] }
 base64 = "0.21.0"

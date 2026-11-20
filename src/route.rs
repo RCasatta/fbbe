@@ -125,7 +125,7 @@ pub async fn route(
             match parsed_req.response_type {
                 ResponseType::Text(col) => builder
                     .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
-                    .body(convert_text_html(&page, col))?,
+                    .body(convert_text_html(&page, col)?)?,
                 ResponseType::Html => builder
                     .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
                     .body(Bytes::from(page))?,
@@ -153,7 +153,7 @@ pub async fn route(
             match parsed_req.response_type {
                 ResponseType::Text(col) => builder
                     .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
-                    .body(convert_text_html(&page, col))?,
+                    .body(convert_text_html(&page, col)?)?,
                 ResponseType::Html => builder
                     .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
                     .body(Bytes::from(page))?,
@@ -224,7 +224,7 @@ pub async fn route(
             match parsed_req.response_type {
                 ResponseType::Text(col) => builder
                     .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
-                    .body(convert_text_html(&page, col))?,
+                    .body(convert_text_html(&page, col)?)?,
                 ResponseType::Html => builder
                     .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
                     .body(Bytes::from(page))?,
@@ -441,7 +441,7 @@ pub async fn route(
             match parsed_req.response_type {
                 ResponseType::Text(col) => builder
                     .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
-                    .body(convert_text_html(&page, col))?,
+                    .body(convert_text_html(&page, col)?)?,
                 ResponseType::Html => builder
                     .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
                     .body(Bytes::from(page))?,
@@ -570,12 +570,35 @@ async fn output_status(
     result
 }
 
-fn convert_text_html(page: &str, columns: u16) -> Bytes {
-    Bytes::from(convert_text_html_string(page, columns))
+fn convert_text_html(page: &str, columns: u16) -> Result<Bytes, Error> {
+    Ok(Bytes::from(convert_text_html_string(page, columns)?))
 }
 
-pub(crate) fn convert_text_html_string(page: &str, columns: u16) -> String {
-    html2text::from_read_with_decorator(page.as_bytes(), columns as usize, BaseTextDecorator {})
+pub(crate) fn convert_text_html_string(page: &str, columns: u16) -> Result<String, Error> {
+    let page = strip_span_tags(page);
+    Ok(html2text::config::with_decorator(BaseTextDecorator {})
+        .allow_width_overflow()
+        .string_from_read(page.as_bytes(), columns as usize)?)
+}
+
+/// Spans are used only for styling, in text mode they are useless and html2text undercounts
+/// the width of inline elements in table cells, causing unneeded wrapping of hex strings.
+fn strip_span_tags(page: &str) -> String {
+    let mut result = String::with_capacity(page.len());
+    let mut rest = page;
+    while let Some(start) = [rest.find("<span"), rest.find("</span>")]
+        .into_iter()
+        .flatten()
+        .min()
+    {
+        let Some(end) = rest[start..].find('>') else {
+            break;
+        };
+        result.push_str(&rest[..start]);
+        rest = &rest[start + end + 1..];
+    }
+    result.push_str(rest);
+    result
 }
 
 fn cache_time_from_confirmations(confirmation: Option<u32>) -> u32 {
@@ -715,4 +738,25 @@ pub async fn route_infallible(
     timer.observe_duration();
 
     Ok(resp)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strip_span_tags_keeps_content() {
+        assert_eq!(
+            strip_span_tags(r#"<code><span class="script">OP_0</span> ab</code><span>"#),
+            "<code>OP_0 ab</code>"
+        );
+        assert_eq!(strip_span_tags("no spans"), "no spans");
+    }
+
+    #[test]
+    fn text_table_does_not_wrap_script() {
+        let html = r#"<table><tbody><tr><th>Type</th><td>p2wpkh</td></tr><tr><th>Script</th><td><code><span class="script">OP_0</span> <span class="script">OP_PUSHBYTES_20</span> e8df018c7e326cc253faac7e46cdc51e68542c42</code></td></tr></tbody></table>"#;
+        let text = convert_text_html_string(html, 80).unwrap();
+        assert!(text.contains("OP_0 OP_PUSHBYTES_20 e8df018c7e326cc253faac7e46cdc51e68542c42"));
+    }
 }

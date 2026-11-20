@@ -29,6 +29,9 @@ pub enum Error {
     Hex2(#[from] hex::FromHexError),
 
     #[error(transparent)]
+    Html2Text(#[from] html2text::Error),
+
+    #[error(transparent)]
     ParseInt(#[from] std::num::ParseIntError),
 
     #[error(transparent)]
