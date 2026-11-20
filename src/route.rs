@@ -19,7 +19,9 @@ use bitcoin::{
 use bitcoin_slices::{bsl, Visit, Visitor};
 use hyper::body::Bytes;
 use hyper::{
-    header::{CACHE_CONTROL, CONTENT_TYPE, IF_MODIFIED_SINCE, LAST_MODIFIED, LOCATION},
+    header::{
+        HeaderValue, CACHE_CONTROL, CONTENT_TYPE, IF_MODIFIED_SINCE, LAST_MODIFIED, LOCATION, VARY,
+    },
     Request, Response, StatusCode,
 };
 use mime::{APPLICATION_OCTET_STREAM, TEXT_HTML_UTF_8, TEXT_PLAIN_UTF_8};
@@ -74,9 +76,25 @@ pub async fn route(
     state: Arc<SharedState>,
     db: Option<Arc<Database>>,
 ) -> Result<Response<Bytes>, Error> {
+    let parsed_req = req::parse(&req).await.map_err(Error::into_input_error)?;
+    let vary_accept = parsed_req.vary_accept;
+    let mut resp = route_parsed(req, parsed_req, state, db).await?;
+    if vary_accept {
+        // shared caches must not serve the text page to browsers, or the opposite
+        resp.headers_mut()
+            .insert(VARY, HeaderValue::from_static("Accept"));
+    }
+    Ok(resp)
+}
+
+async fn route_parsed(
+    req: Request<Bytes>,
+    parsed_req: req::ParsedRequest,
+    state: Arc<SharedState>,
+    db: Option<Arc<Database>>,
+) -> Result<Response<Bytes>, Error> {
     let now = Instant::now();
     // let _count = state.requests.fetch_add(1, Ordering::Relaxed);
-    let parsed_req = req::parse(&req).await.map_err(Error::into_input_error)?;
 
     handle_http_counter(&parsed_req);
 

@@ -135,6 +135,15 @@ fn check_pages() {
         get(format!("http://{fbbe_addr}/text?s={genesis_tx}"))
     );
 
+    // agents asking for text/plain get the text page
+    let tx_text = get(format!("http://{fbbe_addr}/t/{genesis_tx}/text"));
+    let resp = minreq::get(format!("http://{fbbe_addr}/t/{genesis_tx}"))
+        .with_header("Accept", "text/plain")
+        .send()
+        .unwrap();
+    assert_eq!(resp.as_str().unwrap(), tx_text);
+    assert_eq!(resp.headers.get("vary").unwrap(), "Accept");
+
     // missing resources are 404, invalid input is 400
     let status = |url: String| minreq::get(url).send().unwrap();
     let missing_tx = "00000000000000000000000000000000000000000000000000000000deadbeef";

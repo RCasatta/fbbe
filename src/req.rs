@@ -9,12 +9,14 @@ use bitcoin::address::NetworkUnchecked;
 use bitcoin::hashes::{sha256d, Hash};
 use bitcoin::{consensus::deserialize, Address, BlockHash, Transaction, Txid};
 use bitcoin::{OutPoint, Psbt};
-use hyper::{Method, Request};
+use hyper::{header::ACCEPT, Method, Request};
 
 #[derive(Debug, Clone)]
 pub struct ParsedRequest {
     pub resource: Resource,
     pub response_type: ResponseType,
+    /// The response type is not in the path, so it depends on the `Accept` header
+    pub vary_accept: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -49,14 +51,15 @@ pub async fn parse(req: &Request<hyper::body::Bytes>) -> Result<ParsedRequest, E
     if path.get(4).is_some() {
         return Err(Error::BadRequest);
     }
-    let response_type = match path.last() {
-        Some(&"text") => ResponseType::Text(parse_cols(req)),
-        Some(&"bin") => ResponseType::Bytes,
-        Some(&"hex") => ResponseType::Hex,
-        _ => ResponseType::Html,
+    let (response_type, vary_accept) = match path.last() {
+        Some(&"text") => (ResponseType::Text(parse_cols(req)), false),
+        Some(&"bin") => (ResponseType::Bytes, false),
+        Some(&"hex") => (ResponseType::Hex, false),
+        _ if accepts_text_not_html(req) => (ResponseType::Text(parse_cols(req)), true),
+        _ => (ResponseType::Html, true),
     };
     log::debug!("{:?}", response_type);
-    if let ResponseType::Text(_) | ResponseType::Bytes | ResponseType::Hex = response_type {
+    if !vary_accept {
         path.pop();
         if path.is_empty() {
             // home page corner case
@@ -175,7 +178,28 @@ pub async fn parse(req: &Request<hyper::body::Bytes>) -> Result<ParsedRequest, E
     Ok(ParsedRequest {
         resource,
         response_type,
+        vary_accept,
     })
+}
+
+/// True when the client asks for `text/plain` and not for html, as agents do, browsers always
+/// list `text/html`
+fn accepts_text_not_html(req: &Request<hyper::body::Bytes>) -> bool {
+    let Some(accept) = req.headers().get(ACCEPT).and_then(|a| a.to_str().ok()) else {
+        return false;
+    };
+    let mut media_types = accept
+        .split(',')
+        .map(|m| m.split(';').next().unwrap_or_default().trim());
+    let mut text = false;
+    for media_type in &mut media_types {
+        match media_type {
+            "text/html" | "application/xhtml+xml" => return false,
+            "text/plain" => text = true,
+            _ => (),
+        }
+    }
+    text
 }
 
 pub struct TextLink<'a>(&'a Resource);
@@ -233,6 +257,32 @@ fn parse_cols(req: &Request<hyper::body::Bytes>) -> u16 {
 mod tests {
     use super::*;
     use hyper::body::Bytes;
+
+    fn request_accept(uri: &str, accept: &str) -> Request<Bytes> {
+        Request::builder()
+            .uri(uri)
+            .header(ACCEPT, accept)
+            .body(Bytes::new())
+            .expect("valid request")
+    }
+
+    #[tokio::test]
+    async fn parse_accept_header() {
+        async fn text(accept: &str) -> bool {
+            let parsed = parse(&request_accept("/", accept)).await.unwrap();
+            assert!(parsed.vary_accept);
+            parsed.response_type.is_text()
+        }
+        assert!(text("text/plain").await);
+        assert!(text("text/markdown, text/plain;q=0.9, */*;q=0.1").await);
+        assert!(!text("text/html,application/xhtml+xml,*/*;q=0.8").await);
+        assert!(!text("text/plain, text/html").await);
+        assert!(!text("*/*").await);
+
+        let parsed = parse(&request_accept("/text", "text/html")).await.unwrap();
+        assert!(parsed.response_type.is_text());
+        assert!(!parsed.vary_accept);
+    }
 
     fn request(uri: &str) -> Request<Bytes> {
         Request::builder()
