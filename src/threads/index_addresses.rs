@@ -235,15 +235,23 @@ pub struct AddressSeen {
 #[derive(PartialEq, Eq, Debug)]
 pub struct Funding {
     pub out_point: OutPoint,
+    /// in satoshi
+    pub value: u64,
     pub block_hash: BlockHash,
     pub height_time: HeightTime,
 }
 
 impl AddressSeen {
-    pub fn new(out_point: OutPoint, block_hash: BlockHash, height_time: HeightTime) -> Self {
+    pub fn new(
+        out_point: OutPoint,
+        value: u64,
+        block_hash: BlockHash,
+        height_time: HeightTime,
+    ) -> Self {
         Self {
             funding: Funding {
                 out_point,
+                value,
                 block_hash,
                 height_time,
             },
@@ -282,7 +290,7 @@ pub async fn address_seen(
     }
 
     let mut heights_with_spending = BTreeSet::new();
-    for (_, outpoint, _) in outpoints_with_script_pubkey.iter().take(10) {
+    for (_, (outpoint, _), _) in outpoints_with_script_pubkey.iter().take(10) {
         //TODO handle pagination?
         if let Some(h) = db.get_spending(outpoint) {
             heights_with_spending.insert(h);
@@ -294,7 +302,7 @@ pub async fn address_seen(
         .await?;
     let mut address_seen: Vec<_> = outpoints_with_script_pubkey
         .into_iter()
-        .map(|(h, o, t)| AddressSeen::new(o, h, t))
+        .map(|(h, (o, value), t)| AddressSeen::new(o, value, h, t))
         .collect();
     for (h, b) in blocks {
         let t = shared_state.height_time(h).await.unwrap();
@@ -353,16 +361,21 @@ fn find_txids_with_prevout(
 }
 
 /// Add txid to txids of transactions in block `b` containing `script_pubkey` in the outputs
-fn find_outpoints_with_script_pubkey(script_pubkey: &ScriptBuf, b: SerBlock) -> Vec<OutPoint> {
+/// Returns the outpoints paying to `script_pubkey` in the block, with their value in satoshi
+fn find_outpoints_with_script_pubkey(
+    script_pubkey: &ScriptBuf,
+    b: SerBlock,
+) -> Vec<(OutPoint, u64)> {
     struct TxContainingScript<'a> {
-        outpoints: Vec<OutPoint>,
+        outpoints: Vec<(OutPoint, u64)>,
         script_pubkey: &'a [u8],
-        current_tx_matching_vouts: Vec<u32>,
+        current_tx_matching_vouts: Vec<(u32, u64)>,
     }
     impl Visitor for TxContainingScript<'_> {
         fn visit_tx_out(&mut self, vout: usize, tx_out: &bsl::TxOut) -> ControlFlow<()> {
             if self.script_pubkey == tx_out.script_pubkey() {
-                self.current_tx_matching_vouts.push(vout as u32);
+                self.current_tx_matching_vouts
+                    .push((vout as u32, tx_out.value()));
             }
             ControlFlow::Continue(())
         }
@@ -373,8 +386,9 @@ fn find_outpoints_with_script_pubkey(script_pubkey: &ScriptBuf, b: SerBlock) -> 
         ) -> core::ops::ControlFlow<()> {
             if !self.current_tx_matching_vouts.is_empty() {
                 let txid: Txid = tx.txid().into();
-                for vout in self.current_tx_matching_vouts.iter() {
-                    self.outpoints.push(OutPoint { txid, vout: *vout });
+                for (vout, value) in self.current_tx_matching_vouts.iter() {
+                    self.outpoints
+                        .push((OutPoint { txid, vout: *vout }, *value));
                 }
                 self.current_tx_matching_vouts.clear();
             }
@@ -498,6 +512,22 @@ async fn index_addresses(db: Arc<Database>, shared_state: Arc<SharedState>) -> R
 
 #[cfg(test)]
 mod test {
+    #[test]
+    fn find_outpoints_with_value() {
+        use crate::rpc::block::SerBlock;
+        use bitcoin::{blockdata::constants::genesis_block, consensus::serialize, Network};
+
+        let block = genesis_block(Network::Bitcoin);
+        let script_pubkey = block.txdata[0].output[0].script_pubkey.clone();
+        let found =
+            super::find_outpoints_with_script_pubkey(&script_pubkey, SerBlock(serialize(&block)));
+        let txid = block.txdata[0].compute_txid();
+        assert_eq!(
+            found,
+            vec![(bitcoin::OutPoint { txid, vout: 0 }, 5_000_000_000)]
+        );
+    }
+
     #[test]
     fn test_endianness() {
         let value = 1u64;

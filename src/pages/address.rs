@@ -85,7 +85,10 @@ pub fn page(
 
                 table class="striped" {
                     tbody {
-                        @for txid in address_seen {
+                        @for (i, txid) in address_seen.iter().enumerate() {
+                            @if i > 0 && parsed.response_type.is_text() {
+                                tr { td { "\u{a0}" } } // without table borders entries would touch
+                            }
                             tr {
                                 td {
                                     (txid)
