@@ -398,13 +398,12 @@ async fn route_parsed(
         Resource::Address(ref address, ref query) => {
             let address = address.clone().require_network(network())?;
 
-            let address_seen = if let Some(db) = db {
-                address_seen(&address, db, state.clone()).await?
-            } else {
-                vec![]
+            let address_outputs = match db {
+                Some(db) => Some(address_seen(&address, db, state.clone()).await?),
+                None => None,
             };
             let page =
-                pages::address::page(&address, &parsed_req, query, address_seen)?.into_string();
+                pages::address::page(&address, &parsed_req, query, address_outputs)?.into_string();
             let builder = Response::builder().header(CACHE_CONTROL, "public, max-age=60");
 
             match parsed_req.response_type {

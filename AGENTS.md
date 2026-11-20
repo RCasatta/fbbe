@@ -27,6 +27,6 @@ Recent history uses short, imperative commit subjects such as `add ads option` a
 ## Design Decisions
 Choices already made on purpose; do not propose them again:
 - No confirmation count on tx or block pages: it would make the pages uncacheable, and it is not useful beyond about 6 confirmations.
-- The address page stays light on the backend: no full history or balance, address reuse is not something to make convenient.
+- The address page stays light on the backend: no full history, address reuse is not something to make convenient. The confirmed balance is shown only when it is known to be correct (a single funding block with few outputs), otherwise it is "unknown" with the reason; do not try to compute it in other cases.
 - The address QR code stays in the text version too, it is useful in a terminal.
 - Block pages are not meant to list or crawl all their transactions; keep the small page size, people search a txid directly.

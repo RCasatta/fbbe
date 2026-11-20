@@ -6,8 +6,12 @@ use maud::{html, Markup};
 use qr_code::QrCode;
 
 use crate::{
-    error::Error, render::Html, req::ParsedRequest, route::convert_text_html_string,
-    threads::index_addresses::AddressSeen,
+    error::Error,
+    render::AmountRow,
+    render::Html,
+    req::ParsedRequest,
+    route::convert_text_html_string,
+    threads::index_addresses::{AddressOutputs, Balance},
 };
 
 use super::html_page;
@@ -16,8 +20,12 @@ pub fn page(
     address: &Address,
     parsed: &ParsedRequest,
     query: &Option<String>,
-    address_seen: Vec<AddressSeen>,
+    address_outputs: Option<AddressOutputs>,
 ) -> Result<Markup, Error> {
+    let (address_seen, balance) = match address_outputs {
+        Some(AddressOutputs { seen, balance }) => (seen, Some(balance)),
+        None => (vec![], None),
+    };
     let address_type = address
         .address_type()
         .map(|t| t.to_string())
@@ -74,6 +82,14 @@ pub fn page(
                         th { "Script" }
                         td { (script_pubkey.html()) }
                     }
+                    @match balance {
+                        Some(Balance::Known(sat)) => (AmountRow::new_with_sat(BALANCE, sat)),
+                        Some(unknown) => tr {
+                            th { (BALANCE) }
+                            td { "unknown, " (unknown_reason(&unknown)) }
+                        },
+                        None => {}
+                    }
                 }
             }
 
@@ -110,6 +126,17 @@ pub fn page(
     };
 
     Ok(html_page("Address", content, parsed))
+}
+
+const BALANCE: &str = "Confirmed balance (BTC)";
+
+fn unknown_reason(balance: &Balance) -> &'static str {
+    match balance {
+        Balance::Known(_) => "",
+        Balance::IndexSyncing => "the address index is still syncing",
+        Balance::MultipleFundingBlocks => "the address received funds in more than one block",
+        Balance::TooManyOutputs => "too many outputs to check",
+    }
 }
 
 /// Converts `input` in base64 and returns a data url

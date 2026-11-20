@@ -4,7 +4,10 @@ use std::{
     hash::Hasher,
     ops::ControlFlow,
     path::Path,
-    sync::Arc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     time::Duration,
 };
 
@@ -40,6 +43,8 @@ const COLUMN_FAMILIES: &[&str] = &[BLOCK_HASH_CF, FUNDING_CF, SPENDING_CF, FEE_C
 #[derive(Debug)]
 pub struct Database {
     db: DB,
+    /// The initial indexing reached the tip, every funding height is in the db
+    synced: AtomicBool,
 }
 
 impl Database {
@@ -61,7 +66,10 @@ impl Database {
         db_opts.create_missing_column_families(true);
 
         let db = DB::open_cf_descriptors(&db_opts, path, Self::create_cf_descriptors())?;
-        Ok(Self { db })
+        Ok(Self {
+            db,
+            synced: AtomicBool::new(false),
+        })
     }
 
     fn block_hash_cf(&self) -> &ColumnFamily {
@@ -101,21 +109,26 @@ impl Database {
             .is_some()
     }
 
-    pub fn script_hash_latest_height(&self, script_pubkey: &Script) -> Option<Height> {
+    /// Returns at most `max` heights of the blocks funding `script_pubkey`, the latest first
+    pub fn script_hash_latest_heights(&self, script_pubkey: &Script, max: usize) -> Vec<Height> {
         let script_hash = script_hash(script_pubkey).to_be_bytes();
         let mut starting = script_hash.to_vec();
         starting.extend(&[0xff; 4]);
 
-        let mut iter = self.db.iterator_cf(
-            self.funding_cf(),
-            rocksdb::IteratorMode::From(&starting[..], rocksdb::Direction::Reverse),
-        );
-        let el = iter.next()?.unwrap().0;
-        if el.starts_with(&script_hash) {
-            Some(u32::from_be_bytes(el[8..].try_into().unwrap()))
-        } else {
-            None
-        }
+        self.db
+            .iterator_cf(
+                self.funding_cf(),
+                rocksdb::IteratorMode::From(&starting[..], rocksdb::Direction::Reverse),
+            )
+            .map(|el| el.unwrap().0)
+            .take_while(|key| key.starts_with(&script_hash))
+            .take(max)
+            .map(|key| u32::from_be_bytes(key[8..].try_into().unwrap()))
+            .collect()
+    }
+
+    pub fn is_synced(&self) -> bool {
+        self.synced.load(Ordering::Relaxed)
     }
 
     pub fn get_spending(&self, outpoint: &OutPoint) -> Option<Height> {
@@ -226,6 +239,23 @@ pub struct IndexBlockResult {
     spending_sh: BTreeSet<OutPoint>,
 }
 
+/// Outputs of an address funded in its latest funding block, with the balance when computable
+pub struct AddressOutputs {
+    pub seen: Vec<AddressSeen>,
+    pub balance: Balance,
+}
+
+/// The confirmed balance is known only when every output ever received is in `seen` and has
+/// been checked for spending, the index keeps only funding heights, not the full history
+#[derive(PartialEq, Eq, Debug)]
+pub enum Balance {
+    /// in satoshi
+    Known(u64),
+    IndexSyncing,
+    MultipleFundingBlocks,
+    TooManyOutputs,
+}
+
 #[derive(PartialEq, Eq, Debug)]
 pub struct AddressSeen {
     pub funding: Funding,
@@ -272,12 +302,12 @@ pub async fn address_seen(
     address: &Address,
     db: Arc<Database>,
     shared_state: Arc<SharedState>,
-) -> Result<Vec<AddressSeen>, Error> {
+) -> Result<AddressOutputs, Error> {
     let script_pubkey = address.script_pubkey();
-    let heights: Vec<_> = db
-        .script_hash_latest_height(&script_pubkey)
-        .into_iter()
-        .collect();
+    // a second height is enough to know the history is not in a single block
+    let mut heights = db.script_hash_latest_heights(&script_pubkey, 2);
+    let multiple_funding_blocks = heights.len() > 1;
+    heights.truncate(1);
     let blocks = shared_state.blocks_from_heights(&heights).await?;
     let mut outpoints_with_script_pubkey = vec![];
     for (h, b) in blocks {
@@ -290,7 +320,10 @@ pub async fn address_seen(
     }
 
     let mut heights_with_spending = BTreeSet::new();
-    for (_, (outpoint, _), _) in outpoints_with_script_pubkey.iter().take(10) {
+    for (_, (outpoint, _), _) in outpoints_with_script_pubkey
+        .iter()
+        .take(MAX_SPENDING_CHECKS)
+    {
         //TODO handle pagination?
         if let Some(h) = db.get_spending(outpoint) {
             heights_with_spending.insert(h);
@@ -309,8 +342,26 @@ pub async fn address_seen(
         find_txids_with_prevout(h, b, t, &mut address_seen);
     }
 
-    Ok(address_seen)
+    let balance = if !db.is_synced() {
+        Balance::IndexSyncing
+    } else if multiple_funding_blocks {
+        Balance::MultipleFundingBlocks
+    } else if address_seen.len() > MAX_SPENDING_CHECKS {
+        Balance::TooManyOutputs
+    } else {
+        // a spending found in the db but not in its block is a key collision, so it's unspent
+        let unspent = address_seen.iter().filter(|s| s.spending.is_none());
+        Balance::Known(unspent.map(|s| s.funding.value).sum())
+    };
+
+    Ok(AddressOutputs {
+        seen: address_seen,
+        balance,
+    })
 }
+
+/// Outputs checked for spending, each could require downloading a block
+const MAX_SPENDING_CHECKS: usize = 10;
 fn find_txids_with_prevout(
     h: BlockHash,
     b: SerBlock,
@@ -483,6 +534,7 @@ async fn index_addresses(db: Arc<Database>, shared_state: Arc<SharedState>) -> R
             Some(hash) if hash != BlockHash::all_zeros() => hash,
             _ => {
                 log::info!("stopping initial block indexing");
+                db.synced.store(true, Ordering::Relaxed);
                 break;
             }
         };
@@ -512,6 +564,36 @@ async fn index_addresses(db: Arc<Database>, shared_state: Arc<SharedState>) -> R
 
 #[cfg(test)]
 mod test {
+    #[test]
+    fn latest_funding_heights() {
+        use super::{script_hash, Database, IndexBlockResult};
+        use bitcoin::{hashes::Hash, BlockHash, ScriptBuf};
+        use std::collections::BTreeSet;
+
+        let dir = std::env::temp_dir().join(format!("fbbe-test-heights-{}", std::process::id()));
+        let db = Database::new(&dir).unwrap();
+        let script = ScriptBuf::from_bytes(vec![0x51]);
+        let other = ScriptBuf::from_bytes(vec![0x52]);
+        for (height, script) in [(5u32, &script), (7, &other), (9, &script), (12, &script)] {
+            let index_res = IndexBlockResult {
+                block_hash: BlockHash::hash(&height.to_be_bytes()),
+                height,
+                funding_sh: BTreeSet::from([script_hash(script)]),
+                spending_sh: BTreeSet::new(),
+            };
+            db.write_hashes(index_res).unwrap();
+        }
+        assert_eq!(db.script_hash_latest_heights(&script, 2), vec![12, 9]);
+        assert_eq!(db.script_hash_latest_heights(&script, 5), vec![12, 9, 5]);
+        assert_eq!(db.script_hash_latest_heights(&other, 2), vec![7]);
+        let unused = ScriptBuf::from_bytes(vec![0x53]);
+        assert!(db.script_hash_latest_heights(&unused, 2).is_empty());
+        assert!(!db.is_synced());
+
+        drop(db);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
     #[test]
     fn find_outpoints_with_value() {
         use crate::rpc::block::SerBlock;
