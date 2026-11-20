@@ -325,7 +325,7 @@ pub fn page(
                 tbody {
                     @for val in inputs {
                         @if let Some((i, fields, amount)) = val {
-                            (io_rows(parsed, format!("i{i}"), i, &fields, amount.clone(), amount))
+                            (io_rows(parsed, format!("i{i}"), i, i != input_start, &fields, amount.clone(), amount))
                         }
                         @else {
                             td { "Coinbase" }
@@ -362,7 +362,7 @@ pub fn page(
             table class="striped" {
                 tbody {
                     @for (i, fields, amount, amount_text) in outputs {
-                        (io_rows(parsed, format!("o{i}"), i, &fields, amount, amount_text))
+                        (io_rows(parsed, format!("o{i}"), i, i != output_start, &fields, amount, amount_text))
                     }
                 }
                 @if let Some(next) = next_output {
@@ -403,11 +403,13 @@ pub fn page(
 
 /// Renders an input or output: in html the fields are stacked in a single cell, in text every
 /// field has its own row, because html2text sizes a cell on the sum of its lines instead of the
-/// widest, making the table much wider than needed.
+/// widest, making the table much wider than needed. Without table borders, an empty row
+/// before every entry but the first keeps the entries apart.
 fn io_rows(
     parsed: &ParsedRequest,
     id: String,
     index: usize,
+    separator: bool,
     fields: &[(String, Markup)],
     amount: Markup,
     amount_text: Markup,
@@ -415,6 +417,9 @@ fn io_rows(
     if parsed.response_type.is_text() {
         let rows = fields.len() + 1;
         html! {
+            @if separator {
+                tr { td { "\u{a0}" } } // an empty cell would not render the line
+            }
             tr id=(id) {
                 th rowspan=(rows) { (index) }
                 th { "Amount (BTC)" }

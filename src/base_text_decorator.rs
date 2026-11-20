@@ -118,7 +118,9 @@ pub(crate) fn footnote_url(link: &str, dns_host: Option<&str>) -> String {
     let has_text = match resource {
         [] => true, // home
         [kind, _id] => matches!(*kind, "t" | "b" | "a"),
-        [kind, _id, page] => matches!(*kind, "t" | "b") && page.parse::<usize>().is_ok(),
+        [kind, _id, page] => {
+            (matches!(*kind, "t" | "b") && page.parse::<usize>().is_ok()) || *kind == "o"
+        }
         _ => false,
     };
     if has_text {

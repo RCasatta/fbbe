@@ -43,6 +43,30 @@ impl ResponseType {
     pub fn is_text(&self) -> bool {
         matches!(self, ResponseType::Text(_))
     }
+
+    /// The path suffix requesting this response type, used to keep it across redirects
+    fn path_suffix(&self) -> &'static str {
+        match self {
+            ResponseType::Text(_) => "/text",
+            ResponseType::Html => "",
+            ResponseType::Bytes => "/bin",
+            ResponseType::Hex => "/hex",
+        }
+    }
+}
+
+/// Redirect to `path` (relative to the network base path), keeping the requested response type
+fn redirect(path: &str, response_type: ResponseType) -> Result<Response<Bytes>, Error> {
+    let network = network().as_url_path();
+    let suffix = response_type.path_suffix();
+    let location = match path.split_once('#') {
+        Some((path, fragment)) => format!("{network}{path}{suffix}#{fragment}"),
+        None => format!("{network}{path}{suffix}"),
+    };
+    Ok(Response::builder()
+        .header(LOCATION, location)
+        .status(StatusCode::TEMPORARY_REDIRECT) // PERMANENT_REDIRECT cause issues in lynx
+        .body(Bytes::new())?)
 }
 
 pub async fn route(
@@ -52,7 +76,7 @@ pub async fn route(
 ) -> Result<Response<Bytes>, Error> {
     let now = Instant::now();
     // let _count = state.requests.fetch_add(1, Ordering::Relaxed);
-    let parsed_req = req::parse(&req).await?;
+    let parsed_req = req::parse(&req).await.map_err(Error::into_input_error)?;
 
     handle_http_counter(&parsed_req);
 
@@ -272,11 +296,7 @@ pub async fn route(
             }
 
             let (txid, vin) = visitor.1.ok_or(Error::NotFound)?;
-            let network = network().as_url_path();
-            Response::builder()
-                .header(LOCATION, format!("{network}t/{txid}#i{vin}"))
-                .status(StatusCode::TEMPORARY_REDIRECT)
-                .body(Bytes::new())?
+            redirect(&format!("t/{txid}#i{vin}"), parsed_req.response_type)?
         }
 
         Resource::SearchHeight(height) => {
@@ -284,36 +304,15 @@ pub async fn route(
                 .height_to_hash(height)
                 .await
                 .ok_or_else(|| Error::HeightNotFound)?;
-            let network = network().as_url_path();
-
-            Response::builder()
-                .header(LOCATION, format!("{network}b/{hash}"))
-                .status(StatusCode::TEMPORARY_REDIRECT) // PERMANENT_REDIRECT cause issues in lynx
-                .body(Bytes::new())?
+            redirect(&format!("b/{hash}"), parsed_req.response_type)?
         }
 
-        Resource::SearchBlock(hash) => {
-            let network = network().as_url_path();
-            Response::builder()
-                .header(LOCATION, format!("{network}b/{hash}"))
-                .status(StatusCode::TEMPORARY_REDIRECT) // PERMANENT_REDIRECT cause issues in lynx
-                .body(Bytes::new())?
-        }
+        Resource::SearchBlock(hash) => redirect(&format!("b/{hash}"), parsed_req.response_type)?,
 
-        Resource::SearchTx(txid) => {
-            let network = network().as_url_path();
-            Response::builder()
-                .header(LOCATION, format!("{network}t/{txid}"))
-                .status(StatusCode::TEMPORARY_REDIRECT)
-                .body(Bytes::new())?
-        }
+        Resource::SearchTx(txid) => redirect(&format!("t/{txid}"), parsed_req.response_type)?,
 
         Resource::SearchAddress(address) => {
-            let network = network().as_url_path();
-            Response::builder()
-                .header(LOCATION, format!("{network}a/{address}"))
-                .status(StatusCode::TEMPORARY_REDIRECT)
-                .body(Bytes::new())?
+            redirect(&format!("a/{address}"), parsed_req.response_type)?
         }
 
         Resource::Head => Response::new(Bytes::new()),
@@ -342,25 +341,11 @@ pub async fn route(
             .header(CONTENT_TYPE, "text/plain")
             .body(Bytes::from_static(include_bytes!("robots.txt")))?,
         Resource::BlockToB(block_hash) => {
-            let network = network().as_url_path();
-            Response::builder()
-                .header(LOCATION, format!("{network}b/{block_hash}"))
-                .status(StatusCode::TEMPORARY_REDIRECT)
-                .body(Bytes::new())?
+            redirect(&format!("b/{block_hash}"), parsed_req.response_type)?
         }
-        Resource::TxToT(txid) => {
-            let network = network().as_url_path();
-            Response::builder()
-                .header(LOCATION, format!("{network}t/{txid}"))
-                .status(StatusCode::TEMPORARY_REDIRECT)
-                .body(Bytes::new())?
-        }
+        Resource::TxToT(txid) => redirect(&format!("t/{txid}"), parsed_req.response_type)?,
         Resource::AddressToA(address) => {
-            let network = network().as_url_path();
-            Response::builder()
-                .header(LOCATION, format!("{network}a/{address}"))
-                .status(StatusCode::TEMPORARY_REDIRECT)
-                .body(Bytes::new())?
+            redirect(&format!("a/{address}"), parsed_req.response_type)?
         }
         Resource::Address(ref address, ref query) => {
             let address = address.clone().require_network(network())?;
@@ -393,21 +378,14 @@ pub async fn route(
         }
         Resource::SearchFullTx(ref tx) => {
             let txid = tx.compute_txid();
-            let network = network().as_url_path();
 
             if state.tx(txid, false).await.is_ok() {
-                Response::builder()
-                    .header(LOCATION, format!("{network}t/{txid}"))
-                    .status(StatusCode::TEMPORARY_REDIRECT)
-                    .body(Bytes::new())?
+                redirect(&format!("t/{txid}"), parsed_req.response_type)?
             } else {
                 let bytes = serialize(&tx);
                 let hex = bytes.to_lower_hex_string();
 
-                Response::builder()
-                    .header(LOCATION, format!("{network}txhex/{hex}"))
-                    .status(StatusCode::TEMPORARY_REDIRECT)
-                    .body(Bytes::new())?
+                redirect(&format!("txhex/{hex}"), parsed_req.response_type)?
             }
         }
         Resource::FullTx(ref tx) => {
@@ -579,6 +557,7 @@ pub(crate) fn convert_text_html_string(page: &str, columns: u16) -> Result<Strin
     let text = html2text::config::with_decorator(BaseTextDecorator {})
         .allow_width_overflow()
         .link_footnotes(true)
+        .no_table_borders() // borders are mostly a 200 columns rule between rows, costly for LLMs
         .no_link_wrapping() // a footnote url split in multiple lines is unusable
         .min_wrap_width(12) // avoid wrapping amounts in narrow columns
         .string_from_read(page.as_bytes(), columns as usize)?;
@@ -739,10 +718,14 @@ pub async fn route_infallible(
         .start_timer();
 
     let resp = route(req, state, db).await.unwrap_or_else(|e| {
-        let body = format!("{}", e);
+        let status = e.status_code();
+        if status.is_server_error() {
+            log::warn!("{e}");
+        }
         Response::builder()
-            .status(StatusCode::from(e)) // TODO map errors to bad request or internal error
-            .body(Bytes::from(body))
+            .status(status)
+            .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
+            .body(Bytes::from(format!("{}\n", e.public_message())))
             .expect("msg")
     });
 
@@ -754,6 +737,25 @@ pub async fn route_infallible(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn error_status_and_message() {
+        let txid = Txid::all_zeros();
+        let e = Error::RpcTxJson(StatusCode::NOT_FOUND, txid);
+        assert_eq!(e.status_code(), StatusCode::NOT_FOUND);
+        assert_eq!(e.public_message(), format!("Transaction {txid} not found"));
+
+        let e = Error::RpcTxJson(StatusCode::SERVICE_UNAVAILABLE, txid);
+        assert_eq!(e.status_code(), StatusCode::INTERNAL_SERVER_ERROR);
+
+        let e = Error::from(Txid::from_str("nothex").unwrap_err()).into_input_error();
+        assert_eq!(e.status_code(), StatusCode::BAD_REQUEST);
+        assert!(e.public_message().starts_with("Bad request: "));
+
+        let e = Error::NotFound.into_input_error();
+        assert_eq!(e.status_code(), StatusCode::NOT_FOUND);
+    }
 
     #[test]
     fn strip_span_tags_keeps_content() {
@@ -797,6 +799,10 @@ mod tests {
             format!("/signet/b/{txid}/2/text")
         );
         assert_eq!(footnote_url("/a/bc1q?q=1", None), "/a/bc1q/text?q=1");
+        assert_eq!(
+            footnote_url(&format!("/o/{txid}:0/100"), None),
+            format!("/o/{txid}:0/100/text")
+        );
         assert_eq!(
             footnote_url(&format!("/t/{txid}/hex"), None),
             format!("/t/{txid}/hex")

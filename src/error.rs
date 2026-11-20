@@ -85,7 +85,7 @@ pub enum Error {
     #[error("Bitcoin core RPC txout failed. txid:{1} vout:{2} status_code:{0}")]
     RpcTxOut(StatusCode, Txid, u32),
 
-    #[error("Bitcoin core RPC block json failed. block_hash:{0} status_code:{0}")]
+    #[error("Bitcoin core RPC block json failed. block_hash:{1} status_code:{0}")]
     RpcBlockJson(StatusCode, BlockHash),
 
     #[error("Bitcoin core RPC block hash by height json failed. height:{1} status_code:{0}")]
@@ -111,6 +111,9 @@ pub enum Error {
 
     #[error("Bad request")]
     BadRequest,
+
+    #[error("Bad request: {0}")]
+    InvalidInput(String),
 
     #[error("Page not found")]
     NotFound,
@@ -140,12 +143,62 @@ pub enum Error {
     HeightNotFound,
 }
 
-impl From<Error> for StatusCode {
-    fn from(e: Error) -> Self {
-        match e {
-            Error::BadRequest => StatusCode::BAD_REQUEST,
-            Error::NotFound => StatusCode::NOT_FOUND,
+impl Error {
+    /// Wraps errors happening while parsing the user request, they are caused by invalid input
+    pub fn into_input_error(self) -> Self {
+        match self {
+            Error::BadRequest | Error::NotFound | Error::InvalidInput(_) => self,
+            e => Error::InvalidInput(e.to_string()),
+        }
+    }
+
+    pub fn status_code(&self) -> StatusCode {
+        match self {
+            Error::BadRequest
+            | Error::InvalidInput(_)
+            | Error::InvalidPageNumber
+            | Error::ContentTypeUnsupported(_, _)
+            | Error::BitcoinAddress(_)
+            | Error::AddressWrongNetwork { .. } => StatusCode::BAD_REQUEST,
+
+            Error::NotFound | Error::HeightNotFound | Error::HeaderNotFound(_) => {
+                StatusCode::NOT_FOUND
+            }
+
+            Error::RpcTx(s, _)
+            | Error::RpcTxJson(s, _)
+            | Error::RpcTxOut(s, _, _)
+            | Error::RpcBlockJson(s, _)
+            | Error::RpcBlockRaw(s, _)
+            | Error::RpcBlockHeaderJson(s, _)
+            | Error::RpcBlockHashByHeightJson(s, _)
+                if *s == StatusCode::NOT_FOUND =>
+            {
+                StatusCode::NOT_FOUND
+            }
+
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
+    }
+
+    /// Message shown to the user, without node internals when the resource is simply missing
+    pub fn public_message(&self) -> String {
+        if self.status_code() == StatusCode::NOT_FOUND {
+            match self {
+                Error::RpcTx(_, txid) | Error::RpcTxJson(_, txid) => {
+                    return format!("Transaction {txid} not found")
+                }
+                Error::RpcTxOut(_, txid, vout) => return format!("Output {txid}:{vout} not found"),
+                Error::RpcBlockJson(_, hash)
+                | Error::RpcBlockRaw(_, hash)
+                | Error::RpcBlockHeaderJson(_, hash)
+                | Error::HeaderNotFound(hash) => return format!("Block {hash} not found"),
+                Error::RpcBlockHashByHeightJson(_, height) => {
+                    return format!("Block at height {height} not found")
+                }
+                _ => (),
+            }
+        }
+        self.to_string()
     }
 }

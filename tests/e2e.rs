@@ -124,6 +124,43 @@ fn check_pages() {
     let tx_hex = get(format!("http://{fbbe_addr}/t/{genesis_tx}/hex"));
     let tx: bitcoin::Transaction = bitcoin::consensus::encode::deserialize_hex(&tx_hex).unwrap();
     assert_eq!(tx.compute_txid().to_string(), genesis_tx);
+
+    // redirects keep the requested text format
+    let block_text = get(format!("http://{fbbe_addr}/b/{genesis_block}/text"));
+    assert!(block_text.starts_with("* Fast Bitcoin Block Explorer"));
+    assert_eq!(block_text, get(format!("http://{fbbe_addr}/text?s=0")));
+    assert_eq!(block_text, get(format!("http://{fbbe_addr}/h/0/text")));
+    assert_eq!(
+        get(format!("http://{fbbe_addr}/t/{genesis_tx}/text")),
+        get(format!("http://{fbbe_addr}/text?s={genesis_tx}"))
+    );
+
+    // missing resources are 404, invalid input is 400
+    let status = |url: String| minreq::get(url).send().unwrap();
+    let missing_tx = "00000000000000000000000000000000000000000000000000000000deadbeef";
+    let resp = status(format!("http://{fbbe_addr}/t/{missing_tx}/text"));
+    assert_eq!(resp.status_code, 404);
+    assert_eq!(
+        resp.as_str().unwrap(),
+        format!("Transaction {missing_tx} not found\n")
+    );
+    let missing_block = "000000000000000000000000000000000000000000000000000000000000beef";
+    assert_eq!(
+        status(format!("http://{fbbe_addr}/b/{missing_block}/text")).status_code,
+        404
+    );
+    assert_eq!(
+        status(format!("http://{fbbe_addr}/h/999999")).status_code,
+        404
+    );
+    assert_eq!(
+        status(format!("http://{fbbe_addr}/t/nothex/text")).status_code,
+        400
+    );
+    assert_eq!(
+        status(format!("http://{fbbe_addr}/a/notanaddress/text")).status_code,
+        400
+    );
 }
 #[test]
 fn check_wrong_network() {
