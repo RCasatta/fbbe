@@ -465,7 +465,7 @@ pub fn fee_rows(wf: WeightFee, last_in_block: Option<TxidWeightFee>) -> Markup {
         (AmountRow::new_with_sat("Fee", wf.fee as u64))
 
         tr {
-            th { "Fee rate (BTC/KvB)" }
+            th { "Fee rate (BTC/kvB)" }
             td class="number" { (wf) }
         }
         @if let Some(last_in_block) = last_in_block.as_ref()  {

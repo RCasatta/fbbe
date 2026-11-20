@@ -143,7 +143,7 @@ impl From<&TxidWeightFeeCompact> for TxidWeightFee {
 }
 
 impl WeightFee {
-    /// for example `0.00179955` (BTC/KvB)
+    /// for example `0.00179955` (BTC/kvB)
     fn rate_btc_over_kvb(&self) -> f64 {
         (self.fee as f64 / 100_000.0) / (self.weight.to_wu() as f64 / 4.0)
     }
