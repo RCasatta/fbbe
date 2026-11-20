@@ -80,7 +80,7 @@ pub fn page(
             @if !address_seen.is_empty() {
                 hgroup {
                     h2 { (txids_len) " transaction output" @if txids_len == 1 { "" } @else { "s" }  }
-                    p { "only confirmed, latest funding block" }
+                    p { "Only confirmed outputs from the latest block paying this address are listed, older outputs, spent or unspent, are not shown" }
                 }
 
                 table class="striped" {
