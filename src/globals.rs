@@ -29,6 +29,13 @@ pub(crate) fn networks() -> &'static [Network] {
     NETWORKS.get().expect("must be initialized")
 }
 
+/// Initialize the globals needed to render pages in unit tests, mainnet only
+#[cfg(test)]
+pub(crate) fn init_test_globals() {
+    let _ = NETWORK.set(Network::Bitcoin);
+    let _ = NETWORKS.set(vec![Network::Bitcoin]);
+}
+
 pub(crate) fn init_globals(args: &mut Arguments) {
     NETWORK
         .set(

@@ -156,6 +156,7 @@ pub fn page(
                 .take(IO_PER_PAGE),
         )
         .map(|((i, output), spent_status)| {
+            let i = i + output_start;
             let address = Address::from_script(&output.script_pubkey, network()).ok();
 
             let output_link = match spent_status {
@@ -223,7 +224,7 @@ pub fn page(
                 )
             };
 
-            (i + output_start, fields, amount, amount_text)
+            (i, fields, amount, amount_text)
         });
 
     let inputs_plural = Plural::new("input", tx.input.len());
@@ -501,5 +502,82 @@ pub fn script_type(script: &Script) -> Option<String> {
         None
     } else {
         Some(kind.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{req::Resource, route::ResponseType};
+    use bitcoin::{
+        absolute::LockTime, hashes::Hash, transaction::Version, Sequence, TxIn, Witness,
+    };
+
+    /// A tx with 12 inputs and 12 outputs, so that indexes 10 and 11 are on page 1
+    fn paginated_tx() -> (Transaction, Vec<TxOut>) {
+        let prev_txid = Txid::from_byte_array([1; 32]);
+        let input = (0..12)
+            .map(|vout| TxIn {
+                previous_output: OutPoint::new(prev_txid, vout + 3),
+                script_sig: ScriptBuf::new(),
+                sequence: Sequence::MAX,
+                witness: Witness::new(),
+            })
+            .collect();
+        let txout = TxOut {
+            value: Amount::from_sat(1000),
+            script_pubkey: ScriptBuf::new(),
+        };
+        let tx = Transaction {
+            version: Version::TWO,
+            lock_time: LockTime::ZERO,
+            input,
+            output: vec![txout.clone(); 12],
+        };
+        (tx, vec![txout; 12])
+    }
+
+    fn render(tx: &Transaction, prevouts: &[TxOut], output_status: Vec<OutputStatus>) -> String {
+        crate::globals::init_test_globals();
+        let txid = tx.compute_txid();
+        let mempool_fees = BlockTemplate {
+            highest: None,
+            last_in_block: None,
+            middle_in_block: None,
+            transactions: None,
+            mempool: Default::default(),
+        };
+        let parsed = ParsedRequest {
+            resource: Resource::Tx(txid, 1),
+            response_type: ResponseType::Html,
+            vary_accept: false,
+        };
+        page(
+            txid,
+            tx,
+            None,
+            prevouts,
+            None,
+            output_status,
+            1,
+            mempool_fees,
+            &parsed,
+            false,
+            None,
+        )
+        .unwrap()
+        .into_string()
+    }
+
+    #[test]
+    fn spent_output_links_use_tx_index() {
+        let (tx, prevouts) = paginated_tx();
+        let txid = tx.compute_txid();
+        let status = (0..12).map(|_| OutputStatus::ConfirmedSpent(100)).collect();
+        let html = render(&tx, &prevouts, status);
+        assert!(html.contains(&format!("/o/{txid}:10/100")), "{html}");
+        assert!(html.contains(&format!("/o/{txid}:11/100")));
+        assert!(!html.contains(&format!("/o/{txid}:0/100")));
+        assert!(!html.contains(&format!("/o/{txid}:1/100")));
     }
 }
