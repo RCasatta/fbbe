@@ -1,5 +1,6 @@
 use std::str::from_utf8;
 
+use bitcoin::absolute::LockTime;
 use bitcoin::Txid;
 use bitcoin::{
     blockdata::script::Instruction, consensus::encode::serialize_hex, Address, Amount, BlockHash,
@@ -13,7 +14,7 @@ use crate::{
     pages::size_rows,
     render::{self, AmountRow, Html, Plural},
     req::ParsedRequest,
-    rpc::headers::HeightTime,
+    rpc::{headers::HeightTime, ts_to_date_time_utc},
     state::{BlockTemplate, SpendPoint},
     threads::{
         index_addresses::Height,
@@ -406,7 +407,7 @@ pub fn page(
                     }
                     tr {
                         th { "Lock time" }
-                        td class="right" { (tx.lock_time.to_consensus_u32()) }
+                        td class="right" { (lock_time_str(tx)) }
                     }
                     tr {
                         th { "Hex" }
@@ -477,6 +478,23 @@ fn amount_str(val: u64) -> String {
             "{:.8}",
             Amount::from_sat(val).to_float_in(Denomination::Bitcoin)
         )
+    }
+}
+
+/// Lock time value with its meaning: a block height or, from 500000000, a unix time
+fn lock_time_str(tx: &Transaction) -> String {
+    let value = tx.lock_time.to_consensus_u32();
+    if value == 0 {
+        return "0".to_string();
+    }
+    let meaning = match tx.lock_time {
+        LockTime::Blocks(h) => format!("height {h}"),
+        LockTime::Seconds(t) => ts_to_date_time_utc(t.to_consensus_u32()),
+    };
+    if tx.is_lock_time_enabled() {
+        format!("{value} ({meaning})")
+    } else {
+        format!("{value} ({meaning}, not enforced: all inputs are final)")
     }
 }
 
@@ -631,5 +649,21 @@ mod tests {
         assert_eq!(script_type(&p2a).as_deref(), Some("v1 p2a"));
         let other = ScriptBuf::from_bytes(vec![0x51, 0x02, 0x4e, 0x74]);
         assert_eq!(script_type(&other), None);
+    }
+
+    #[test]
+    fn lock_time_meaning() {
+        let genesis = bitcoin::blockdata::constants::genesis_block(bitcoin::Network::Bitcoin);
+        let mut tx = genesis.txdata[0].clone();
+        assert_eq!(lock_time_str(&tx), "0");
+        tx.lock_time = LockTime::from_consensus(840_000);
+        assert_eq!(
+            lock_time_str(&tx),
+            "840000 (height 840000, not enforced: all inputs are final)"
+        );
+        tx.input[0].sequence = bitcoin::Sequence::ENABLE_LOCKTIME_NO_RBF;
+        assert_eq!(lock_time_str(&tx), "840000 (height 840000)");
+        tx.lock_time = LockTime::from_consensus(1_700_000_000);
+        assert_eq!(lock_time_str(&tx), "1700000000 (2023-11-14 22:13:20 UTC)");
     }
 }
