@@ -93,6 +93,9 @@ pub struct SharedState {
 
     /// A note on known transactions
     pub known_txs: HashMap<Txid, String>,
+
+    /// Transactions with a fee computation running in the background, see `route::tx_page_prevouts_and_fee`
+    pub fee_in_flight: Mutex<FxHashSet<Txid>>,
 }
 
 #[derive(Debug, Clone)]
@@ -164,6 +167,7 @@ impl SharedState {
             minutes_since_block: Mutex::new(None),
             mempool_spending: Mutex::new(FxHashMap::default()),
             known_txs,
+            fee_in_flight: Mutex::new(FxHashSet::default()),
         }
     }
 
@@ -341,21 +345,21 @@ impl SharedState {
             .inc_by(needed_len as f64);
         let start = Instant::now();
 
-        let got_txs: Vec<_> = stream::iter(needed)
+        // Cached as they arrive: memory doesn't grow with the number of inputs and the progress
+        // isn't lost if the request is dropped, eg. on client timeout
+        stream::iter(needed)
             .map(rpc::tx::call_raw)
             .buffer_unordered(self.args.fetch_parallelism)
-            .collect()
+            .for_each(|tx| async move {
+                if let Ok(tx) = tx {
+                    if let Ok(res) = bsl::Transaction::parse(&tx) {
+                        let tx = res.parsed();
+                        let txid = Txid::from_byte_array(tx.txid_sha2().into());
+                        let _ = self.txs.lock().await.insert(txid, tx);
+                    }
+                }
+            })
             .await;
-
-        let mut txs = self.txs.lock().await;
-
-        for tx in got_txs.into_iter().flatten() {
-            if let Ok(res) = bsl::Transaction::parse(&tx) {
-                let tx = res.parsed();
-                let txid = Txid::from_byte_array(tx.txid_sha2().into());
-                let _ = txs.insert(txid, tx);
-            }
-        }
 
         if needed_len > 10 {
             log::info!(
