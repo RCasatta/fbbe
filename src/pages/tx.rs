@@ -115,6 +115,12 @@ pub fn page(
                 let sequence = format!("0x{:x}", input.sequence);
 
                 let mut fields = vec![("Previous outpoint".to_string(), po.html())];
+                if let Some(previous_address) = previous_script_pubkey
+                    .as_ref()
+                    .and_then(|s| Address::from_script(s, network()).ok())
+                {
+                    fields.push(("Previous address".to_string(), previous_address.html()));
+                }
                 if let Some(previous_script_pubkey) = previous_script_pubkey {
                     let label = match previous_script_pubkey_type {
                         Some(t) => format!("Previous script pubkey ({t})"),
