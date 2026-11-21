@@ -112,7 +112,11 @@ pub fn page(
                     .then(|| witness.last().map(|e| ScriptBuf::from(e.to_vec())))
                     .flatten();
 
-                let sequence = format!("0x{:x}", input.sequence);
+                let sequence = if input.sequence.is_rbf() {
+                    format!("0x{:x} (signals RBF)", input.sequence)
+                } else {
+                    format!("0x{:x}", input.sequence)
+                };
 
                 let mut fields = vec![("Previous outpoint".to_string(), po.html())];
                 if let Some(previous_address) = previous_script_pubkey
@@ -391,6 +395,14 @@ pub fn page(
                     tr {
                         th { "Version" }
                         td class="right" { (tx.version) }
+                    }
+                    @if !tx.is_coinbase() {
+                        tr {
+                            th { "Replace-by-fee (BIP125)" }
+                            td class="right" {
+                                @if tx.is_explicitly_rbf() { "Signaled" } @else { "Not signaled" }
+                            }
+                        }
                     }
                     tr {
                         th { "Lock time" }
