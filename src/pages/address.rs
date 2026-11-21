@@ -159,15 +159,7 @@ fn create_bmp_base64_qr(message: &str) -> Result<String, Error> {
     Ok(to_data_url(cursor.into_inner(), "image/bmp"))
 }
 
-pub fn text_page(address: &Address, page: &str, col: u16) -> Result<String, Error> {
-    let mut s = convert_text_html_string(page, col)?;
-    s.push('\n');
-    s.push_str(&create_string_qr(&address.to_qr_uri())?);
-    Ok(s)
-}
-/// Creates QR containing `message` and encode it in data url
-pub(crate) fn create_string_qr(message: &str) -> Result<String, Error> {
-    let qr = QrCode::new(message.as_bytes())?;
-
-    Ok(qr.to_string(true, 2))
+/// No ASCII QR code in text: agents can't scan it and it is a lot of noise
+pub fn text_page(page: &str, col: u16) -> Result<String, Error> {
+    convert_text_html_string(page, col)
 }
