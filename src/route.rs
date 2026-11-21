@@ -3,7 +3,7 @@ use crate::{
     error::Error,
     network,
     pages::{self, tx::OutputStatus},
-    render::MempoolSection,
+    render::{Io, MempoolSection, TxIoPath},
     req::{self, Resource},
     rpc,
     state::tx_output,
@@ -329,7 +329,8 @@ async fn route_parsed(
             }
 
             let (txid, vin) = visitor.1.ok_or(Error::NotFound)?;
-            redirect(&format!("t/{txid}#i{vin}"), parsed_req.response_type)?
+            let path = TxIoPath(&txid, Io::Input, vin).to_string();
+            redirect(&path, parsed_req.response_type)?
         }
 
         Resource::SearchHeight(height) => {

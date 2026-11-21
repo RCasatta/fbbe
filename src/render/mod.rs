@@ -15,6 +15,7 @@ mod witness;
 pub use amount_row::AmountRow;
 pub use block_hash::BlockHash;
 pub use mempool::MempoolSection;
+pub use outpoint::{tx_io_link, Io, TxIoPath};
 pub use plural::Plural;
 pub use size_row::SizeRow;
 pub use txid::Txid;

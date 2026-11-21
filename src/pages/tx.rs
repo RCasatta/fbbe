@@ -97,7 +97,7 @@ pub fn page(
             if po == &OutPoint::null() {
                 None
             } else {
-                let link = format!("{}t/{}#o{}", network().as_url_path(), po.txid, po.vout);
+                let link = render::tx_io_link(&po.txid, render::Io::Output, po.vout as usize);
                 let amount = amount_str(previous_output.value.to_sat());
                 let previous_script_pubkey = (previous_output.value.to_sat() != u64::MAX)
                     .then(|| previous_output.script_pubkey.clone());
@@ -164,12 +164,11 @@ pub fn page(
                     let n = network().as_url_path();
                     Some(format!("{n}o/{txid}:{i}/{h}"))
                 }
-                OutputStatus::UnconfirmedSpent(s) => {
-                    let n = network().as_url_path();
-                    let txid = s.txid();
-                    let vin = s.vin();
-                    Some(format!("{n}t/{txid}#i{vin}"))
-                }
+                OutputStatus::UnconfirmedSpent(s) => Some(render::tx_io_link(
+                    s.txid(),
+                    render::Io::Input,
+                    s.vin() as usize,
+                )),
                 OutputStatus::Unspent => None,
                 OutputStatus::Unknown => None,
             };
@@ -579,5 +578,25 @@ mod tests {
         assert!(html.contains(&format!("/o/{txid}:11/100")));
         assert!(!html.contains(&format!("/o/{txid}:0/100")));
         assert!(!html.contains(&format!("/o/{txid}:1/100")));
+    }
+
+    #[test]
+    fn io_links_point_to_the_right_page() {
+        let (tx, prevouts) = paginated_tx();
+        let spending_txid = Txid::from_byte_array([2; 32]);
+        let status = (0..12)
+            .map(|vin| OutputStatus::UnconfirmedSpent(SpendPoint::new(spending_txid, vin + 3)))
+            .collect();
+        let html = render(&tx, &prevouts, status);
+        // output 10 is spent by input 13 of spending_txid, on its page 1
+        assert!(
+            html.contains(&format!("/t/{spending_txid}/1#i13")),
+            "{html}"
+        );
+        assert!(!html.contains(&format!("/t/{spending_txid}#i13")));
+        // input 10 spends output 13 of prev_txid, on its page 1
+        let prev_txid = Txid::from_byte_array([1; 32]);
+        assert!(html.contains(&format!("href=\"/t/{prev_txid}/1#o13\"")));
+        assert!(!html.contains(&format!("/t/{prev_txid}#o13")));
     }
 }

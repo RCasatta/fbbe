@@ -1,10 +1,13 @@
 use maud::{html, Render};
 
-use crate::{globals::network, threads::index_addresses::Spending, NetworkExt};
+use crate::{
+    render::{tx_io_link, Io},
+    threads::index_addresses::Spending,
+};
 
 impl Render for Spending {
     fn render(&self) -> maud::Markup {
-        let link = format!("{}t/{}#i{}", network().as_url_path(), self.txid, self.vin); //FIXME, broken for more than 9 (ling with page)
+        let link = tx_io_link(&self.txid, Io::Input, self.vin);
 
         html! {
             a href=(link) {
