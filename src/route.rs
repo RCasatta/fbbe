@@ -26,7 +26,11 @@ use hyper::{
 };
 use mime::{APPLICATION_OCTET_STREAM, TEXT_HTML_UTF_8, TEXT_PLAIN_UTF_8};
 use prometheus::Encoder;
-use std::{convert::Infallible, sync::Arc, time::Instant};
+use std::{
+    convert::Infallible,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 const CSS_LAST_MODIFIED: &str = "2022-10-03 07:53:03 UTC";
 const ABOUT_PAGE_LAST_MODIFIED: &str = "2022-12-16 07:53:03 UTC";
@@ -249,7 +253,7 @@ async fn route_parsed(
                 None => None,
             };
             let (prevouts, fee) =
-                tx_page_prevouts_and_fee(txid, &tx, &state, db.as_deref(), pagination).await?;
+                tx_page_prevouts_and_fee(txid, &tx, &state, db.as_ref(), pagination).await?;
             let current_tip = state.chain_info.lock().await.clone();
             let mempool_fees = state.mempool_fees.lock().await.clone();
             let known_tx = state.known_txs.get(&txid).cloned();
@@ -729,38 +733,56 @@ async fn fetch_prevouts_page(
 async fn tx_page_prevouts_and_fee(
     txid: Txid,
     tx: &bitcoin::Transaction,
-    state: &SharedState,
-    db: Option<&Database>,
+    state: &Arc<SharedState>,
+    db: Option<&Arc<Database>>,
     page: usize,
 ) -> Result<(Vec<bitcoin::TxOut>, Option<u64>), Error> {
     const FEE_CACHE_INPUT_THRESHOLD: usize = 10;
+    /// Waiting time for the fee of a large transaction, then the page is served without it
+    const FEE_WAIT: Duration = Duration::from_secs(10);
 
-    if tx.input.len() > FEE_CACHE_INPUT_THRESHOLD {
-        // For large transactions, a cached fee lets us fetch only the prevouts visible in the page.
-        if let Some(db) = db {
-            if let Some(fee) = db.get_fee(&txid) {
-                let prevouts = fetch_prevouts_page(txid, tx, state, page).await?;
-                return Ok((prevouts, Some(fee)));
-            }
+    let db = match db {
+        Some(db) if tx.input.len() > FEE_CACHE_INPUT_THRESHOLD && !tx.is_coinbase() => db,
+        _ => {
+            let prevouts = fetch_prevouts(txid, tx, state, false).await?;
+            let fee = (!tx.is_coinbase()).then(|| fee(tx, &prevouts));
+            return Ok((prevouts, fee));
         }
-    }
-
-    let prevouts = fetch_prevouts(txid, tx, state, false).await?;
-    let fee = if tx.is_coinbase() {
-        None
-    } else {
-        let sum_outputs: u64 = tx.output.iter().map(|o| o.value.to_sat()).sum();
-        let sum_inputs: u64 = prevouts.iter().map(|o| o.value.to_sat()).sum();
-        Some(sum_inputs.saturating_sub(sum_outputs))
     };
 
-    if tx.input.len() > FEE_CACHE_INPUT_THRESHOLD {
-        if let (Some(db), Some(fee)) = (db, fee) {
-            db.put_fee(&txid, fee)?;
-        }
+    // For large transactions, a cached fee lets us fetch only the prevouts visible in the page.
+    if let Some(fee) = db.get_fee(&txid) {
+        let prevouts = fetch_prevouts_page(txid, tx, state, page).await?;
+        return Ok((prevouts, Some(fee)));
     }
 
-    Ok((prevouts, fee))
+    // Fetching all the prevouts could take longer than the client or proxy timeout (eg. 20k
+    // inputs), a dropped request would lose the work, so it runs in a task that caches the fee.
+    if state.fee_in_flight.lock().await.insert(txid) {
+        let (state, db, tx) = (state.clone(), db.clone(), tx.clone());
+        let handle = tokio::spawn(async move {
+            let result = fetch_prevouts(txid, &tx, &state, false).await;
+            state.fee_in_flight.lock().await.remove(&txid);
+            let prevouts = result?;
+            let fee = fee(&tx, &prevouts);
+            db.put_fee(&txid, fee)?;
+            Ok::<_, Error>((prevouts, fee))
+        });
+        match tokio::time::timeout(FEE_WAIT, handle).await {
+            Ok(Ok(result)) => return result.map(|(prevouts, fee)| (prevouts, Some(fee))),
+            Ok(Err(join_error)) => return Err(Error::Join(join_error)),
+            Err(_elapsed) => log::info!("fee of {txid} still computing after {FEE_WAIT:?}"),
+        }
+    }
+    let prevouts = fetch_prevouts_page(txid, tx, state, page).await?;
+    Ok((prevouts, None))
+}
+
+/// In satoshi, `prevouts` are all the outputs spent by the non-coinbase `tx`
+fn fee(tx: &bitcoin::Transaction, prevouts: &[bitcoin::TxOut]) -> u64 {
+    let sum_outputs: u64 = tx.output.iter().map(|o| o.value.to_sat()).sum();
+    let sum_inputs: u64 = prevouts.iter().map(|o| o.value.to_sat()).sum();
+    sum_inputs.saturating_sub(sum_outputs)
 }
 
 pub async fn route_infallible(
