@@ -101,11 +101,15 @@ impl TextDecorator for BaseTextDecorator {
 
 /// Internal links to pages having a text version are converted to point to it, so that following
 /// links from a text page remains in text, if `dns_host` is given links are made absolute.
+/// The fragment is kept, because it tells which input or output of a tx page is linked.
 pub(crate) fn footnote_url(link: &str, dns_host: Option<&str>) -> String {
     if !link.starts_with('/') {
         return link.to_string();
     }
-    let link = link.split('#').next().unwrap_or_default();
+    let (link, fragment) = match link.split_once('#') {
+        Some((link, fragment)) => (link, Some(fragment)),
+        None => (link, None),
+    };
     let (path, query) = match link.split_once('?') {
         Some((path, query)) => (path, Some(query)),
         None => (link, None),
@@ -138,6 +142,10 @@ pub(crate) fn footnote_url(link: &str, dns_host: Option<&str>) -> String {
     if let Some(query) = query {
         result.push('?');
         result.push_str(query);
+    }
+    if let Some(fragment) = fragment {
+        result.push('#');
+        result.push_str(fragment);
     }
     result
 }

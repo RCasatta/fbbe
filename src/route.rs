@@ -861,7 +861,11 @@ mod tests {
         assert_eq!(footnote_url("/signet/", None), "/signet/text");
         assert_eq!(
             footnote_url(&format!("/t/{txid}#o2"), host),
-            format!("https://fbbe.info/t/{txid}/text")
+            format!("https://fbbe.info/t/{txid}/text#o2")
+        );
+        assert_eq!(
+            footnote_url(&format!("/signet/t/{txid}/1#i12"), None),
+            format!("/signet/t/{txid}/1/text#i12")
         );
         assert_eq!(
             footnote_url(&format!("/signet/b/{txid}/2"), None),
