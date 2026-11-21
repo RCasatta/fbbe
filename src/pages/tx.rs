@@ -86,6 +86,8 @@ pub fn page(
         .then(|| format!("{}t/{}/{}#outputs", network_url_path, txid, page + 1));
     let separator_output = (prev_output.is_some() && next_output.is_some()).then_some(" | ");
 
+    let block_height = height_time.as_ref().map(|(_, h)| h.height);
+
     let inputs = tx
         .input
         .iter()
@@ -96,7 +98,7 @@ pub fn page(
         .map(|(i, (input, previous_output))| {
             let po = &input.previous_output;
             if po == &OutPoint::null() {
-                None
+                coinbase_input(i + input_start, input, block_height)
             } else {
                 let link = render::tx_io_link(&po.txid, render::Io::Output, po.vout as usize);
                 let amount = amount_str(previous_output.value.to_sat());
@@ -150,7 +152,7 @@ pub fn page(
                 let amount_text = html! { (amount) };
                 let amount = html! { a href=(link) { (amount) } };
 
-                Some((i + input_start, fields, amount, amount_text))
+                (i + input_start, fields, amount, amount_text)
             }
         });
 
@@ -225,6 +227,9 @@ pub fn page(
             } else {
                 let status = if script_pubkey.is_op_return() {
                     "Provably unspendable"
+                } else if block_height == Some(0) {
+                    // the genesis coinbase is not in the utxo set
+                    "Unspendable genesis output"
                 } else {
                     "Unspent"
                 };
@@ -336,15 +341,8 @@ pub fn page(
 
             table class="striped" {
                 tbody {
-                    @for val in inputs {
-                        @if let Some((i, fields, amount, amount_text)) = val {
-                            (io_rows(parsed, format!("i{i}"), i, i != input_start, &fields, amount, amount_text))
-                        }
-                        @else {
-                            td { "Coinbase" }
-                            td {}
-
-                        }
+                    @for (i, fields, amount, amount_text) in inputs {
+                        (io_rows(parsed, format!("i{i}"), i, i != input_start, &fields, amount, amount_text))
                     }
                 }
                 @if let Some(next) = next_input {
@@ -478,6 +476,86 @@ fn amount_str(val: u64) -> String {
             "{:.8}",
             Amount::from_sat(val).to_float_in(Denomination::Bitcoin)
         )
+    }
+}
+
+type IoRow = (usize, Vec<(String, Markup)>, Markup, Markup);
+
+/// The coinbase input has no previous output, show what miners put in the script sig
+fn coinbase_input(index: usize, input: &bitcoin::TxIn, block_height: Option<u32>) -> IoRow {
+    let script_sig = &input.script_sig;
+    let mut fields = vec![("Coinbase script sig".to_string(), script_sig.html())];
+    let ascii = printable_ascii(script_sig);
+    if !ascii.is_empty() {
+        fields.push((
+            "Coinbase script sig in ASCII".to_string(),
+            html! { code { (ascii) } },
+        ));
+    }
+    if let Some(height) = block_height.filter(|h| bip34_height(script_sig) == Some(*h)) {
+        fields.push((
+            "Height in script sig (BIP34)".to_string(),
+            html! { code { (height) } },
+        ));
+    }
+    fields.push((
+        "Sequence".to_string(),
+        html! { code { (format!("0x{:x}", input.sequence)) } },
+    ));
+    if !input.witness.is_empty() {
+        fields.push(("Witness".to_string(), input.witness.html()));
+    }
+    (
+        index,
+        fields,
+        html! { "Coinbase" },
+        html! { "none (coinbase)" },
+    )
+}
+
+/// Runs of at least 4 printable ASCII chars in the pushes of `script`, like the genesis
+/// "The Times" message or pool tags. Falls back to the raw bytes when the script doesn't parse.
+fn printable_ascii(script: &Script) -> String {
+    const MIN_RUN: usize = 4;
+    let mut runs: Vec<&[u8]> = vec![];
+    let pushes: Option<Vec<&[u8]>> = script
+        .instructions()
+        .map(|i| {
+            i.ok().map(|i| match i {
+                Instruction::PushBytes(p) => p.as_bytes(),
+                Instruction::Op(_) => &[][..],
+            })
+        })
+        .collect();
+    let chunks = pushes.unwrap_or_else(|| vec![script.as_bytes()]);
+    for chunk in chunks {
+        runs.extend(
+            chunk
+                .split(|b| !(0x20..=0x7e).contains(b))
+                .filter(|run| run.len() >= MIN_RUN),
+        );
+    }
+    runs.iter()
+        .filter_map(|run| from_utf8(run).ok())
+        .map(str::trim)
+        .filter(|run| !run.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// The block height pushed as first item of a coinbase script sig, see BIP34
+fn bip34_height(script: &Script) -> Option<u32> {
+    match script.instructions().next()?.ok()? {
+        Instruction::PushBytes(p) if p.len() <= 4 => {
+            let mut buf = [0u8; 4];
+            buf[..p.len()].copy_from_slice(p.as_bytes());
+            Some(u32::from_le_bytes(buf))
+        }
+        Instruction::Op(op) => {
+            let n = op.to_u8();
+            (0x51..=0x60).contains(&n).then(|| (n - 0x50) as u32)
+        }
+        _ => None,
     }
 }
 
@@ -649,6 +727,31 @@ mod tests {
         assert_eq!(script_type(&p2a).as_deref(), Some("v1 p2a"));
         let other = ScriptBuf::from_bytes(vec![0x51, 0x02, 0x4e, 0x74]);
         assert_eq!(script_type(&other), None);
+    }
+
+    #[test]
+    fn coinbase_script_sig() {
+        let genesis = bitcoin::blockdata::constants::genesis_block(bitcoin::Network::Bitcoin);
+        let script_sig = &genesis.txdata[0].input[0].script_sig;
+        assert_eq!(
+            printable_ascii(script_sig),
+            "The Times 03/Jan/2009 Chancellor on brink of second bailout for banks"
+        );
+        assert_ne!(bip34_height(script_sig), Some(0));
+
+        // BIP34 height 840000 followed by a pool tag
+        let script_sig = ScriptBuf::from_bytes(
+            bitcoin::hashes::hex::FromHex::from_hex(
+                "0340d10c1a2f5669614254432f4d696e656420627920627463646f6d39332f",
+            )
+            .unwrap(),
+        );
+        assert_eq!(bip34_height(&script_sig), Some(840_000));
+        assert_eq!(printable_ascii(&script_sig), "/ViaBTC/Mined by btcdom93/");
+
+        let regtest = ScriptBuf::from_bytes(vec![0x51, 0x00]);
+        assert_eq!(bip34_height(&regtest), Some(1));
+        assert_eq!(printable_ascii(&regtest), "");
     }
 
     #[test]
