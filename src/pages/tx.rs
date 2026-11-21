@@ -492,6 +492,8 @@ pub fn script_type(script: &Script) -> Option<String> {
         "v0 p2wsh"
     } else if script.is_p2tr() {
         "v1 p2tr"
+    } else if is_p2a(script) {
+        "v1 p2a"
     } else if script.is_op_return() {
         "op return"
     } else {
@@ -502,6 +504,11 @@ pub fn script_type(script: &Script) -> Option<String> {
     } else {
         Some(kind.to_string())
     }
+}
+
+/// Pay-to-anchor (BIP433): `OP_1 OP_PUSHBYTES_2 4e73`
+fn is_p2a(script: &Script) -> bool {
+    script.as_bytes() == [0x51, 0x02, 0x4e, 0x73]
 }
 
 #[cfg(test)]
@@ -598,5 +605,13 @@ mod tests {
         let prev_txid = Txid::from_byte_array([1; 32]);
         assert!(html.contains(&format!("href=\"/t/{prev_txid}/1#o13\"")));
         assert!(!html.contains(&format!("/t/{prev_txid}#o13")));
+    }
+
+    #[test]
+    fn script_type_p2a() {
+        let p2a = ScriptBuf::from_bytes(vec![0x51, 0x02, 0x4e, 0x73]);
+        assert_eq!(script_type(&p2a).as_deref(), Some("v1 p2a"));
+        let other = ScriptBuf::from_bytes(vec![0x51, 0x02, 0x4e, 0x74]);
+        assert_eq!(script_type(&other), None);
     }
 }
