@@ -500,16 +500,16 @@ fn lock_time_str(tx: &Transaction) -> String {
 
 pub fn fee_rows(wf: WeightFee, last_in_block: Option<TxidWeightFee>) -> Markup {
     html! {
-        (AmountRow::new_with_sat("Fee", wf.fee as u64))
+        (AmountRow::new_with_sat("Fee (BTC)", wf.fee as u64))
 
         tr {
             th { "Fee rate (BTC/kvB)" }
-            td class="number" { (wf) }
+            td class="number" { (wf) " (" (wf.sat_over_vb_str()) ")" }
         }
         @if let Some(last_in_block) = last_in_block.as_ref()  {
             tr {
-                th { em { "Last in block" } }
-                td class="number" { (last_in_block.wf) }
+                th { em { "Last in block (BTC/kvB)" } }
+                td class="number" { (last_in_block.wf) " (" (last_in_block.wf.sat_over_vb_str()) ")" }
             }
         }
     }
