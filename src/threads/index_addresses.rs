@@ -239,11 +239,19 @@ pub struct IndexBlockResult {
     spending_sh: BTreeSet<OutPoint>,
 }
 
-/// Outputs of an address funded in its latest funding block, with the balance when computable
+/// A page of the outputs of an address funded in its latest funding block, with the balance
+/// when computable
 pub struct AddressOutputs {
+    /// at most [`OUTPUTS_PER_PAGE`] outputs, starting at `page * OUTPUTS_PER_PAGE`
     pub seen: Vec<AddressSeen>,
+    /// number of outputs paying the address in its latest funding block, over all pages
+    pub total: usize,
+    pub page: usize,
     pub balance: Balance,
 }
+
+/// Outputs listed in an address page, each one is checked for spending
+pub const OUTPUTS_PER_PAGE: usize = MAX_SPENDING_CHECKS;
 
 /// The confirmed balance is known only when every output ever received is in `seen` and has
 /// been checked for spending, the index keeps only funding heights, not the full history
@@ -302,6 +310,7 @@ pub async fn address_seen(
     address: &Address,
     db: Arc<Database>,
     shared_state: Arc<SharedState>,
+    page: usize,
 ) -> Result<AddressOutputs, Error> {
     let script_pubkey = address.script_pubkey();
     // a second height is enough to know the history is not in a single block
@@ -309,22 +318,22 @@ pub async fn address_seen(
     let multiple_funding_blocks = heights.len() > 1;
     heights.truncate(1);
     let blocks = shared_state.blocks_from_heights(&heights).await?;
+    let start = page * OUTPUTS_PER_PAGE;
     let mut outpoints_with_script_pubkey = vec![];
+    let mut total = 0;
     for (h, b) in blocks {
         let t = shared_state.height_time(h).await.unwrap();
-        outpoints_with_script_pubkey.extend(
-            find_outpoints_with_script_pubkey(&script_pubkey, b)
-                .into_iter()
-                .map(|e| (h, e, t)),
-        );
+        let (outpoints, count) =
+            find_outpoints_with_script_pubkey(&script_pubkey, b, start, OUTPUTS_PER_PAGE);
+        total += count;
+        outpoints_with_script_pubkey.extend(outpoints.into_iter().map(|e| (h, e, t)));
+    }
+    if page > 0 && start >= total {
+        return Err(Error::InvalidPageNumber);
     }
 
     let mut heights_with_spending = BTreeSet::new();
-    for (_, (outpoint, _), _) in outpoints_with_script_pubkey
-        .iter()
-        .take(MAX_SPENDING_CHECKS)
-    {
-        //TODO handle pagination?
+    for (_, (outpoint, _), _) in outpoints_with_script_pubkey.iter() {
         if let Some(h) = db.get_spending(outpoint) {
             heights_with_spending.insert(h);
         }
@@ -346,7 +355,7 @@ pub async fn address_seen(
         Balance::IndexSyncing
     } else if multiple_funding_blocks {
         Balance::MultipleFundingBlocks
-    } else if address_seen.len() > MAX_SPENDING_CHECKS {
+    } else if total > MAX_SPENDING_CHECKS {
         Balance::TooManyOutputs
     } else {
         // a spending found in the db but not in its block is a key collision, so it's unspent
@@ -356,6 +365,8 @@ pub async fn address_seen(
 
     Ok(AddressOutputs {
         seen: address_seen,
+        total,
+        page,
         balance,
     })
 }
@@ -411,14 +422,20 @@ fn find_txids_with_prevout(
     bsl::Block::visit(&b.0, &mut visitor).unwrap();
 }
 
-/// Add txid to txids of transactions in block `b` containing `script_pubkey` in the outputs
-/// Returns the outpoints paying to `script_pubkey` in the block, with their value in satoshi
+/// Returns the outpoints paying to `script_pubkey` in the block, with their value in satoshi,
+/// skipping the first `skip` and keeping at most `take`, and the count of all the matching ones.
+/// Only the requested window is kept in memory, an address could have thousands of outputs.
 fn find_outpoints_with_script_pubkey(
     script_pubkey: &ScriptBuf,
     b: SerBlock,
-) -> Vec<(OutPoint, u64)> {
+    skip: usize,
+    take: usize,
+) -> (Vec<(OutPoint, u64)>, usize) {
     struct TxContainingScript<'a> {
         outpoints: Vec<(OutPoint, u64)>,
+        count: usize,
+        skip: usize,
+        take: usize,
         script_pubkey: &'a [u8],
         current_tx_matching_vouts: Vec<(u32, u64)>,
     }
@@ -436,10 +453,21 @@ fn find_outpoints_with_script_pubkey(
             tx: &bitcoin_slices::bsl::Transaction,
         ) -> core::ops::ControlFlow<()> {
             if !self.current_tx_matching_vouts.is_empty() {
+                // the txid hashing is skipped for matches outside the window
+                let end = self.skip.saturating_add(self.take);
+                let matching = self.current_tx_matching_vouts.len();
+                if self.count + matching <= self.skip || self.count >= end {
+                    self.count += matching;
+                    self.current_tx_matching_vouts.clear();
+                    return core::ops::ControlFlow::Continue(());
+                }
                 let txid: Txid = tx.txid().into();
                 for (vout, value) in self.current_tx_matching_vouts.iter() {
-                    self.outpoints
-                        .push((OutPoint { txid, vout: *vout }, *value));
+                    if self.count >= self.skip && self.outpoints.len() < self.take {
+                        self.outpoints
+                            .push((OutPoint { txid, vout: *vout }, *value));
+                    }
+                    self.count += 1;
                 }
                 self.current_tx_matching_vouts.clear();
             }
@@ -448,11 +476,14 @@ fn find_outpoints_with_script_pubkey(
     }
     let mut visitor = TxContainingScript {
         script_pubkey: script_pubkey.as_bytes(),
-        outpoints: vec![],
+        outpoints: Vec::with_capacity(take.min(OUTPUTS_PER_PAGE)),
+        count: 0,
+        skip,
+        take,
         current_tx_matching_vouts: vec![],
     };
     bsl::Block::visit(&b.0, &mut visitor).unwrap(); // TODO
-    visitor.outpoints
+    (visitor.outpoints, visitor.count)
 }
 
 pub fn index_block(block: &Block, height: u32) -> Result<IndexBlockResult, crate::Error> {
@@ -601,13 +632,76 @@ mod test {
 
         let block = genesis_block(Network::Bitcoin);
         let script_pubkey = block.txdata[0].output[0].script_pubkey.clone();
-        let found =
-            super::find_outpoints_with_script_pubkey(&script_pubkey, SerBlock(serialize(&block)));
+        let found = super::find_outpoints_with_script_pubkey(
+            &script_pubkey,
+            SerBlock(serialize(&block)),
+            0,
+            10,
+        );
         let txid = block.txdata[0].compute_txid();
         assert_eq!(
             found,
-            vec![(bitcoin::OutPoint { txid, vout: 0 }, 5_000_000_000)]
+            (
+                vec![(bitcoin::OutPoint { txid, vout: 0 }, 5_000_000_000)],
+                1
+            )
         );
+    }
+
+    #[test]
+    fn find_outpoints_window() {
+        use crate::rpc::block::SerBlock;
+        use bitcoin::{
+            absolute::LockTime, blockdata::constants::genesis_block, consensus::serialize,
+            transaction::Version, Amount, Network, OutPoint, ScriptBuf, Transaction, TxIn, TxOut,
+        };
+
+        let script = ScriptBuf::from_bytes(vec![0x51]);
+        let other = ScriptBuf::from_bytes(vec![0x52]);
+        let tx = |n: u64, outputs: &[&ScriptBuf]| Transaction {
+            version: Version::TWO,
+            lock_time: LockTime::from_consensus(n as u32),
+            input: vec![TxIn::default()],
+            output: outputs
+                .iter()
+                .enumerate()
+                .map(|(i, s)| TxOut {
+                    value: Amount::from_sat(n * 100 + i as u64),
+                    script_pubkey: (*s).clone(),
+                })
+                .collect(),
+        };
+        let mut block = genesis_block(Network::Regtest);
+        // 25 outputs paying `script` in 5 txs, mixed with outputs paying `other`
+        block.txdata = (0..5u64)
+            .map(|n| tx(n, &[&script, &other, &script, &script, &script, &script]))
+            .collect();
+        let expected: Vec<(OutPoint, u64)> = block
+            .txdata
+            .iter()
+            .flat_map(|tx| {
+                let txid = tx.compute_txid();
+                tx.output
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, o)| o.script_pubkey == script)
+                    .map(move |(vout, o)| (OutPoint::new(txid, vout as u32), o.value.to_sat()))
+            })
+            .collect();
+        assert_eq!(expected.len(), 25);
+        let ser = || SerBlock(serialize(&block));
+        let find =
+            |skip, take| super::find_outpoints_with_script_pubkey(&script, ser(), skip, take);
+
+        assert_eq!(find(0, 10), (expected[0..10].to_vec(), 25));
+        assert_eq!(find(10, 10), (expected[10..20].to_vec(), 25));
+        assert_eq!(find(20, 10), (expected[20..25].to_vec(), 25));
+        assert_eq!(find(3, 4), (expected[3..7].to_vec(), 25));
+        assert_eq!(find(30, 10), (vec![], 25));
+        assert_eq!(find(0, usize::MAX), (expected.clone(), 25));
+        let found_other = super::find_outpoints_with_script_pubkey(&other, ser(), 0, 10);
+        assert_eq!(found_other.0.len(), 5);
+        assert_eq!(found_other.1, 5);
     }
 
     #[test]

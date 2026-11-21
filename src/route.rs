@@ -395,11 +395,12 @@ async fn route_parsed(
         Resource::AddressToA(address) => {
             redirect(&format!("a/{address}"), parsed_req.response_type)?
         }
-        Resource::Address(ref address, ref query) => {
+        Resource::Address(ref address, ref query, page) => {
             let address = address.clone().require_network(network())?;
 
             let address_outputs = match db {
-                Some(db) => Some(address_seen(&address, db, state.clone()).await?),
+                Some(db) => Some(address_seen(&address, db, state.clone(), page).await?),
+                None if page > 0 => return Err(Error::InvalidPageNumber),
                 None => None,
             };
             let page =
@@ -547,7 +548,7 @@ fn handle_http_counter(parsed_req: &req::ParsedRequest) {
         Resource::Robots => "Robots",
         Resource::BlockToB(_) => "BlockToB",
         Resource::TxToT(_) => "TxToT",
-        Resource::Address(_, _) => "Address",
+        Resource::Address(_, _, _) => "Address",
         Resource::AddressToA(_) => "AddressToA",
         Resource::FullTx(_) => "FullTx",
         Resource::Metrics => "Metrics",
