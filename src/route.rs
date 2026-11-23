@@ -273,8 +273,13 @@ async fn route_parsed(
                 known_tx,
             )?
             .into_string();
-            let cache_seconds =
-                cache_time_from_confirmations(ts.map(|t| current_tip.blocks - t.1.height));
+            let fee_still_computing = fee.is_none() && !tx.is_coinbase();
+            let cache_seconds = if fee_still_computing {
+                // the fee will be in the page once the background task caches it
+                cache_time_from_confirmations(None)
+            } else {
+                cache_time_from_confirmations(ts.map(|t| current_tip.blocks - t.1.height))
+            };
 
             let cache_control = format!("public, max-age={cache_seconds}");
             let mut builder = Response::builder().header(CACHE_CONTROL, cache_control);
