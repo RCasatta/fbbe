@@ -7,11 +7,13 @@ use qr_code::QrCode;
 
 use crate::{
     error::Error,
+    network,
     render::AmountRow,
     render::Html,
     req::ParsedRequest,
     route::convert_text_html_string,
-    threads::index_addresses::{AddressOutputs, Balance},
+    threads::index_addresses::{AddressOutputs, Balance, OUTPUTS_PER_PAGE},
+    NetworkExt,
 };
 
 use super::html_page;
@@ -22,9 +24,14 @@ pub fn page(
     query: &Option<String>,
     address_outputs: Option<AddressOutputs>,
 ) -> Result<Markup, Error> {
-    let (address_seen, balance) = match address_outputs {
-        Some(AddressOutputs { seen, balance }) => (seen, Some(balance)),
-        None => (vec![], None),
+    let (address_seen, total, page, balance) = match address_outputs {
+        Some(AddressOutputs {
+            seen,
+            total,
+            page,
+            balance,
+        }) => (seen, total, page, Some(balance)),
+        None => (vec![], 0, 0, None),
     };
     let address_type = address
         .address_type()
@@ -50,16 +57,18 @@ pub fn page(
     };
 
     let script_pubkey = address.script_pubkey();
-    let txids_len = address_seen.len();
-
-    // TODO the spent part
-    //  eg 1 transaction output (1 spent)
-    //  eg 1 transaction output
-    //  eg 3 transaction outputs (1 spent)
-
-    // TODO add truncated at the end
-
-    // TODO paging to most recent 10 funding
+    let from = page * OUTPUTS_PER_PAGE;
+    let to = from + address_seen.len();
+    let page_link = |page: usize| {
+        let base = format!("{}a/{}", network().as_url_path(), address);
+        if page == 0 {
+            base
+        } else {
+            format!("{base}/{page}")
+        }
+    };
+    let prev = (page > 0).then(|| page_link(page - 1));
+    let next = (to < total).then(|| page_link(page + 1));
 
     let content = html! {
         section {
@@ -95,8 +104,22 @@ pub fn page(
 
             @if !address_seen.is_empty() {
                 hgroup {
-                    h2 { (txids_len) " transaction output" @if txids_len == 1 { "" } @else { "s" }  }
+                    h2 { (total) " transaction output" @if total == 1 { "" } @else { "s" }  }
                     p { "Only confirmed outputs from the latest block paying this address are listed, older outputs, spent or unspent, are not shown" }
+                    @if total > address_seen.len() {
+                        p {
+                            "Showing outputs " (from) "-" (to.saturating_sub(1)) " of " (total) ", " (OUTPUTS_PER_PAGE) " per page "
+                            @if let Some(prev) = prev.as_ref() {
+                                a href=(prev) { "Prev" }
+                            }
+                            @if prev.is_some() && next.is_some() {
+                                " | "
+                            }
+                            @if let Some(next) = next.as_ref() {
+                                a href=(next) { "Next" }
+                            }
+                        }
+                    }
                 }
 
                 table class="striped" {
@@ -109,14 +132,6 @@ pub fn page(
                                 td {
                                     (txid)
                                 }
-                            }
-                        }
-                    }
-                    @if txids_len > 9 {
-                        tfoot {
-                            tr {
-                                td { "possibly truncated"  }
-
                             }
                         }
                     }

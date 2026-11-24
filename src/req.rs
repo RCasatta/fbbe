@@ -37,7 +37,7 @@ pub enum Resource {
     Robots,
     BlockToB(BlockHash),
     TxToT(Txid),
-    Address(Address<NetworkUnchecked>, Option<String>),
+    Address(Address<NetworkUnchecked>, Option<String>, usize),
     AddressToA(Address),
     FullTx(Transaction),
     Metrics,
@@ -148,9 +148,13 @@ pub async fn parse(req: &Request<hyper::body::Bytes>) -> Result<ParsedRequest, E
             };
             Resource::Block(block_hash, page)
         }
-        (&Method::GET, query, Some(&"a"), Some(address), None) => {
+        (&Method::GET, query, Some(&"a"), Some(address), page) => {
             let address = parse_address(address)?;
-            Resource::Address(address, query.map(ToString::to_string))
+            let page = match page {
+                Some(page) => page.parse::<usize>()?,
+                None => 0,
+            };
+            Resource::Address(address, query.map(ToString::to_string), page)
         }
         (&Method::GET, None, Some(&"block"), Some(block_hash), None) => {
             let block_hash = BlockHash::from_str(block_hash)?;
@@ -239,9 +243,13 @@ impl Display for TextLink<'_> {
                     write!(f, "{base}b/{block_hash}/{pagination}/text")
                 }
             }
-            Resource::Address(address, query) => {
+            Resource::Address(address, query, pagination) => {
                 let address = address.clone().assume_checked(); // TODO clone is a performance penalty here
-                write!(f, "{base}a/{address}/text")?;
+                if *pagination == 0 {
+                    write!(f, "{base}a/{address}/text")?;
+                } else {
+                    write!(f, "{base}a/{address}/{pagination}/text")?;
+                }
                 if let Some(query) = query {
                     write!(f, "?{query}")?;
                 }
@@ -255,7 +263,7 @@ impl Resource {
     pub fn link(&self) -> Option<TextLink> {
         use Resource::*;
         match self {
-            Home | Tx(_, _) | Block(_, _) | Address(_, _) => Some(TextLink(self)),
+            Home | Tx(_, _) | Block(_, _) | Address(_, _, _) => Some(TextLink(self)),
             _ => None,
         }
     }
@@ -308,6 +316,31 @@ mod tests {
             .uri(uri)
             .body(Bytes::new())
             .expect("valid request")
+    }
+
+    #[tokio::test]
+    async fn parse_paginated_address() {
+        let address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq";
+        let parsed = parse(&request(&format!("/a/{address}/text")))
+            .await
+            .unwrap();
+        match parsed.resource {
+            Resource::Address(ref a, None, 0) => {
+                assert_eq!(a.clone().assume_checked().to_string(), address)
+            }
+            ref resource => panic!("unexpected resource: {resource:?}"),
+        }
+        assert!(parsed.response_type.is_text());
+
+        let parsed = parse(&request(&format!("/a/{address}/3?amount=1")))
+            .await
+            .unwrap();
+        match parsed.resource {
+            Resource::Address(_, Some(ref query), 3) => assert_eq!(query, "amount=1"),
+            ref resource => panic!("unexpected resource: {resource:?}"),
+        }
+
+        assert!(parse(&request(&format!("/a/{address}/x"))).await.is_err());
     }
 
     #[tokio::test]
