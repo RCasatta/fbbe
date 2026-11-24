@@ -131,6 +131,8 @@ fn check_pages() {
     assert!(block_text.starts_with("* Fast Bitcoin Block Explorer"));
     assert!(block_text.contains("Coinbase value (BTC) 50.00000000\n"));
     assert!(block_text.contains("Fees (BTC)           0.00000000\n"));
+    assert!(block_text.contains(" 285 B\n"));
+    assert!(block_text.contains("Next block »"));
     assert_eq!(block_text, get(format!("http://{fbbe_addr}/text?s=0")));
     assert_eq!(block_text, get(format!("http://{fbbe_addr}/h/0/text")));
     assert_eq!(
@@ -159,6 +161,13 @@ fn check_pages() {
         .unwrap();
     assert_ne!(resp.as_str().unwrap(), tx_text);
     assert_eq!(resp.headers.get("vary").unwrap(), "columns");
+
+    // no ASCII QR code in text
+    let script = bitcoin::ScriptBuf::from_bytes(vec![bitcoin::opcodes::OP_TRUE.to_u8()]);
+    let addr = bitcoin::Address::p2wsh(&script, Network::Regtest);
+    let address_text = get(format!("http://{fbbe_addr}/a/{addr}/text"));
+    assert!(address_text.contains(&addr.to_string()));
+    assert!(!address_text.contains('█'));
 
     let about = get(format!("http://{fbbe_addr}/about/text"));
     assert!(about.starts_with("* Fast Bitcoin Block Explorer"));

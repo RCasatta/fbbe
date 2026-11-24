@@ -80,7 +80,7 @@ impl BlockNoTxDetails {
         match self.previousblockhash.as_ref() {
             Some(val) => {
                 let link = format!("{}b/{}", network().as_url_path(), val);
-                html! { a href=(link) { "«" } (NBSP) }
+                html! { a href=(link) { "« Previous block" } (NBSP) }
             }
             None => html! {},
         }
@@ -90,7 +90,7 @@ impl BlockNoTxDetails {
         match self.nextblockhash.as_ref() {
             Some(val) => {
                 let link = format!("{}b/{}", network().as_url_path(), val);
-                html! { (NBSP) a href=(link) { "»" } }
+                html! { (NBSP) a href=(link) { "Next block »" } }
             }
             None => html! {},
         }

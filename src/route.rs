@@ -419,9 +419,7 @@ async fn route_parsed(
             match parsed_req.response_type {
                 ResponseType::Text(col) => builder
                     .header(CONTENT_TYPE, TEXT_PLAIN_UTF_8.as_ref())
-                    .body(Bytes::from(pages::address::text_page(
-                        &address, &page, col,
-                    )?))?,
+                    .body(Bytes::from(pages::address::text_page(&page, col)?))?,
                 ResponseType::Html => builder
                     .header(CONTENT_TYPE, TEXT_HTML_UTF_8.as_ref())
                     .body(Bytes::from(page))?,
