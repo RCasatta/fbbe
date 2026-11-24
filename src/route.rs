@@ -406,7 +406,15 @@ async fn route_parsed(
             redirect(&format!("a/{address}"), parsed_req.response_type)?
         }
         Resource::Address(ref address, ref query, page) => {
-            let address = address.clone().require_network(network())?;
+            let address = address.clone().require_network(network()).map_err(|_| {
+                Error::InvalidInput(address_wrong_network(
+                    address,
+                    network(),
+                    crate::globals::networks(),
+                    crate::globals::dns_host(),
+                    parsed_req.response_type.is_text(),
+                ))
+            })?;
 
             let address_outputs = match db {
                 Some(db) => Some(address_seen(&address, db, state.clone(), page).await?),
@@ -816,10 +824,61 @@ pub async fn route_infallible(
     Ok(resp)
 }
 
+/// Message for an address valid on another network, it points to the address page on that network
+/// when this instance serves it too
+fn address_wrong_network(
+    address: &bitcoin::Address<bitcoin::address::NetworkUnchecked>,
+    current: bitcoin::Network,
+    served: &[bitcoin::Network],
+    dns_host: Option<&str>,
+    text: bool,
+) -> String {
+    let other = served
+        .iter()
+        .find(|n| **n != current && address.is_valid_for_network(**n));
+    let address = address.clone().assume_checked().to_string();
+    let mut message = format!("address {address} is not a {current} address");
+    if let Some(other) = other {
+        let host = dns_host.map(|h| format!("https://{h}")).unwrap_or_default();
+        let prefix = match other {
+            bitcoin::Network::Bitcoin => String::new(),
+            n => format!("/{n}"),
+        };
+        let suffix = if text { "/text" } else { "" };
+        message.push_str(&format!(
+            ", it is a {other} address: {host}{prefix}/a/{address}{suffix}"
+        ));
+    }
+    message
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::str::FromStr;
+
+    #[test]
+    fn address_wrong_network_message() {
+        use bitcoin::Network::{Bitcoin, Regtest, Signet};
+        let mainnet = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq";
+        let signet = "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx";
+        let msg = |a: &str, current, served: &[_], host, text| {
+            let a = bitcoin::Address::from_str(a).unwrap();
+            address_wrong_network(&a, current, served, host, text)
+        };
+        assert_eq!(
+            msg(mainnet, Signet, &[Signet, Bitcoin], Some("fbbe.info"), true),
+            format!("address {mainnet} is not a signet address, it is a bitcoin address: https://fbbe.info/a/{mainnet}/text")
+        );
+        assert_eq!(
+            msg(signet, Bitcoin, &[Bitcoin, Signet], None, false),
+            format!("address {signet} is not a bitcoin address, it is a signet address: /signet/a/{signet}")
+        );
+        assert_eq!(
+            msg(mainnet, Regtest, &[Regtest], None, true),
+            format!("address {mainnet} is not a regtest address")
+        );
+    }
 
     #[test]
     fn error_status_and_message() {

@@ -195,6 +195,13 @@ fn check_pages() {
         resp.as_str().unwrap(),
         "Bad request: invalid address tb1qxyz\n"
     );
+    let mainnet_addr = bitcoin::Address::p2wsh(&script, Network::Bitcoin);
+    let resp = status(format!("http://{fbbe_addr}/a/{mainnet_addr}/text"));
+    assert_eq!(resp.status_code, 400);
+    assert_eq!(
+        resp.as_str().unwrap(),
+        format!("Bad request: address {mainnet_addr} is not a regtest address\n")
+    );
     let resp = status(format!("http://{fbbe_addr}/text?s=garbage"));
     assert_eq!(resp.status_code, 400);
     assert!(resp
