@@ -20,7 +20,7 @@ pub mod mempool;
 pub mod tx;
 pub mod txout;
 
-fn ts_to_date_time_utc(ts: u32) -> String {
+pub(crate) fn ts_to_date_time_utc(ts: u32) -> String {
     let ndt = DateTime::from_timestamp(ts as i64, 0).unwrap();
     ndt.format("%Y-%m-%d %H:%M:%S %Z").to_string() // 2022-11-18 07:53:03 UTC
 }

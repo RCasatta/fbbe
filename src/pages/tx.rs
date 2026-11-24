@@ -1,5 +1,6 @@
 use std::str::from_utf8;
 
+use bitcoin::absolute::LockTime;
 use bitcoin::Txid;
 use bitcoin::{
     blockdata::script::Instruction, consensus::encode::serialize_hex, Address, Amount, BlockHash,
@@ -13,7 +14,7 @@ use crate::{
     pages::size_rows,
     render::{self, AmountRow, Html, Plural},
     req::ParsedRequest,
-    rpc::headers::HeightTime,
+    rpc::{headers::HeightTime, ts_to_date_time_utc},
     state::{BlockTemplate, SpendPoint},
     threads::{
         index_addresses::Height,
@@ -85,6 +86,8 @@ pub fn page(
         .then(|| format!("{}t/{}/{}#outputs", network_url_path, txid, page + 1));
     let separator_output = (prev_output.is_some() && next_output.is_some()).then_some(" | ");
 
+    let block_height = height_time.as_ref().map(|(_, h)| h.height);
+
     let inputs = tx
         .input
         .iter()
@@ -95,7 +98,7 @@ pub fn page(
         .map(|(i, (input, previous_output))| {
             let po = &input.previous_output;
             if po == &OutPoint::null() {
-                None
+                coinbase_input(i + input_start, input, block_height)
             } else {
                 let link = render::tx_io_link(&po.txid, render::Io::Output, po.vout as usize);
                 let amount = amount_str(previous_output.value.to_sat());
@@ -112,9 +115,19 @@ pub fn page(
                     .then(|| witness.last().map(|e| ScriptBuf::from(e.to_vec())))
                     .flatten();
 
-                let sequence = format!("0x{:x}", input.sequence);
+                let sequence = if input.sequence.is_rbf() {
+                    format!("0x{:x} (signals RBF)", input.sequence)
+                } else {
+                    format!("0x{:x}", input.sequence)
+                };
 
                 let mut fields = vec![("Previous outpoint".to_string(), po.html())];
+                if let Some(previous_address) = previous_script_pubkey
+                    .as_ref()
+                    .and_then(|s| Address::from_script(s, network()).ok())
+                {
+                    fields.push(("Previous address".to_string(), previous_address.html()));
+                }
                 if let Some(previous_script_pubkey) = previous_script_pubkey {
                     let label = match previous_script_pubkey_type {
                         Some(t) => format!("Previous script pubkey ({t})"),
@@ -139,7 +152,7 @@ pub fn page(
                 let amount_text = html! { (amount) };
                 let amount = html! { a href=(link) { (amount) } };
 
-                Some((i + input_start, fields, amount, amount_text))
+                (i + input_start, fields, amount, amount_text)
             }
         });
 
@@ -214,6 +227,9 @@ pub fn page(
             } else {
                 let status = if script_pubkey.is_op_return() {
                     "Provably unspendable"
+                } else if block_height == Some(0) {
+                    // the genesis coinbase is not in the utxo set
+                    "Unspendable genesis output"
                 } else {
                     "Unspent"
                 };
@@ -325,15 +341,8 @@ pub fn page(
 
             table class="striped" {
                 tbody {
-                    @for val in inputs {
-                        @if let Some((i, fields, amount, amount_text)) = val {
-                            (io_rows(parsed, format!("i{i}"), i, i != input_start, &fields, amount, amount_text))
-                        }
-                        @else {
-                            td { "Coinbase" }
-                            td {}
-
-                        }
+                    @for (i, fields, amount, amount_text) in inputs {
+                        (io_rows(parsed, format!("i{i}"), i, i != input_start, &fields, amount, amount_text))
                     }
                 }
                 @if let Some(next) = next_input {
@@ -386,9 +395,17 @@ pub fn page(
                         th { "Version" }
                         td class="right" { (tx.version) }
                     }
+                    @if !tx.is_coinbase() {
+                        tr {
+                            th { "Replace-by-fee (BIP125)" }
+                            td class="right" {
+                                @if tx.is_explicitly_rbf() { "Signaled" } @else { "Not signaled" }
+                            }
+                        }
+                    }
                     tr {
                         th { "Lock time" }
-                        td class="right" { (tx.lock_time.to_consensus_u32()) }
+                        td class="right" { (lock_time_str(tx)) }
                     }
                     tr {
                         th { "Hex" }
@@ -462,18 +479,115 @@ fn amount_str(val: u64) -> String {
     }
 }
 
+type IoRow = (usize, Vec<(String, Markup)>, Markup, Markup);
+
+/// The coinbase input has no previous output, show what miners put in the script sig
+fn coinbase_input(index: usize, input: &bitcoin::TxIn, block_height: Option<u32>) -> IoRow {
+    let script_sig = &input.script_sig;
+    let mut fields = vec![("Coinbase script sig".to_string(), script_sig.html())];
+    let ascii = printable_ascii(script_sig);
+    if !ascii.is_empty() {
+        fields.push((
+            "Coinbase script sig in ASCII".to_string(),
+            html! { code { (ascii) } },
+        ));
+    }
+    if let Some(height) = block_height.filter(|h| bip34_height(script_sig) == Some(*h)) {
+        fields.push((
+            "Height in script sig (BIP34)".to_string(),
+            html! { code { (height) } },
+        ));
+    }
+    fields.push((
+        "Sequence".to_string(),
+        html! { code { (format!("0x{:x}", input.sequence)) } },
+    ));
+    if !input.witness.is_empty() {
+        fields.push(("Witness".to_string(), input.witness.html()));
+    }
+    (
+        index,
+        fields,
+        html! { "Coinbase" },
+        html! { "none (coinbase)" },
+    )
+}
+
+/// Runs of at least 4 printable ASCII chars in the pushes of `script`, like the genesis
+/// "The Times" message or pool tags. Falls back to the raw bytes when the script doesn't parse.
+fn printable_ascii(script: &Script) -> String {
+    const MIN_RUN: usize = 4;
+    let mut runs: Vec<&[u8]> = vec![];
+    let pushes: Option<Vec<&[u8]>> = script
+        .instructions()
+        .map(|i| {
+            i.ok().map(|i| match i {
+                Instruction::PushBytes(p) => p.as_bytes(),
+                Instruction::Op(_) => &[][..],
+            })
+        })
+        .collect();
+    let chunks = pushes.unwrap_or_else(|| vec![script.as_bytes()]);
+    for chunk in chunks {
+        runs.extend(
+            chunk
+                .split(|b| !(0x20..=0x7e).contains(b))
+                .filter(|run| run.len() >= MIN_RUN),
+        );
+    }
+    runs.iter()
+        .filter_map(|run| from_utf8(run).ok())
+        .map(str::trim)
+        .filter(|run| !run.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// The block height pushed as first item of a coinbase script sig, see BIP34
+fn bip34_height(script: &Script) -> Option<u32> {
+    match script.instructions().next()?.ok()? {
+        Instruction::PushBytes(p) if p.len() <= 4 => {
+            let mut buf = [0u8; 4];
+            buf[..p.len()].copy_from_slice(p.as_bytes());
+            Some(u32::from_le_bytes(buf))
+        }
+        Instruction::Op(op) => {
+            let n = op.to_u8();
+            (0x51..=0x60).contains(&n).then(|| (n - 0x50) as u32)
+        }
+        _ => None,
+    }
+}
+
+/// Lock time value with its meaning: a block height or, from 500000000, a unix time
+fn lock_time_str(tx: &Transaction) -> String {
+    let value = tx.lock_time.to_consensus_u32();
+    if value == 0 {
+        return "0".to_string();
+    }
+    let meaning = match tx.lock_time {
+        LockTime::Blocks(h) => format!("height {h}"),
+        LockTime::Seconds(t) => ts_to_date_time_utc(t.to_consensus_u32()),
+    };
+    if tx.is_lock_time_enabled() {
+        format!("{value} ({meaning})")
+    } else {
+        format!("{value} ({meaning}, not enforced: all inputs are final)")
+    }
+}
+
 pub fn fee_rows(wf: WeightFee, last_in_block: Option<TxidWeightFee>) -> Markup {
     html! {
-        (AmountRow::new_with_sat("Fee", wf.fee as u64))
+        (AmountRow::new_with_sat("Fee (BTC)", wf.fee as u64))
 
         tr {
             th { "Fee rate (BTC/kvB)" }
-            td class="number" { (wf) }
+            td class="number" { (wf) " (" (wf.sat_over_vb_str()) ")" }
         }
         @if let Some(last_in_block) = last_in_block.as_ref()  {
             tr {
-                th { em { "Last in block" } }
-                td class="number" { (last_in_block.wf) }
+                th { em { "Last in block (BTC/kvB)" } }
+                td class="number" { (last_in_block.wf) " (" (last_in_block.wf.sat_over_vb_str()) ")" }
             }
         }
     }
@@ -492,6 +606,8 @@ pub fn script_type(script: &Script) -> Option<String> {
         "v0 p2wsh"
     } else if script.is_p2tr() {
         "v1 p2tr"
+    } else if is_p2a(script) {
+        "v1 p2a"
     } else if script.is_op_return() {
         "op return"
     } else {
@@ -502,6 +618,11 @@ pub fn script_type(script: &Script) -> Option<String> {
     } else {
         Some(kind.to_string())
     }
+}
+
+/// Pay-to-anchor (BIP433): `OP_1 OP_PUSHBYTES_2 4e73`
+fn is_p2a(script: &Script) -> bool {
+    script.as_bytes() == [0x51, 0x02, 0x4e, 0x73]
 }
 
 #[cfg(test)]
@@ -598,5 +719,54 @@ mod tests {
         let prev_txid = Txid::from_byte_array([1; 32]);
         assert!(html.contains(&format!("href=\"/t/{prev_txid}/1#o13\"")));
         assert!(!html.contains(&format!("/t/{prev_txid}#o13")));
+    }
+
+    #[test]
+    fn script_type_p2a() {
+        let p2a = ScriptBuf::from_bytes(vec![0x51, 0x02, 0x4e, 0x73]);
+        assert_eq!(script_type(&p2a).as_deref(), Some("v1 p2a"));
+        let other = ScriptBuf::from_bytes(vec![0x51, 0x02, 0x4e, 0x74]);
+        assert_eq!(script_type(&other), None);
+    }
+
+    #[test]
+    fn coinbase_script_sig() {
+        let genesis = bitcoin::blockdata::constants::genesis_block(bitcoin::Network::Bitcoin);
+        let script_sig = &genesis.txdata[0].input[0].script_sig;
+        assert_eq!(
+            printable_ascii(script_sig),
+            "The Times 03/Jan/2009 Chancellor on brink of second bailout for banks"
+        );
+        assert_ne!(bip34_height(script_sig), Some(0));
+
+        // BIP34 height 840000 followed by a pool tag
+        let script_sig = ScriptBuf::from_bytes(
+            bitcoin::hashes::hex::FromHex::from_hex(
+                "0340d10c1a2f5669614254432f4d696e656420627920627463646f6d39332f",
+            )
+            .unwrap(),
+        );
+        assert_eq!(bip34_height(&script_sig), Some(840_000));
+        assert_eq!(printable_ascii(&script_sig), "/ViaBTC/Mined by btcdom93/");
+
+        let regtest = ScriptBuf::from_bytes(vec![0x51, 0x00]);
+        assert_eq!(bip34_height(&regtest), Some(1));
+        assert_eq!(printable_ascii(&regtest), "");
+    }
+
+    #[test]
+    fn lock_time_meaning() {
+        let genesis = bitcoin::blockdata::constants::genesis_block(bitcoin::Network::Bitcoin);
+        let mut tx = genesis.txdata[0].clone();
+        assert_eq!(lock_time_str(&tx), "0");
+        tx.lock_time = LockTime::from_consensus(840_000);
+        assert_eq!(
+            lock_time_str(&tx),
+            "840000 (height 840000, not enforced: all inputs are final)"
+        );
+        tx.input[0].sequence = bitcoin::Sequence::ENABLE_LOCKTIME_NO_RBF;
+        assert_eq!(lock_time_str(&tx), "840000 (height 840000)");
+        tx.lock_time = LockTime::from_consensus(1_700_000_000);
+        assert_eq!(lock_time_str(&tx), "1700000000 (2023-11-14 22:13:20 UTC)");
     }
 }
