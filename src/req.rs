@@ -198,28 +198,33 @@ fn parse_address(address: &str) -> Result<Address<NetworkUnchecked>, Error> {
         .map_err(|_| Error::InvalidInput(format!("invalid address {address}")))
 }
 
-/// True when the client asks for `text/plain` or `text/markdown` and not for html, as agents do,
-/// browsers always list `text/html`. The text page reads well as markdown, so it serves both.
+/// True when the client prefers `text/plain` or `text/markdown` over html, as agents do: they may
+/// list `text/html` with a lower `q`, browsers always rank it first. Ties go to html.
+/// The text page reads well as markdown, so it serves both.
 fn accepts_text_not_html(req: &Request<hyper::body::Bytes>) -> bool {
     let Some(accept) = req.headers().get(ACCEPT).and_then(|a| a.to_str().ok()) else {
         return false;
     };
-    let media_types = accept.split(',').map(|m| {
-        m.split(';')
+    let mut text_q = 0.0f32;
+    let mut html_q = 0.0f32;
+    for media_range in accept.split(',') {
+        let mut params = media_range.split(';');
+        let media_type = params
             .next()
             .unwrap_or_default()
             .trim()
-            .to_ascii_lowercase()
-    });
-    let mut text = false;
-    for media_type in media_types {
+            .to_ascii_lowercase();
+        let q = params
+            .filter_map(|p| p.trim().strip_prefix("q="))
+            .find_map(|q| q.trim().parse::<f32>().ok())
+            .unwrap_or(1.0);
         match media_type.as_str() {
-            "text/html" | "application/xhtml+xml" => return false,
-            "text/plain" | "text/markdown" => text = true,
+            "text/html" | "application/xhtml+xml" => html_q = html_q.max(q),
+            "text/plain" | "text/markdown" => text_q = text_q.max(q),
             _ => (),
         }
     }
-    text
+    text_q > html_q
 }
 
 pub struct TextLink<'a>(&'a Resource);
@@ -300,7 +305,11 @@ mod tests {
         assert!(text("text/plain").await);
         assert!(text("text/markdown").await);
         assert!(text("Text/Markdown;charset=utf-8").await);
-        assert!(!text("text/markdown, text/html;q=0.5").await);
+        assert!(text("text/markdown, text/html;q=0.5").await);
+        assert!(text("text/markdown, text/html;q=0.9, */*;q=0.8").await);
+        assert!(!text("text/html, text/markdown;q=0.9").await);
+        assert!(!text("text/html;q=0.9, text/markdown;q=0.9").await);
+        assert!(!text("text/plain;q=0, text/html;q=0.1").await);
         assert!(text("text/markdown, text/plain;q=0.9, */*;q=0.1").await);
         assert!(!text("text/html,application/xhtml+xml,*/*;q=0.8").await);
         assert!(!text("text/plain, text/html").await);
