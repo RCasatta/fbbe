@@ -93,6 +93,9 @@ pub struct Arguments {
     #[arg(short, long, env)]
     pub other_network: Vec<Network>,
 
+    /// Path of the address index, enabling the outputs and the confirmed balance of addresses.
+    /// Requires Bitcoin Core 30 or later. A directory indexed by a previous release, whose format
+    /// is no longer supported, is refused: point to an empty one to reindex.
     #[arg(short, long, env)]
     pub addr_index_path: Option<PathBuf>,
 

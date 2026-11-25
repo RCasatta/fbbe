@@ -1,20 +1,21 @@
 use std::{
-    collections::{BTreeSet, HashSet},
+    collections::{BTreeSet, HashMap, HashSet, VecDeque},
     fmt::Display,
-    hash::Hasher,
     ops::ControlFlow,
     path::Path,
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc,
+        Arc, Mutex, MutexGuard,
     },
     time::Duration,
 };
 
-use bitcoin::{hashes::Hash, Address, Block, BlockHash, OutPoint, Script, ScriptBuf, Txid};
+use bitcoin::{
+    hashes::{siphash24, Hash},
+    Address, Block, BlockHash, OutPoint, Script, ScriptBuf, TxOut, Txid,
+};
 use bitcoin_slices::{bsl, Visit, Visitor};
-use fxhash::FxHasher64;
-use rocksdb::properties;
+use rocksdb::{properties, MergeOperands};
 use rocksdb::{ColumnFamily, ColumnFamilyDescriptor, DBCompressionType, Options, WriteBatch, DB};
 
 use crate::{
@@ -27,24 +28,133 @@ use crate::{
 type ScriptHash = u64;
 pub type Height = u32;
 
-fn script_hash(script: &Script) -> ScriptHash {
-    let mut hasher = FxHasher64::default();
-    hasher.write(script.as_bytes());
-    hasher.finish()
-}
-
 const BLOCK_HASH_CF: &str = "BLOCK_HASH_CF"; // BlockHash -> [] // indexed blocks
 const FUNDING_CF: &str = "FUNDING_CF"; // hash(Script) || height -> []
 const SPENDING_CF: &str = "SPENDING_CF"; // hash(prevout) || height -> []
 const FEE_CF: &str = "FEE_CF"; // txid[..12] -> fee
+const BALANCE_CF: &str = "BALANCE_CF"; // hash(Script) -> confirmed balance, see `merge_sum`
+const META_CF: &str = "META_CF"; // the keys below
 
-const COLUMN_FAMILIES: &[&str] = &[BLOCK_HASH_CF, FUNDING_CF, SPENDING_CF, FEE_CF];
+/// Format version of the database, `u32` big endian
+const FORMAT_VERSION_KEY: &[u8] = b"V";
+/// Key of the script hash, 16 random bytes chosen when the database is created
+const SCRIPT_HASH_KEY: &[u8] = b"K";
+/// Height (`u32` big endian) and hash of the last block counted in `BALANCE_CF`
+const BALANCE_TIP_KEY: &[u8] = b"T";
+
+/// 1. Script hashes computed with keyed SipHash-2-4, confirmed balances in `BALANCE_CF`.
+///
+/// Databases created before format versions existed, without `META_CF`, are refused: their
+/// script hashes are unkeyed and they have no balances, they must be reindexed.
+const FORMAT_VERSION: u32 = 1;
+
+const COLUMN_FAMILIES: &[&str] = &[
+    BLOCK_HASH_CF,
+    FUNDING_CF,
+    SPENDING_CF,
+    FEE_CF,
+    BALANCE_CF,
+    META_CF,
+];
+
+/// Blocks this deep or less are kept in memory and reach `BALANCE_CF` only when buried deeper,
+/// so that a reorg never needs undoing what is in the db. A deeper reorg is detected, it makes
+/// the balances unavailable until a reindex.
+pub const REORG_DEPTH: usize = 6;
+
+/// How scripts are hashed in the keys of the database, it can't change without reindexing.
+///
+/// SipHash-2-4 keyed with random bytes stored in the database, so that nobody can craft a
+/// script colliding with a given address, which would alter its balance. It comes with
+/// `bitcoin_hashes`, and std's `DefaultHasher` can't be used: its algorithm may change
+/// between Rust releases.
+#[derive(Debug, Clone, Copy)]
+struct ScriptHasher {
+    k0: u64,
+    k1: u64,
+}
+
+impl ScriptHasher {
+    fn new(key: [u8; 16]) -> Self {
+        let (k0, k1) = key.split_at(8);
+        Self {
+            k0: u64::from_le_bytes(k0.try_into().expect("8 bytes")),
+            k1: u64::from_le_bytes(k1.try_into().expect("8 bytes")),
+        }
+    }
+
+    fn hash(&self, script: &Script) -> ScriptHash {
+        siphash24::Hash::hash_to_u64_with_keys(self.k0, self.k1, script.as_bytes())
+    }
+}
+
+/// The balance change of each script in a block, in satoshi
+pub struct BlockDeltas {
+    height: Height,
+    block_hash: BlockHash,
+    prev_blockhash: BlockHash,
+    deltas: HashMap<ScriptHash, i64>,
+}
+
+/// The last block counted in `BALANCE_CF`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BalanceTip {
+    pub height: Height,
+    pub block_hash: BlockHash,
+}
+
+impl BalanceTip {
+    fn to_bytes(self) -> [u8; 36] {
+        let mut bytes = [0u8; 36];
+        bytes[..4].copy_from_slice(&self.height.to_be_bytes());
+        bytes[4..].copy_from_slice(self.block_hash.as_byte_array());
+        bytes
+    }
+
+    fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        let height = u32::from_be_bytes(bytes.get(..4)?.try_into().ok()?);
+        let block_hash = BlockHash::from_slice(bytes.get(4..)?).ok()?;
+        Some(Self { height, block_hash })
+    }
+}
+
+/// The blocks not yet in `BALANCE_CF`
+#[derive(Debug, Default)]
+struct Recent {
+    /// `None` until the genesis block reaches `BALANCE_CF`
+    tip: Option<BalanceTip>,
+    /// consecutive blocks following `tip`, at most [`REORG_DEPTH`]
+    blocks: VecDeque<BlockDeltas>,
+    /// a reorg replaced blocks already in `BALANCE_CF`
+    reindex_needed: bool,
+}
+
+impl std::fmt::Debug for BlockDeltas {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "BlockDeltas({} {})", self.height, self.block_hash)
+    }
+}
+
+impl Recent {
+    /// Height and parent hash of the block that can be pushed next
+    fn next(&self) -> (Height, BlockHash) {
+        match (self.blocks.back(), self.tip) {
+            (Some(last), _) => (last.height + 1, last.block_hash),
+            (None, Some(tip)) => (tip.height + 1, tip.block_hash),
+            (None, None) => (0, BlockHash::all_zeros()),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct Database {
     db: DB,
+    hasher: ScriptHasher,
     /// The initial indexing reached the tip, every funding height is in the db
     synced: AtomicBool,
+    /// Held while `BALANCE_CF` is written, so that a balance read sees the db and the recent
+    /// blocks at the same point
+    recent: Mutex<Recent>,
 }
 
 impl Database {
@@ -54,22 +164,64 @@ impl Database {
             .map(|&name| {
                 let mut opts = Options::default();
                 opts.set_compression_type(DBCompressionType::Zstd);
+                if name == BALANCE_CF {
+                    opts.set_merge_operator_associative("sum", merge_sum);
+                }
                 ColumnFamilyDescriptor::new(name, opts)
             })
             .collect()
     }
 
-    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, rocksdb::Error> {
+    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
+        let path = path.as_ref();
+        // an error here means there is no database yet
+        if let Ok(cfs) = DB::list_cf(&Options::default(), path) {
+            if !cfs.iter().any(|cf| cf == META_CF) {
+                return Err(Error::AddrIndex(format!(
+                    "{} was created by a previous release, its format is no longer supported: \
+                     point --addr-index-path to an empty directory to reindex",
+                    path.display()
+                )));
+            }
+        }
+
         let mut db_opts = Options::default();
 
         db_opts.create_if_missing(true);
         db_opts.create_missing_column_families(true);
 
         let db = DB::open_cf_descriptors(&db_opts, path, Self::create_cf_descriptors())?;
+        let hasher = get_or_init_script_hasher(&db)?;
+        let meta_cf = db.cf_handle(META_CF).expect("missing META_CF");
+        let tip = match db.get_cf(meta_cf, BALANCE_TIP_KEY)? {
+            None => None,
+            Some(bytes) => Some(
+                BalanceTip::from_bytes(&bytes)
+                    .ok_or_else(|| Error::AddrIndex("invalid balance tip".into()))?,
+            ),
+        };
+        log::info!("address index balance tip: {tip:?}");
         Ok(Self {
             db,
+            hasher,
             synced: AtomicBool::new(false),
+            recent: Mutex::new(Recent {
+                tip,
+                ..Default::default()
+            }),
         })
+    }
+
+    fn recent(&self) -> MutexGuard<'_, Recent> {
+        self.recent.lock().expect("poisoned")
+    }
+
+    fn balance_cf(&self) -> &ColumnFamily {
+        self.db.cf_handle(BALANCE_CF).expect("missing BALANCE_CF")
+    }
+
+    fn meta_cf(&self) -> &ColumnFamily {
+        self.db.cf_handle(META_CF).expect("missing META_CF")
     }
 
     fn block_hash_cf(&self) -> &ColumnFamily {
@@ -88,6 +240,137 @@ impl Database {
 
     fn fee_cf(&self) -> &ColumnFamily {
         self.db.cf_handle(FEE_CF).expect("missing FEE_CF")
+    }
+
+    /// The balance change of each script in `block`, `spent` are the outputs spent by each of
+    /// its transactions, see [`rpc::spenttxouts::call`]
+    pub fn block_deltas(
+        &self,
+        block: &Block,
+        height: Height,
+        spent: &[Vec<TxOut>],
+    ) -> Result<BlockDeltas, Error> {
+        let block_hash = block.block_hash();
+        if spent.len() != block.txdata.len()
+            || block
+                .txdata
+                .iter()
+                .zip(spent)
+                .any(|(tx, spent)| !tx.is_coinbase() && tx.input.len() != spent.len())
+        {
+            return Err(Error::SpentTxOutsMismatch(block_hash));
+        }
+        let mut deltas: HashMap<ScriptHash, i64> = HashMap::new();
+        for tx in block.txdata.iter() {
+            for output in tx.output.iter() {
+                *deltas
+                    .entry(self.hasher.hash(&output.script_pubkey))
+                    .or_default() += output.value.to_sat() as i64;
+            }
+        }
+        for output in spent.iter().flatten() {
+            *deltas
+                .entry(self.hasher.hash(&output.script_pubkey))
+                .or_default() -= output.value.to_sat() as i64;
+        }
+        // eg. a script receiving and spending the same amount, or zero value OP_RETURNs
+        deltas.retain(|_, delta| *delta != 0);
+        Ok(BlockDeltas {
+            height,
+            block_hash,
+            prev_blockhash: block.header.prev_blockhash,
+            deltas,
+        })
+    }
+
+    /// Height of the next block to push, the one after the last pushed
+    pub fn next_balance_height(&self) -> Height {
+        self.recent().next().0
+    }
+
+    /// Adds `block` to the recent ones, if it extends them, and writes in `BALANCE_CF` the
+    /// recent blocks buried more than [`REORG_DEPTH`]. Returns `false` if `block` doesn't
+    /// extend the recent blocks, so it isn't counted twice or out of the chain.
+    pub fn push_block(&self, block: BlockDeltas) -> Result<bool, Error> {
+        let mut recent = self.recent();
+        if (block.height, block.prev_blockhash) != recent.next() {
+            return Ok(false);
+        }
+        recent.blocks.push_back(block);
+        while recent.blocks.len() > REORG_DEPTH {
+            let oldest = recent.blocks.front().expect("not empty");
+            let tip = BalanceTip {
+                height: oldest.height,
+                block_hash: oldest.block_hash,
+            };
+            let mut batch = WriteBatch::default();
+            for (script_hash, delta) in oldest.deltas.iter() {
+                batch.merge_cf(
+                    self.balance_cf(),
+                    script_hash.to_be_bytes(),
+                    encode_delta(*delta),
+                );
+            }
+            // in the same batch, so a block is counted once even if the process is killed
+            batch.put_cf(self.meta_cf(), BALANCE_TIP_KEY, tip.to_bytes());
+            self.db.write(batch)?;
+            recent.blocks.pop_front();
+            recent.tip = Some(tip);
+        }
+        Ok(true)
+    }
+
+    /// The last block in `BALANCE_CF` and the recent blocks, by height and hash
+    pub fn balance_chain(&self) -> (Option<BalanceTip>, Vec<(Height, BlockHash)>) {
+        let recent = self.recent();
+        let blocks = recent
+            .blocks
+            .iter()
+            .map(|b| (b.height, b.block_hash))
+            .collect();
+        (recent.tip, blocks)
+    }
+
+    /// Drops the recent blocks from `height` on, replaced by a reorg
+    pub fn truncate_recent(&self, height: Height) {
+        self.recent().blocks.retain(|b| b.height < height);
+    }
+
+    /// A reorg replaced a block already in `BALANCE_CF`
+    pub fn set_reindex_needed(&self) {
+        self.recent().reindex_needed = true;
+    }
+
+    /// The confirmed balance of `script_pubkey`
+    pub fn balance(&self, script_pubkey: &Script) -> Result<Balance, Error> {
+        if !self.is_synced() {
+            return Ok(Balance::IndexSyncing);
+        }
+        let script_hash = self.hasher.hash(script_pubkey);
+        let recent = self.recent();
+        if recent.reindex_needed {
+            return Ok(Balance::ReindexNeeded);
+        }
+        let stored = match self
+            .db
+            .get_pinned_cf(self.balance_cf(), script_hash.to_be_bytes())?
+        {
+            None => 0,
+            Some(value) => decode_delta(&value)
+                .ok_or_else(|| Error::AddrIndex("invalid balance value".into()))?,
+        };
+        let recent_deltas: i64 = recent
+            .blocks
+            .iter()
+            .filter_map(|b| b.deltas.get(&script_hash))
+            .sum();
+        match u64::try_from(stored + recent_deltas) {
+            Ok(sat) => Ok(Balance::Known(sat)),
+            Err(_) => {
+                log::error!("negative balance for {script_pubkey}, the index is corrupted");
+                Ok(Balance::ReindexNeeded)
+            }
+        }
     }
 
     pub fn indexed_block_hash(&self) -> HashSet<BlockHash> {
@@ -111,7 +394,7 @@ impl Database {
 
     /// Returns at most `max` heights of the blocks funding `script_pubkey`, the latest first
     pub fn script_hash_latest_heights(&self, script_pubkey: &Script, max: usize) -> Vec<Height> {
-        let script_hash = script_hash(script_pubkey).to_be_bytes();
+        let script_hash = self.hasher.hash(script_pubkey).to_be_bytes();
         let mut starting = script_hash.to_vec();
         starting.extend(&[0xff; 4]);
 
@@ -174,6 +457,7 @@ impl Database {
             ("funding", self.funding_cf()),
             ("spending", self.spending_cf()),
             ("fee", self.fee_cf()),
+            ("balance", self.balance_cf()),
         ];
 
         cfs.into_iter()
@@ -185,6 +469,31 @@ impl Database {
                 Ok((name, value))
             })
             .collect()
+    }
+
+    pub fn index_block(&self, block: &Block, height: Height) -> IndexBlockResult {
+        // # funding script_hashes, script_pubkeys in outputs
+        let funding_sh: BTreeSet<ScriptHash> = block
+            .txdata
+            .iter()
+            .flat_map(|tx| tx.output.iter())
+            .map(|txout| self.hasher.hash(&txout.script_pubkey))
+            .collect();
+
+        // # spending script_hashes
+        let spending_sh: BTreeSet<OutPoint> = block
+            .txdata
+            .iter()
+            .flat_map(|tx| tx.input.iter())
+            .map(|i| i.previous_output)
+            .collect();
+
+        IndexBlockResult {
+            block_hash: block.block_hash(),
+            height,
+            funding_sh,
+            spending_sh,
+        }
     }
 
     pub fn write_hashes(&self, index_res: IndexBlockResult) -> Result<(), Error> {
@@ -231,6 +540,80 @@ fn txid_fee_key(txid: &Txid) -> [u8; 12] {
         .try_into()
         .expect("slice right length")
 }
+
+/// Reads the format version and the script hash key, or writes them in a new database.
+fn get_or_init_script_hasher(db: &DB) -> Result<ScriptHasher, Error> {
+    let cf = db.cf_handle(META_CF).expect("missing META_CF");
+    match db.get_cf(cf, FORMAT_VERSION_KEY)? {
+        None => {
+            // META_CF was just created, a previous first start may have been interrupted
+            // before this point, but nothing is indexed without the key
+            let mut key = [0u8; 16];
+            getrandom::getrandom(&mut key)
+                .map_err(|e| Error::AddrIndex(format!("cannot generate the key: {e}")))?;
+            let mut batch = WriteBatch::default();
+            batch.put_cf(cf, FORMAT_VERSION_KEY, FORMAT_VERSION.to_be_bytes());
+            batch.put_cf(cf, SCRIPT_HASH_KEY, key);
+            db.write(batch)?;
+            Ok(ScriptHasher::new(key))
+        }
+        Some(version) if version[..] == FORMAT_VERSION.to_be_bytes() => {
+            let key = db
+                .get_cf(cf, SCRIPT_HASH_KEY)?
+                .and_then(|key| <[u8; 16]>::try_from(key).ok())
+                .ok_or_else(|| Error::AddrIndex("missing or invalid script hash key".into()))?;
+            Ok(ScriptHasher::new(key))
+        }
+        Some(version) => Err(Error::AddrIndex(format!(
+            "unsupported format version {version:?}, this release supports {FORMAT_VERSION}"
+        ))),
+    }
+}
+
+/// Merges the balance changes of a script: the value and the operands are zigzag varints, see
+/// [`encode_delta`], the result is their sum. Returns `None`, failing the merge, on invalid data.
+fn merge_sum(_key: &[u8], existing: Option<&[u8]>, operands: &MergeOperands) -> Option<Vec<u8>> {
+    let mut sum = match existing {
+        Some(value) => decode_delta(value)?,
+        None => 0,
+    };
+    for operand in operands.iter() {
+        sum = sum.checked_add(decode_delta(operand)?)?;
+    }
+    Some(encode_delta(sum))
+}
+
+/// LEB128 varint of the zigzag encoding of `value`, small values in few bytes whatever the sign
+fn encode_delta(value: i64) -> Vec<u8> {
+    let mut zigzag = ((value << 1) ^ (value >> 63)) as u64;
+    let mut bytes = Vec::with_capacity(10);
+    loop {
+        let byte = (zigzag & 0x7f) as u8;
+        zigzag >>= 7;
+        if zigzag == 0 {
+            bytes.push(byte);
+            return bytes;
+        }
+        bytes.push(byte | 0x80);
+    }
+}
+
+fn decode_delta(bytes: &[u8]) -> Option<i64> {
+    let mut zigzag = 0u64;
+    for (i, byte) in bytes.iter().enumerate() {
+        if i >= 10 {
+            return None;
+        }
+        zigzag |= ((byte & 0x7f) as u64) << (7 * i);
+        if byte & 0x80 == 0 {
+            if i + 1 != bytes.len() {
+                return None;
+            }
+            return Some((zigzag >> 1) as i64 ^ -((zigzag & 1) as i64));
+        }
+    }
+    None
+}
 pub struct IndexBlockResult {
     block_hash: BlockHash,
     height: Height,
@@ -239,8 +622,7 @@ pub struct IndexBlockResult {
     spending_sh: BTreeSet<OutPoint>,
 }
 
-/// A page of the outputs of an address funded in its latest funding block, with the balance
-/// when computable
+/// A page of the outputs of an address funded in its latest funding block, with its balance
 pub struct AddressOutputs {
     /// at most [`OUTPUTS_PER_PAGE`] outputs, starting at `page * OUTPUTS_PER_PAGE`
     pub seen: Vec<AddressSeen>,
@@ -253,15 +635,15 @@ pub struct AddressOutputs {
 /// Outputs listed in an address page, each one is checked for spending
 pub const OUTPUTS_PER_PAGE: usize = MAX_SPENDING_CHECKS;
 
-/// The confirmed balance is known only when every output ever received is in `seen` and has
-/// been checked for spending, the index keeps only funding heights, not the full history
+/// The confirmed balance, from the running total of each script in `BALANCE_CF` plus the
+/// recent blocks
 #[derive(PartialEq, Eq, Debug)]
 pub enum Balance {
     /// in satoshi
     Known(u64),
     IndexSyncing,
-    MultipleFundingBlocks,
-    TooManyOutputs,
+    /// a reorg deeper than [`REORG_DEPTH`] replaced blocks already counted
+    ReindexNeeded,
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -313,10 +695,7 @@ pub async fn address_seen(
     page: usize,
 ) -> Result<AddressOutputs, Error> {
     let script_pubkey = address.script_pubkey();
-    // a second height is enough to know the history is not in a single block
-    let mut heights = db.script_hash_latest_heights(&script_pubkey, 2);
-    let multiple_funding_blocks = heights.len() > 1;
-    heights.truncate(1);
+    let heights = db.script_hash_latest_heights(&script_pubkey, 1);
     let blocks = shared_state.blocks_from_heights(&heights).await?;
     let start = page * OUTPUTS_PER_PAGE;
     let mut outpoints_with_script_pubkey = vec![];
@@ -351,17 +730,7 @@ pub async fn address_seen(
         find_txids_with_prevout(h, b, t, &mut address_seen);
     }
 
-    let balance = if !db.is_synced() {
-        Balance::IndexSyncing
-    } else if multiple_funding_blocks {
-        Balance::MultipleFundingBlocks
-    } else if total > MAX_SPENDING_CHECKS {
-        Balance::TooManyOutputs
-    } else {
-        // a spending found in the db but not in its block is a key collision, so it's unspent
-        let unspent = address_seen.iter().filter(|s| s.spending.is_none());
-        Balance::Known(unspent.map(|s| s.funding.value).sum())
-    };
+    let balance = db.balance(&script_pubkey)?;
 
     Ok(AddressOutputs {
         seen: address_seen,
@@ -486,33 +855,6 @@ fn find_outpoints_with_script_pubkey(
     (visitor.outpoints, visitor.count)
 }
 
-pub fn index_block(block: &Block, height: u32) -> Result<IndexBlockResult, crate::Error> {
-    let block_hash = block.block_hash();
-
-    // # funding script_hashes, script_pubkeys in outputs
-    let funding_sh: BTreeSet<ScriptHash> = block
-        .txdata
-        .iter()
-        .flat_map(|tx| tx.output.iter())
-        .map(|txout| script_hash(&txout.script_pubkey))
-        .collect();
-
-    // # spending script_hashes
-    let spending_sh: BTreeSet<OutPoint> = block
-        .txdata
-        .iter()
-        .flat_map(|tx| tx.input.iter())
-        .map(|i| i.previous_output)
-        .collect();
-
-    Ok(IndexBlockResult {
-        block_hash,
-        height,
-        funding_sh,
-        spending_sh,
-    })
-}
-
 pub(crate) async fn index_addresses_infallible(db: Arc<Database>, shared_state: Arc<SharedState>) {
     if let Err(e) = index_addresses(db, shared_state).await {
         log::error!("{:?}", e);
@@ -559,6 +901,9 @@ async fn index_addresses(db: Arc<Database>, shared_state: Arc<SharedState>) -> R
 
     let indexed_block_hash = db.indexed_block_hash();
     log::info!("already_indexed:{}", indexed_block_hash.len());
+    // blocks from here are counted in the balances, the ones before already are
+    let balance_from = db.next_balance_height();
+    let mut balance_extends = true;
 
     for height in 0.. {
         let block_hash = match shared_state.height_to_hash(height).await {
@@ -569,35 +914,100 @@ async fn index_addresses(db: Arc<Database>, shared_state: Arc<SharedState>) -> R
                 break;
             }
         };
-        if indexed_block_hash.contains(&block_hash) || db.is_block_hash_indexed(&block_hash) {
-            // there are 2 checks because the first is fast the second is fresher
+        // there are 2 checks because the first is fast the second is fresher
+        let index_hashes =
+            !indexed_block_hash.contains(&block_hash) && !db.is_block_hash_indexed(&block_hash);
+        let index_balance = balance_extends && height >= balance_from;
+        if !index_hashes && !index_balance {
             continue;
         }
         if height % 5_000 == 0 {
             log::info!("indexed block {height} ")
         }
 
-        let block = loop {
-            match rpc::block::call(block_hash).await {
-                Ok(block) => break block,
-                Err(e) => {
-                    log::warn!("Cannot download block: {block_hash} {e}");
-                    tokio::time::sleep(Duration::from_secs(1)).await
-                }
+        let (block, spent) = fetch_block(block_hash, index_balance).await;
+        if index_hashes {
+            let index_res = db.index_block(&block, height);
+            let db = db.clone();
+            tokio::spawn(async move { db.write_hashes(index_res) });
+        }
+        if let Some(spent) = spent {
+            let deltas = db.block_deltas(&block, height, &spent)?;
+            if !db.push_block(deltas)? {
+                // the chain changed under the balances, see `update_balance` once synced
+                log::warn!("block {height} {block_hash} doesn't extend the balances");
+                balance_extends = false;
             }
-        };
-        let index_res = index_block(&block, height)?;
-        let db = db.clone();
-        tokio::spawn(async move { db.write_hashes(index_res) });
+        }
     }
     Ok(())
+}
+
+/// Downloads a block, and the outputs it spends if `with_spent`, retrying until it succeeds
+async fn fetch_block(block_hash: BlockHash, with_spent: bool) -> (Block, Option<Vec<Vec<TxOut>>>) {
+    loop {
+        let spent = async {
+            if with_spent {
+                rpc::spenttxouts::call(block_hash).await.map(Some)
+            } else {
+                Ok(None)
+            }
+        };
+        match tokio::try_join!(rpc::block::call(block_hash), spent) {
+            Ok(result) => return result,
+            Err(e) => {
+                log::warn!("Cannot download block: {block_hash} {e}");
+                tokio::time::sleep(Duration::from_secs(1)).await
+            }
+        }
+    }
+}
+
+/// Aligns the balances with the active chain, after the initial indexing: drops the recent
+/// blocks replaced by a reorg and pushes the missing ones.
+pub(crate) async fn update_balance(db: &Database, shared_state: &SharedState) -> Result<(), Error> {
+    if !db.is_synced() {
+        return Ok(());
+    }
+    let (tip, recent) = db.balance_chain();
+    if let Some(tip) = tip {
+        if shared_state.height_to_hash(tip.height).await != Some(tip.block_hash) {
+            log::error!(
+                "reorg deeper than {REORG_DEPTH} blocks replaced {tip:?}, the address index \
+                 balances need a reindex"
+            );
+            db.set_reindex_needed();
+            return Ok(());
+        }
+    }
+    for (height, block_hash) in recent {
+        if shared_state.height_to_hash(height).await != Some(block_hash) {
+            log::info!("reorg replaced block {height} {block_hash} in the balances");
+            db.truncate_recent(height);
+            break;
+        }
+    }
+    loop {
+        let height = db.next_balance_height();
+        let block_hash = match shared_state.height_to_hash(height).await {
+            Some(hash) if hash != BlockHash::all_zeros() => hash,
+            _ => return Ok(()),
+        };
+        let block = rpc::block::call(block_hash).await?;
+        let spent = rpc::spenttxouts::call(block_hash).await?;
+        let deltas = db.block_deltas(&block, height, &spent)?;
+        if !db.push_block(deltas)? {
+            log::warn!("block {height} {block_hash} doesn't extend the balances");
+            return Ok(());
+        }
+    }
 }
 
 #[cfg(test)]
 mod test {
     #[test]
     fn latest_funding_heights() {
-        use super::{script_hash, Database, IndexBlockResult};
+        use super::{Database, IndexBlockResult};
         use bitcoin::{hashes::Hash, BlockHash, ScriptBuf};
         use std::collections::BTreeSet;
 
@@ -609,7 +1019,7 @@ mod test {
             let index_res = IndexBlockResult {
                 block_hash: BlockHash::hash(&height.to_be_bytes()),
                 height,
-                funding_sh: BTreeSet::from([script_hash(script)]),
+                funding_sh: BTreeSet::from([db.hasher.hash(script)]),
                 spending_sh: BTreeSet::new(),
             };
             db.write_hashes(index_res).unwrap();
@@ -623,6 +1033,174 @@ mod test {
 
         drop(db);
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    fn test_dir(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("fbbe-test-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        dir
+    }
+
+    /// Block `height` of a test chain, every block hash derives from its height
+    fn deltas(
+        db: &super::Database,
+        height: u32,
+        changes: &[(&bitcoin::ScriptBuf, i64)],
+    ) -> super::BlockDeltas {
+        use bitcoin::{hashes::Hash, BlockHash};
+        let hash = |h: u32| BlockHash::hash(&h.to_be_bytes());
+        super::BlockDeltas {
+            height,
+            block_hash: hash(height),
+            prev_blockhash: if height == 0 {
+                BlockHash::all_zeros()
+            } else {
+                hash(height - 1)
+            },
+            deltas: changes
+                .iter()
+                .map(|(script, delta)| (db.hasher.hash(script), *delta))
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn balance_running_total() {
+        use super::{Balance, Database, REORG_DEPTH};
+        use bitcoin::{hashes::Hash, BlockHash, ScriptBuf};
+        use std::sync::atomic::Ordering;
+
+        let dir = test_dir("balance");
+        let db = Database::new(&dir).unwrap();
+        let a = ScriptBuf::from_bytes(vec![0x51]);
+        let b = ScriptBuf::from_bytes(vec![0x52]);
+        let unused = ScriptBuf::from_bytes(vec![0x53]);
+        assert_eq!(db.balance(&a).unwrap(), Balance::IndexSyncing);
+        db.synced.store(true, Ordering::Relaxed);
+
+        assert!(db.push_block(deltas(&db, 0, &[(&a, 1_000)])).unwrap());
+        assert!(db
+            .push_block(deltas(&db, 1, &[(&a, -1_000), (&b, 900)]))
+            .unwrap());
+        assert!(db.push_block(deltas(&db, 2, &[(&a, 500)])).unwrap());
+        // not counted twice, nor with a gap
+        assert!(!db.push_block(deltas(&db, 2, &[(&a, 500)])).unwrap());
+        assert!(!db.push_block(deltas(&db, 4, &[(&a, 500)])).unwrap());
+        assert_eq!(db.balance(&a).unwrap(), Balance::Known(500));
+        assert_eq!(db.balance(&b).unwrap(), Balance::Known(900));
+        assert_eq!(db.balance(&unused).unwrap(), Balance::Known(0));
+        assert_eq!(db.balance_chain().0, None, "all blocks still recent");
+
+        for height in 3..=(REORG_DEPTH as u32 + 3) {
+            assert!(db.push_block(deltas(&db, height, &[(&b, 1)])).unwrap());
+        }
+        let (tip, recent) = db.balance_chain();
+        let tip = tip.unwrap();
+        assert_eq!(tip.height, 3);
+        assert_eq!(recent.len(), REORG_DEPTH);
+        assert_eq!(recent[0].0, 4);
+        assert_eq!(db.balance(&a).unwrap(), Balance::Known(500));
+        assert_eq!(
+            db.balance(&b).unwrap(),
+            Balance::Known(900 + REORG_DEPTH as u64 + 1)
+        );
+
+        // a reorg of the recent blocks: replaced from height 7
+        db.truncate_recent(7);
+        assert_eq!(db.next_balance_height(), 7);
+        let mut fork = deltas(&db, 7, &[(&a, 10)]);
+        fork.block_hash = BlockHash::hash(b"fork");
+        assert!(db.push_block(fork).unwrap());
+        assert_eq!(db.balance(&a).unwrap(), Balance::Known(510));
+        assert_eq!(db.balance(&b).unwrap(), Balance::Known(900 + 4));
+
+        // after a restart, the tip and the script hash key are the same, the recent blocks are
+        // pushed again
+        let key = (db.hasher.k0, db.hasher.k1);
+        drop(db);
+        let db = Database::new(&dir).unwrap();
+        db.synced.store(true, Ordering::Relaxed);
+        assert_eq!(key, (db.hasher.k0, db.hasher.k1));
+        assert_eq!(db.balance_chain(), (Some(tip), vec![]));
+        assert_eq!(db.next_balance_height(), 4);
+        assert_eq!(db.balance(&a).unwrap(), Balance::Known(500));
+        assert_eq!(db.balance(&b).unwrap(), Balance::Known(900 + 1));
+
+        db.set_reindex_needed();
+        assert_eq!(db.balance(&a).unwrap(), Balance::ReindexNeeded);
+
+        drop(db);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn block_deltas_from_block() {
+        use bitcoin::{blockdata::constants::genesis_block, Network};
+
+        let dir = test_dir("deltas");
+        let db = super::Database::new(&dir).unwrap();
+        let block = genesis_block(Network::Bitcoin);
+        let deltas = db.block_deltas(&block, 0, &[vec![]]).unwrap();
+        let script = &block.txdata[0].output[0].script_pubkey;
+        assert_eq!(deltas.deltas.len(), 1);
+        assert_eq!(deltas.deltas[&db.hasher.hash(script)], 5_000_000_000);
+        assert!(db.block_deltas(&block, 0, &[]).is_err());
+        assert!(db.block_deltas(&block, 0, &[vec![], vec![]]).is_err());
+
+        drop(db);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn previous_format_refused() {
+        let dir = test_dir("old-format");
+        {
+            let mut opts = rocksdb::Options::default();
+            opts.create_if_missing(true);
+            opts.create_missing_column_families(true);
+            rocksdb::DB::open_cf(&opts, &dir, ["BLOCK_HASH_CF", "FUNDING_CF"]).unwrap();
+        }
+        let err = super::Database::new(&dir).unwrap_err().to_string();
+        assert!(
+            err.contains("point --addr-index-path to an empty directory"),
+            "{err}"
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn delta_encoding() {
+        use super::{decode_delta, encode_delta};
+        for value in [
+            0,
+            1,
+            -1,
+            63,
+            -64,
+            64,
+            127,
+            2_100_000_000_000_000,
+            i64::MAX,
+            i64::MIN,
+        ] {
+            assert_eq!(decode_delta(&encode_delta(value)), Some(value), "{value}");
+        }
+        assert_eq!(encode_delta(0), vec![0]);
+        assert_eq!(encode_delta(-1), vec![1]);
+        assert_eq!(encode_delta(1), vec![2]);
+        assert_eq!(encode_delta(64).len(), 2);
+        assert_eq!(decode_delta(&[]), None);
+        assert_eq!(decode_delta(&[0x80]), None, "unterminated");
+        assert_eq!(decode_delta(&[0, 0]), None, "trailing bytes");
+        assert_eq!(decode_delta(&[0xff; 11]), None, "too long");
+    }
+
+    #[test]
+    fn siphash_reference() {
+        // SipHash-2-4 reference vector: key 00..0f, empty input
+        let key: [u8; 16] = core::array::from_fn(|i| i as u8);
+        let hasher = super::ScriptHasher::new(key);
+        assert_eq!(hasher.hash(bitcoin::Script::new()), 0x726fdb47dd0e0e31);
     }
 
     #[test]

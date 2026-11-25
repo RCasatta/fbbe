@@ -4,7 +4,7 @@ use crate::error::Error;
 use crate::rpc;
 use crate::rpc::chaininfo::ChainInfo;
 use crate::state::SharedState;
-use crate::threads::index_addresses::index_block;
+use crate::threads::index_addresses::update_balance;
 use bitcoin::hashes::Hash;
 use bitcoin::BlockHash;
 use std::time::Duration;
@@ -62,7 +62,7 @@ async fn update_chain_info(
                             .await?;
 
                         if let Some(db) = db.as_ref() {
-                            let index_res = index_block(&last_block, last_height)?;
+                            let index_res = db.index_block(&last_block, last_height);
                             db.write_hashes(index_res)?;
                         }
 
@@ -87,6 +87,13 @@ async fn update_chain_info(
                                 last_block_hash = prev_blockhash;
                                 last_height -= 1;
                             }
+                        }
+                    }
+
+                    if let Some(db) = db.as_ref() {
+                        // after the loop: the reorged heights now point to the new blocks
+                        if let Err(e) = update_balance(db, &shared_state).await {
+                            log::warn!("cannot update the address balances: {e:?}");
                         }
                     }
 

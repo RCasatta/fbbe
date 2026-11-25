@@ -13,7 +13,7 @@ Use the pinned Rust toolchain from `rust-toolchain.toml` (`1.85.0`). The MSRV is
 - `cargo clippy -- -D warnings` treats all lint warnings as errors.
 - `just docker` builds the Nix-based Docker image and loads it into Docker.
 
-For local runtime, point the app at a Bitcoin Core node with `txindex=1` and `rest=1`.
+For local runtime, point the app at a Bitcoin Core node with `txindex=1` and `rest=1`. The address index (`--addr-index-path`) needs Bitcoin Core 30 or later, for the `/rest/spenttxouts` endpoint.
 
 ## Coding Style & Naming Conventions
 Follow standard Rust formatting: 4-space indentation, `snake_case` for functions/modules, `CamelCase` for types, and small focused modules. Keep new code compatible with `cargo fmt` and warning-free under `clippy`. Match existing file organization by placing route-specific UI in `src/pages/` and reusable HTML formatting in `src/render/`. If you edit `src/css/custom.css`, regenerate `src/css/custom.min.css` before submitting.
@@ -27,6 +27,6 @@ Recent history uses short, imperative commit subjects such as `add ads option` a
 ## Design Decisions
 Choices already made on purpose; do not propose them again:
 - No confirmation count on tx or block pages: it would make the pages uncacheable, and it is not useful beyond about 6 confirmations.
-- The address page stays light on the backend: no full history, address reuse is not something to make convenient. The confirmed balance is shown only when it is known to be correct (a single funding block with few outputs), otherwise it is "unknown" with the reason; do not try to compute it in other cases.
+- The address page stays light on the backend: no full history, address reuse is not something to make convenient. The confirmed balance comes from a running total per script (`BALANCE_CF`, a merge operator summing the balance change of each block), read with one point lookup; the last `REORG_DEPTH` blocks stay in memory so the db never needs undoing on a reorg, a deeper one makes the balance "unknown" until a reindex.
 - The address QR code stays in the text version too, it is useful in a terminal.
 - Block pages are not meant to list or crawl all their transactions; keep the small page size, people search a txid directly.

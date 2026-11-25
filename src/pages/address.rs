@@ -149,8 +149,7 @@ fn unknown_reason(balance: &Balance) -> &'static str {
     match balance {
         Balance::Known(_) => "",
         Balance::IndexSyncing => "the address index is still syncing",
-        Balance::MultipleFundingBlocks => "the address received funds in more than one block",
-        Balance::TooManyOutputs => "too many outputs to check",
+        Balance::ReindexNeeded => "a deep reorg happened, the address index needs a reindex",
     }
 }
 

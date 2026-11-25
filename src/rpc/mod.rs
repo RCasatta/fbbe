@@ -17,6 +17,7 @@ pub mod blockhashbyheight;
 pub mod chaininfo;
 pub mod headers;
 pub mod mempool;
+pub mod spenttxouts;
 pub mod tx;
 pub mod txout;
 

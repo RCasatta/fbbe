@@ -97,6 +97,15 @@ pub enum Error {
     #[error("Bitcoin core RPC block raw failed for block. block_hash:{1} status_code:{0}")]
     RpcBlockRaw(StatusCode, BlockHash),
 
+    #[error("Bitcoin core RPC spent outputs failed for block. block_hash:{1} status_code:{0}")]
+    RpcSpentTxOuts(StatusCode, BlockHash),
+
+    #[error("Spent outputs don't match the inputs of block {0}")]
+    SpentTxOutsMismatch(BlockHash),
+
+    #[error("Address index: {0}")]
+    AddrIndex(String),
+
     #[error("Bitcoin core RPC headers failed. start:{1} count:{2} status_code:{0}")]
     RpcBlockHeaders(StatusCode, BlockHash, u32),
 

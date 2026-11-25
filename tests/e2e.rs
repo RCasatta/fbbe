@@ -313,3 +313,138 @@ fn check_wrong_network() {
         "bitcoind and fbbe doesn't have the same network. fbbe:testnet bitcoind:regtest"
     ));
 }
+
+#[test]
+fn check_address_balance() {
+    use bitcoin::{
+        absolute::LockTime, consensus::encode::serialize_hex, transaction::Version, Amount,
+        OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness,
+    };
+
+    let bitcoind = init_node();
+    let miner_script = ScriptBuf::from_bytes(vec![bitcoin::opcodes::OP_TRUE.to_u8()]);
+    let miner = bitcoin::Address::p2wsh(&miner_script, Network::Regtest);
+    // OP_2: another anyone-can-spend script, the address whose balance is checked
+    let script = ScriptBuf::from_bytes(vec![0x52]);
+    let addr = bitcoin::Address::p2wsh(&script, Network::Regtest);
+    // coinbases of blocks 1 to 3 must mature
+    let _blocks = bitcoind.client.generate_to_address(102, &miner).unwrap();
+    let call = |method: &str, args: &[serde_json::Value]| {
+        bitcoind
+            .client
+            .call::<serde_json::Value>(method, args)
+            .unwrap()
+    };
+    let coinbase = |height: u64| {
+        let hash = call("getblockhash", &[height.into()]);
+        let block_hex = call("getblock", &[hash, 0.into()]);
+        let block: bitcoin::Block =
+            bitcoin::consensus::encode::deserialize_hex(block_hex.as_str().unwrap()).unwrap();
+        block.txdata[0].clone()
+    };
+    let spend = |prevout: OutPoint, witness_script: &ScriptBuf, outputs: Vec<TxOut>| {
+        let tx = Transaction {
+            version: Version::TWO,
+            lock_time: LockTime::ZERO,
+            input: vec![TxIn {
+                previous_output: prevout,
+                script_sig: ScriptBuf::new(),
+                sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+                witness: Witness::from_slice(&[witness_script.as_bytes()]),
+            }],
+            output: outputs,
+        };
+        call("sendrawtransaction", &[serialize_hex(&tx).into()]);
+        tx.compute_txid()
+    };
+    let pay = |sat: u64, to: &bitcoin::Address| TxOut {
+        value: Amount::from_sat(sat),
+        script_pubkey: to.script_pubkey(),
+    };
+    let mine = |n: usize| {
+        bitcoind.client.generate_to_address(n, &miner).unwrap();
+    };
+    let btc = |sat: u64| format!("{}.{:08}", sat / 100_000_000, sat % 100_000_000);
+
+    // the address receives in 2 blocks, 3 outputs, then spends one of them
+    let first = spend(
+        OutPoint::new(coinbase(1).compute_txid(), 0),
+        &miner_script,
+        vec![pay(100_000_000, &addr), pay(4_899_990_000, &miner)],
+    );
+    mine(1);
+    spend(
+        OutPoint::new(coinbase(2).compute_txid(), 0),
+        &miner_script,
+        vec![
+            pay(200_000_000, &addr),
+            pay(30_000_000, &addr),
+            pay(4_769_990_000, &miner),
+        ],
+    );
+    mine(1);
+    spend(
+        OutPoint::new(first, 0),
+        &script,
+        vec![pay(99_990_000, &miner)],
+    );
+    mine(1);
+    let spending_block = call("getbestblockhash", &[]);
+    let expected = 230_000_000;
+
+    let db_dir = std::env::temp_dir().join(format!("fbbe-e2e-balance-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&db_dir);
+    let (fbbe_addr, exe, mut args) = init_fbbe(&bitcoind, Network::Regtest);
+    args.push("--addr-index-path".into());
+    args.push(db_dir.display().to_string());
+    let balance_line = || {
+        let text = minreq::get(format!("http://{fbbe_addr}/a/{addr}/text"))
+            .send()
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_string();
+        text.lines()
+            .find(|l| l.contains("Confirmed balance"))
+            .unwrap_or_default()
+            .to_string()
+    };
+    // waits for the balance, fbbe polls the node every 2 seconds
+    let wait_balance = |sat: u64| {
+        let expected = btc(sat);
+        for _ in 0..60 {
+            let line = balance_line();
+            if line.ends_with(&format!(" {expected}")) {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(500));
+        }
+        panic!("balance {expected} not found, last: {}", balance_line());
+    };
+
+    let mut fbbe_proc = FbbeProcess::new(exe.clone(), args.clone());
+    wait_balance(expected);
+
+    // a block reorged out of the recent ones: the spending of 1 BTC is undone
+    call("invalidateblock", &[spending_block]);
+    let empty: Vec<String> = vec![];
+    for _ in 0..2 {
+        call(
+            "generateblock",
+            &[miner.to_string().into(), empty.clone().into()],
+        );
+    }
+    wait_balance(expected + 100_000_000);
+
+    // the spending, back from the mempool, and blocks burying it beyond the ones kept in
+    // memory (`REORG_DEPTH`), so it reaches the db
+    mine(8);
+    wait_balance(expected);
+
+    // after a restart, the recent blocks are pushed again over the db
+    let _ = signal::kill(Pid::from_raw(fbbe_proc.0.id() as i32), Signal::SIGINT);
+    fbbe_proc.0.wait().unwrap();
+    let _fbbe_proc = FbbeProcess::new(exe, args);
+    wait_balance(expected);
+    std::fs::remove_dir_all(db_dir).unwrap();
+}
