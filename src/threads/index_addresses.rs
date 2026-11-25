@@ -7,7 +7,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex, MutexGuard,
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use bitcoin::{
@@ -904,12 +904,17 @@ async fn index_addresses(db: Arc<Database>, shared_state: Arc<SharedState>) -> R
     // blocks from here are counted in the balances, the ones before already are
     let balance_from = db.next_balance_height();
     let mut balance_extends = true;
+    let mut progress = Progress::new(Instant::now());
 
     for height in 0.. {
         let block_hash = match shared_state.height_to_hash(height).await {
             Some(hash) if hash != BlockHash::all_zeros() => hash,
             _ => {
-                log::info!("stopping initial block indexing");
+                log::info!(
+                    "stopping initial block indexing, {} blocks indexed in {}",
+                    progress.total_blocks,
+                    format_duration(progress.start.elapsed())
+                );
                 db.synced.store(true, Ordering::Relaxed);
                 break;
             }
@@ -921,11 +926,11 @@ async fn index_addresses(db: Arc<Database>, shared_state: Arc<SharedState>) -> R
         if !index_hashes && !index_balance {
             continue;
         }
-        if height % 5_000 == 0 {
-            log::info!("indexed block {height} ")
-        }
-
         let (block, spent) = fetch_block(block_hash, index_balance).await;
+        let tip = shared_state.chain_info.lock().await.blocks;
+        if let Some(line) = progress.block(Instant::now(), height, tip, &block) {
+            log::info!("{line}");
+        }
         if index_hashes {
             let index_res = db.index_block(&block, height);
             let db = db.clone();
@@ -941,6 +946,85 @@ async fn index_addresses(db: Arc<Database>, shared_state: Arc<SharedState>) -> R
         }
     }
     Ok(())
+}
+
+/// Progress of the initial indexing logged at most once every this interval
+const PROGRESS_INTERVAL: Duration = Duration::from_secs(60);
+
+/// Counts the blocks indexed since the last progress line, to log the current rates: early
+/// blocks are tiny, so the time left is an estimate at the current rate, not a forecast.
+struct Progress {
+    start: Instant,
+    last: Instant,
+    total_blocks: u64,
+    blocks: u64,
+    txs: u64,
+    bytes: u64,
+}
+
+impl Progress {
+    fn new(now: Instant) -> Self {
+        Self {
+            start: now,
+            last: now,
+            total_blocks: 0,
+            blocks: 0,
+            txs: 0,
+            bytes: 0,
+        }
+    }
+
+    /// Counts `block` at `height`, returns the progress line if it's time to log it
+    fn block(
+        &mut self,
+        now: Instant,
+        height: Height,
+        tip: Height,
+        block: &Block,
+    ) -> Option<String> {
+        self.total_blocks += 1;
+        self.blocks += 1;
+        self.txs += block.txdata.len() as u64;
+        self.bytes += block.total_size() as u64;
+        let elapsed = now.duration_since(self.last);
+        if elapsed < PROGRESS_INTERVAL {
+            return None;
+        }
+        let secs = elapsed.as_secs_f64();
+        let blocks_per_sec = self.blocks as f64 / secs;
+        let remaining = tip.saturating_sub(height) as f64 / blocks_per_sec;
+        let line = format!(
+            "indexing addresses: block {height}/{tip} ({:.1}%), last {}: {:.1} blocks/s, \
+             {:.0} tx/s, {:.1} MB/s, ~{} left at this rate, {} elapsed",
+            height as f64 * 100.0 / tip.max(1) as f64,
+            format_duration(elapsed),
+            blocks_per_sec,
+            self.txs as f64 / secs,
+            self.bytes as f64 / secs / 1_000_000.0,
+            format_duration(Duration::from_secs_f64(remaining.min(1e9))),
+            format_duration(now.duration_since(self.start)),
+        );
+        self.last = now;
+        self.blocks = 0;
+        self.txs = 0;
+        self.bytes = 0;
+        Some(line)
+    }
+}
+
+/// `1d 2h`, `2h 3m`, `3m 4s` or `4s`: the two largest units are enough for a progress line
+fn format_duration(duration: Duration) -> String {
+    let secs = duration.as_secs();
+    let (d, h, m, s) = (secs / 86_400, secs / 3_600 % 24, secs / 60 % 60, secs % 60);
+    if d > 0 {
+        format!("{d}d {h}h")
+    } else if h > 0 {
+        format!("{h}h {m}m")
+    } else if m > 0 {
+        format!("{m}m {s}s")
+    } else {
+        format!("{s}s")
+    }
 }
 
 /// Downloads a block, and the outputs it spends if `with_spent`, retrying until it succeeds
@@ -1166,6 +1250,43 @@ mod test {
             "{err}"
         );
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn progress_line() {
+        use super::{format_duration, Progress, PROGRESS_INTERVAL};
+        use bitcoin::{blockdata::constants::genesis_block, Network};
+        use std::time::{Duration, Instant};
+
+        let block = genesis_block(Network::Bitcoin);
+        let start = Instant::now();
+        let mut progress = Progress::new(start);
+        for height in 0..119 {
+            assert!(progress.block(start, height, 1_000, &block).is_none());
+        }
+        let line = progress
+            .block(start + PROGRESS_INTERVAL, 119, 1_000, &block)
+            .unwrap();
+        assert_eq!(
+            line,
+            "indexing addresses: block 119/1000 (11.9%), last 1m 0s: 2.0 blocks/s, 2 tx/s, \
+             0.0 MB/s, ~7m 20s left at this rate, 1m 0s elapsed"
+        );
+        // counters restart from the line just logged
+        assert!(progress
+            .block(start + PROGRESS_INTERVAL, 120, 1_000, &block)
+            .is_none());
+        assert_eq!(progress.total_blocks, 121);
+
+        assert_eq!(format_duration(Duration::from_secs(4)), "4s");
+        assert_eq!(
+            format_duration(Duration::from_secs(3 * 3_600 + 61)),
+            "3h 1m"
+        );
+        assert_eq!(
+            format_duration(Duration::from_secs(2 * 86_400 + 7_200)),
+            "2d 2h"
+        );
     }
 
     #[test]
