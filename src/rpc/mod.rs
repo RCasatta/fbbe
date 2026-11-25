@@ -34,8 +34,9 @@ async fn check_status<F: FnOnce(StatusCode) -> Error>(
         Ok(())
     } else {
         let e = error(status);
-        if status == 503 {
-            log::debug!("returned 503, {e:?}");
+        if status == 503 || status == 429 {
+            // node busy (503 full work queue, 429 rate limiting proxy): slow down the caller
+            log::debug!("returned {status}, {e:?}");
             tokio::time::sleep(Duration::from_secs(1)).await;
         } else {
             log::warn!("status {status} error:{e:?}");

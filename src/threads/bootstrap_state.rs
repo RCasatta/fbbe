@@ -6,8 +6,9 @@ use bitcoin::blockdata::constants::genesis_block;
 use bitcoin::hashes::Hash;
 use bitcoin::BlockHash;
 use std::collections::HashMap;
+use std::future::Future;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// Maximum allowed by the bitcoind REST interface, with a remote node every request costs a round trip
 const HEADERS_PER_REQUEST: usize = 2000;
@@ -22,7 +23,7 @@ pub async fn bootstrap_state(shared_state: Arc<SharedState>) -> Result<(), Error
     let start = Instant::now();
 
     for i in (0usize..).step_by(HEADERS_PER_REQUEST - 1) {
-        let headers = rpc::headers::call_many(hash, HEADERS_PER_REQUEST as u32).await?;
+        let headers = retry(|| rpc::headers::call_many(hash, HEADERS_PER_REQUEST as u32)).await;
         {
             for (j, header) in headers.iter().enumerate() {
                 hash = header.block_hash();
@@ -55,7 +56,7 @@ pub async fn bootstrap_state(shared_state: Arc<SharedState>) -> Result<(), Error
     let start = Instant::now();
     let mut count = 0;
     loop {
-        let block = rpc::block::call(current).await?;
+        let block = retry(|| rpc::block::call(current)).await;
         current = block.header.prev_blockhash;
         shared_state.update_cache(&block, None).await?;
         count += 1;
@@ -79,4 +80,22 @@ pub async fn bootstrap_state(shared_state: Arc<SharedState>) -> Result<(), Error
     );
 
     Ok(())
+}
+
+/// Calls `f` until it succeeds: a busy node (429 from a rate limiting proxy, 503 from a full work
+/// queue) must not abort the startup
+async fn retry<T, F, Fut>(f: F) -> T
+where
+    F: Fn() -> Fut,
+    Fut: Future<Output = Result<T, Error>>,
+{
+    loop {
+        match f().await {
+            Ok(result) => return result,
+            Err(e) => {
+                log::warn!("bootstrap_state: {e}, retrying");
+                tokio::time::sleep(Duration::from_secs(1)).await
+            }
+        }
+    }
 }
