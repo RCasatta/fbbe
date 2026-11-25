@@ -103,6 +103,11 @@ pub struct Arguments {
     #[arg(short, long, env)]
     pub zmq_rawtx: Option<SocketAddr>,
 
+    /// Don't poll bitcoind for the mempool info and fees, saving node requests, eg. while only
+    /// building the address index. Mempool data stays as at startup, ZMQ is unaffected.
+    #[arg(long, env)]
+    pub no_mempool: bool,
+
     /// DNS hostname, used to generate sitemap URLs
     #[arg(long, env)]
     pub dns_host: Option<String>,
@@ -149,6 +154,7 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
     });
     let args = args;
     let zmq_rawtx = args.zmq_rawtx;
+    let no_mempool = args.no_mempool;
 
     log::debug!("local address {:?}", addr);
 
@@ -249,10 +255,12 @@ pub async fn inner_main(mut args: Arguments) -> Result<(), Error> {
             tokio::spawn(async move { update_tx_zmq_infallible(&socket, shared_state_zmq).await });
     }
 
-    #[allow(clippy::let_underscore_future)]
-    let _ = tokio::spawn(async move {
-        update_mempool(shared_state_mempool).await;
-    });
+    if !no_mempool {
+        #[allow(clippy::let_underscore_future)]
+        let _ = tokio::spawn(async move {
+            update_mempool(shared_state_mempool).await;
+        });
+    }
 
     // Create a simple HTTP server using hyper 1.x
     let listener = tokio::net::TcpListener::bind(&addr).await?;
