@@ -71,14 +71,18 @@ async fn update_chain_info(
                             break;
                         }
 
-                        match shared_state.height_time(prev_blockhash).await.ok() {
-                            Some(height_time) if height_time.height == last_height - 1 => {
-                                log::debug!("previous block has correct height, breaking");
+                        // the height map, not the header of the previous block, which would be
+                        // fetched and found at the right height while the blocks before it, if
+                        // more than one arrived since the last check, are still missing
+                        match shared_state.height_to_hash(last_height - 1).await {
+                            Some(hash) if hash == prev_blockhash => {
+                                log::debug!("previous block is in the height map, breaking");
                                 break;
                             }
                             _ => {
                                 log::info!(
-                                    "cache missing or reorg longer than 1 happened, going back"
+                                    "previous block missing or reorg longer than 1 happened, \
+                                     going back"
                                 );
                                 last_block_hash = prev_blockhash;
                                 last_height -= 1;
